@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Enforcer Governor</title>
+<style>
+  :root{--bg:#07090C;--panel:#0C1016;--panel2:#10151D;--line:#1D2530;--lineS:#161D27;--ink:#E8EDF2;--dim:#8B98A8;--faint:#5A6678;--teal:#57C4B8;--allow:#3FB970;--deny:#E5534B;--esc:#D4A72C;--mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;--sans:-apple-system,system-ui,sans-serif;--serif:Georgia,serif;}
+  *{box-sizing:border-box;margin:0;} body{background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;overflow-x:hidden;} body.ungoverned{background:#0c0708;}
+  .wrap{max-width:1240px;margin:0 auto;padding:0 clamp(14px,3vw,32px);}
+  .top{border-bottom:1px solid var(--line);padding:16px 0 14px;position:sticky;top:0;background:var(--bg);z-index:20;} body.ungoverned .top{border-color:rgba(229,83,75,.4);}
+  .top .row{display:flex;align-items:center;gap:20px;flex-wrap:wrap;}
+  .brand{font-family:var(--mono);font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);} .brand b{color:var(--teal);}
+  .tag{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;color:var(--faint);border:1px solid var(--line);border-radius:20px;padding:3px 10px;}
+  .tag.live{color:var(--allow);border-color:rgba(63,185,112,.4);}
+  .metrics{display:flex;gap:clamp(14px,2.5vw,30px);margin-left:auto;flex-wrap:wrap;}
+  .metric .v{font-family:var(--mono);font-size:19px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1;} .metric .k{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-top:5px;}
+  .v.teal{color:var(--teal);}.v.deny{color:var(--deny);}.v.esc{color:var(--esc);}.v.allow{color:var(--allow);} .chainok{color:var(--allow);}.chainbad{color:var(--deny);}
+  .lead{padding:22px 0 4px;} .lead h1{font-family:var(--serif);font-weight:400;font-size:clamp(21px,3vw,30px);line-height:1.14;max-width:26ch;} .lead p{color:var(--dim);font-size:14.5px;max-width:76ch;margin-top:9px;} .lead b{color:var(--ink);} .verbs .a{color:var(--allow);}.verbs .d{color:var(--deny);}.verbs .e{color:var(--esc);}
+  .controls{margin:20px 0 6px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;}
+  .ctrl-h{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);margin-bottom:12px;}
+  .switches{display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
+  .sw{display:inline-flex;align-items:center;gap:10px;font-family:var(--mono);font-size:12px;background:#0A0E13;border:1px solid var(--lineS);border-radius:8px;padding:9px 13px;cursor:pointer;color:var(--dim);}
+  .sw .knob{width:32px;height:18px;border-radius:10px;background:#242c38;position:relative;transition:background .2s;flex:none;} .sw .knob::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#6b7686;transition:left .2s,background .2s;}
+  .sw.on{color:var(--ink);border-color:rgba(87,196,184,.35);} .sw.on .knob{background:rgba(87,196,184,.45);} .sw.on .knob::after{left:16px;background:var(--teal);}
+  .sw.master.on{border-color:rgba(63,185,112,.5);} .sw.master.on .knob{background:rgba(63,185,112,.55);} .sw.master.on .knob::after{background:var(--allow);left:16px;}
+  .sw.master.off{border-color:rgba(229,83,75,.6);color:var(--deny);} .sw.master.off .knob{background:rgba(229,83,75,.5);} .sw.master.off .knob::after{background:var(--deny);left:2px;}
+  .sw.dis{opacity:.4;pointer-events:none;}
+  .seg{display:inline-flex;border:1px solid var(--lineS);border-radius:8px;overflow:hidden;} .seg-lbl{font-family:var(--mono);font-size:11px;color:var(--faint);align-self:center;margin:0 2px 0 6px;}
+  .seg-b{font-family:var(--mono);font-size:12px;background:#0A0E13;border:none;color:var(--faint);padding:9px 13px;cursor:pointer;} .seg-b.on{color:var(--ink);background:rgba(212,167,44,.12);box-shadow:inset 0 0 0 1px rgba(212,167,44,.4);} .seg-b.on.dm{background:rgba(229,83,75,.12);box-shadow:inset 0 0 0 1px rgba(229,83,75,.4);}
+  .ungov-banner{display:none;margin:13px 0 0;padding:11px 15px;font-family:var(--mono);font-size:12.5px;color:var(--deny);background:rgba(229,83,75,.08);border:1px solid rgba(229,83,75,.4);border-radius:8px;} body.ungoverned .ungov-banner{display:block;}
+  .fleet-h{display:flex;align-items:baseline;gap:12px;margin:22px 0 12px;} .fleet-h .lbl{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);} .fleet-h .hint{font-family:var(--mono);font-size:11px;color:var(--faint);margin-left:auto;}
+  .fleet{display:grid;grid-template-columns:repeat(auto-fill,minmax(178px,1fr));gap:12px;} .empty{font-family:var(--mono);font-size:12.5px;color:var(--faint);padding:26px 4px;}
+  .agent{position:relative;background:var(--panel);border:1px solid var(--lineS);border-radius:9px;overflow:hidden;transition:border-color .3s;}
+  .agent.warn{border-color:rgba(212,167,44,.5);} .agent.esc{border-color:rgba(212,167,44,.8);box-shadow:0 0 0 1px rgba(212,167,44,.3);} .agent.grounded{border-color:rgba(229,83,75,.5);opacity:.82;} .agent.free{border-color:rgba(229,83,75,.35);}
+  .a-top{padding:12px 13px 8px;} .a-name{font-family:var(--mono);font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:7px;}
+  .a-name .pulse{width:7px;height:7px;border-radius:50%;background:var(--allow);box-shadow:0 0 8px var(--allow);flex:none;} .warn .pulse{background:var(--esc);box-shadow:0 0 8px var(--esc);} .esc .pulse{background:var(--esc);animation:blink .8s infinite;} .grounded .pulse{background:var(--deny);box-shadow:none;} .free .pulse{background:var(--deny);animation:blink .5s infinite;}
+  @keyframes blink{50%{opacity:.25;}}
+  .a-model{font-family:var(--mono);font-size:10px;color:var(--faint);margin-top:3px;}
+  .gauge{position:relative;height:132px;margin:4px 11px 0;border:1px solid var(--lineS);border-radius:6px;background:#080B10;overflow:hidden;}
+  .fill{position:absolute;left:0;right:0;bottom:0;height:0;background:linear-gradient(180deg,rgba(87,196,184,.85),rgba(87,196,184,.35));transition:height .6s cubic-bezier(.3,.7,.3,1);}
+  .warn .fill{background:linear-gradient(180deg,rgba(212,167,44,.9),rgba(212,167,44,.4));} .esc .fill{background:linear-gradient(180deg,rgba(212,167,44,.95),rgba(212,167,44,.5));} .grounded .fill,.free .fill{background:linear-gradient(180deg,rgba(229,83,75,.85),rgba(229,83,75,.4));}
+  .softmark{position:absolute;left:0;right:0;border-top:1px dashed rgba(229,83,75,.5);} .softmark::after{content:"cap";position:absolute;right:4px;top:-13px;font-family:var(--mono);font-size:9px;color:var(--faint);}
+  .gpct{position:absolute;top:8px;left:0;right:0;text-align:center;font-family:var(--mono);font-size:24px;font-weight:600;z-index:2;mix-blend-mode:difference;color:#fff;} .gtok{position:absolute;bottom:6px;left:0;right:0;text-align:center;font-family:var(--mono);font-size:10.5px;color:var(--ink);z-index:2;}
+  .loopbadge{position:absolute;top:6px;right:6px;font-family:var(--mono);font-size:9.5px;font-weight:600;color:var(--deny);background:rgba(229,83,75,.14);border:1px solid rgba(229,83,75,.5);border-radius:4px;padding:1px 5px;z-index:3;opacity:0;} .loopbadge.show{opacity:1;}
+  .a-foot{display:flex;align-items:center;justify-content:space-between;padding:9px 12px 11px;font-family:var(--mono);font-size:10.5px;color:var(--dim);} .a-status{display:flex;align-items:center;gap:5px;} .st-dot{width:6px;height:6px;border-radius:50%;background:var(--allow);flex:none;} .warn .st-dot{background:var(--esc);}.esc .st-dot{background:var(--esc);}.grounded .st-dot,.free .st-dot{background:var(--deny);}
+  .kill{font-family:var(--mono);font-size:10px;color:var(--faint);background:none;border:1px solid var(--line);border-radius:5px;padding:3px 8px;cursor:pointer;flex:none;} .kill:hover{border-color:var(--deny);color:var(--deny);} .kill:disabled{opacity:.35;cursor:default;}
+  .tape-wrap{margin:22px 0 36px;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;}
+  .tape-top{display:flex;align-items:center;gap:14px;padding:11px 15px;border-bottom:1px solid var(--line);background:var(--panel2);font-family:var(--mono);font-size:11px;} .tape-top .lbl{letter-spacing:.16em;text-transform:uppercase;color:var(--faint);} .tape-top .legend{display:flex;gap:14px;margin-left:auto;color:var(--dim);} .tape-top .legend i{width:8px;height:8px;border-radius:2px;display:inline-block;margin-right:5px;vertical-align:middle;}
+  .verify{font-family:var(--mono);font-size:10.5px;color:var(--dim);background:none;border:1px solid var(--line);border-radius:6px;padding:5px 11px;cursor:pointer;} .verify:hover{border-color:var(--teal);color:var(--teal);}
+  .tape{display:flex;gap:8px;padding:14px 15px;overflow-x:auto;min-height:82px;} .chip{flex:none;width:176px;border:1px solid var(--lineS);border-left-width:2px;border-radius:6px;padding:8px 10px;background:#0A0E13;font-family:var(--mono);animation:sl .35s ease backwards;} @keyframes sl{from{opacity:0;transform:translateX(-10px);}}
+  .chip.allow{border-left-color:var(--allow);}.chip.deny{border-left-color:var(--deny);}.chip.escalate{border-left-color:var(--esc);}.chip.gap{border-left-color:var(--faint);border-style:dashed;}
+  .chip .verb{font-size:10px;font-weight:600;letter-spacing:.08em;} .chip.allow .verb{color:var(--allow);}.chip.deny .verb{color:var(--deny);}.chip.escalate .verb{color:var(--esc);}.chip.gap .verb{color:var(--faint);}
+  .chip .who{font-size:11px;color:var(--ink);margin:3px 0 2px;} .chip .rule{font-size:10px;color:var(--faint);} .chip .hash{font-size:9.5px;color:var(--teal);margin-top:5px;word-break:break-all;opacity:.85;} .chip .auth{font-size:9.5px;color:var(--esc);margin-top:3px;} .chip .nohash{font-size:9.5px;color:var(--deny);margin-top:5px;}
+  .esc-modal{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(4,6,9,.72);opacity:0;pointer-events:none;transition:opacity .25s;z-index:50;} .esc-modal.show{opacity:1;pointer-events:auto;}
+  .esc-card{width:min(460px,calc(100% - 32px));background:#12161d;border:1px solid rgba(212,167,44,.6);border-radius:12px;padding:22px 24px;}
+  .esc-card .eh{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--esc);margin-bottom:12px;} .esc-card h3{font-family:var(--serif);font-size:20px;margin-bottom:12px;} .ectx{font-family:var(--mono);font-size:12px;color:var(--dim);line-height:1.8;background:#0A0E13;border:1px solid var(--lineS);border-radius:7px;padding:11px 13px;margin-bottom:16px;} .ectx b{color:var(--ink);}
+  .ebtns{display:flex;gap:10px;} .esc-btn{flex:1;font-family:var(--mono);font-size:13px;font-weight:600;cursor:pointer;border-radius:7px;padding:11px;border:1px solid;} .esc-approve{background:rgba(63,185,112,.14);border-color:var(--allow);color:var(--allow);} .esc-deny{background:none;border-color:var(--line);color:var(--dim);}
+  footer{border-top:1px solid var(--lineS);padding:22px 0 40px;font-family:var(--mono);font-size:11px;color:var(--faint);display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001s!important;}}
+</style>
+</head>
+<body>
+<div class="top"><div class="wrap row">
+  <span class="brand"><b>ENFORCER</b> GOVERNOR</span>
+  <span class="tag" id="modeTag">DEMO</span>
+  <div class="metrics">
+    <div class="metric"><div class="v teal" id="mBurn">0</div><div class="k">tokens / min</div></div>
+    <div class="metric"><div class="v allow" id="mAllow">0</div><div class="k">allowed</div></div>
+    <div class="metric"><div class="v deny" id="mDeny">0</div><div class="k">blocked</div></div>
+    <div class="metric"><div class="v esc" id="mEsc">0</div><div class="k">escalated</div></div>
+    <div class="metric"><div class="v" id="mChain"><span class="chainok">intact</span></div><div class="k">receipt chain</div></div>
+  </div>
+</div></div>
+
+<div class="wrap">
+  <div class="lead">
+    <h1>Every agent runs on a fuel budget. Enforcer decides who keeps flying.</h1>
+    <p>Each column is an agent burning tokens. Every action passes one check first: <span class="verbs">in budget and on task? <span class="a">allow</span> · over budget or looping? <span class="d">deny</span> · needs more fuel? <span class="e">escalate</span></span>. Every verdict leaves a hash-chained receipt. <b>Flip a switch and the fleet reacts live.</b></p>
+  </div>
+  <div class="controls">
+    <div class="ctrl-h">Policy controls</div>
+    <div class="switches">
+      <button class="sw master on" id="swEnforcer"><span class="knob"></span><span>Enforcer</span></button>
+      <button class="sw on" id="swBudget"><span class="knob"></span><span>Budget caps</span></button>
+      <button class="sw on" id="swLoop"><span class="knob"></span><span>Loop / waste block</span></button>
+      <div class="seg"><span class="seg-lbl">on soft cap:</span>
+        <button class="seg-b on" id="segEsc">Escalate to human</button>
+        <button class="seg-b dm" id="segDeny">Auto-deny</button>
+      </div>
+    </div>
+    <div class="ungov-banner">ENFORCER OFF · agents executing with no budget check and no receipts. This is how most agent fleets run today.</div>
+  </div>
+  <div class="fleet-h"><span class="lbl">Agent fleet</span><span class="hint" id="fleetHint"></span></div>
+  <div class="fleet" id="fleet"></div>
+  <div class="tape-wrap">
+    <div class="tape-top"><span class="lbl">Decision tape · signed receipts</span>
+      <span class="legend"><span><i style="background:var(--allow)"></i>allow</span><span><i style="background:var(--deny)"></i>deny</span><span><i style="background:var(--esc)"></i>escalate</span></span>
+      <button class="verify" id="verifyBtn">Verify chain</button>
+    </div>
+    <div class="tape" id="tape" aria-live="polite"></div>
+  </div>
+</div>
+<footer><div class="wrap" style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;width:100%"><span>INSTRUXI · ENFORCER GOVERNOR</span><span>deterministic checks decide · humans judge · every decision receipted</span></div></footer>
+<div class="esc-modal" id="escModal"><div class="esc-card">
+  <div class="eh">Escalation · human decision required <span id="escTimer"></span></div>
+  <h3 id="escTitle"></h3><div class="ectx" id="escCtx"></div>
+  <div class="ebtns"><button class="esc-btn esc-approve" id="escApprove">Approve more fuel</button><button class="esc-btn esc-deny" id="escDeny">Deny and hold</button></div>
+</div></div>
+
+<script>
+/*__LIVE__*/
+(() => {
+  const $=id=>document.getElementById(id), LIVE=window.__GOVERNOR_LIVE__===true;
+  const fmt=n=>n>=1e6?(n/1e6).toFixed(2)+'M':n>=1e3?(n/1e3).toFixed(1)+'k':String(Math.round(n));
+  const cards={}; let allow=0,deny=0,esc=0,burn=0;
+  const policy={enforcer:true,budget:true,loop:true,soft:'escalate'};
+  $('modeTag').textContent = LIVE?'LIVE · governing your agents':'DEMO · simulated fleet';
+  if (LIVE) $('modeTag').classList.add('live');
+  $('fleetHint').textContent = LIVE?'agents appear as your tools run · kill any of them':'watch scraper-07 loop · approve research-swarm-03 when it asks';
+
+  function card(id, model, budget, soft){
+    if (cards[id]) return cards[id];
+    if ($('fleet').querySelector('.empty')) $('fleet').innerHTML='';
+    const el=document.createElement('div'); el.className='agent';
+    el.innerHTML=`<div class="a-top"><div class="a-name"><span class="pulse"></span>${id}</div><div class="a-model">${model||''}</div></div>
+      <div class="gauge"><div class="softmark" style="bottom:${(soft||.75)*100}%"></div><div class="fill"></div><div class="loopbadge">LOOP</div><div class="gpct">0%</div><div class="gtok">0 / ${fmt(budget||200000)}</div></div>
+      <div class="a-foot"><div class="a-status"><span class="st-dot"></span><span class="stxt">flying</span></div><button class="kill">kill</button></div>`;
+    $('fleet').appendChild(el);
+    const c={el,budget:budget||200000,soft:soft||.75};
+    el.querySelector('.kill').onclick=()=>killAgent(id);
+    cards[id]=c; return c;
+  }
+  function paint(id, {tokens,budget,status,model,loopStreak}){
+    const c=card(id,model,budget); if(budget)c.budget=budget;
+    const pct=Math.min(100,tokens/c.budget*100);
+    c.el.classList.remove('warn','esc','grounded','free');
+    let cls='', txt='flying';
+    if(status==='grounded'){cls='grounded';txt='grounded';} else if(status==='paused'){cls='esc';txt='paused · awaiting you';}
+    else if(!policy.enforcer){cls='free';txt='ungoverned';}
+    else if(tokens>=c.budget*(c.soft-0.12)){cls='warn';txt='flying · near cap';}
+    if(cls)c.el.classList.add(cls);
+    c.el.querySelector('.stxt').textContent=txt;
+    c.el.querySelector('.fill').style.height=pct+'%';
+    c.el.querySelector('.gpct').textContent=Math.round(tokens/c.budget*100)+'%';
+    c.el.querySelector('.gtok').textContent=fmt(tokens)+' / '+fmt(c.budget);
+    if(model)c.el.querySelector('.a-model').textContent=model;
+    const lb=c.el.querySelector('.loopbadge'); if(loopStreak>=3){lb.textContent='LOOP x'+loopStreak;lb.classList.add('show');}else lb.classList.remove('show');
+    c.el.querySelector('.kill').disabled = status==='grounded';
+  }
+  function chip(verb,who,rule,hashLabel,authority){
+    const c=document.createElement('div'); c.className='chip '+verb;
+    c.innerHTML=`<div class="verb">${verb==='gap'?'NO CHECK':verb.toUpperCase()}</div><div class="who">${who}</div><div class="rule">${rule}</div>${authority?`<div class="auth">${authority}</div>`:''}${hashLabel?`<div class="hash">${hashLabel}</div>`:`<div class="nohash">no receipt issued</div>`}`;
+    const t=$('tape'); t.appendChild(c); while(t.children.length>40)t.removeChild(t.firstChild); t.scrollLeft=t.scrollWidth;
+  }
+  function bump(v){ if(v==='allow')allow++;else if(v==='deny')deny++;else if(v==='escalate')esc++; $('mAllow').textContent=allow;$('mDeny').textContent=deny;$('mEsc').textContent=esc; }
+  function onDecision(d){
+    if(d.verdict==='gap'){ chip('gap',d.agent.id||d.agent,d.reason,null,null); paint(d.agent.id||d.agent,d.agent); return; }
+    const a=d.agent; paint(a.id,{...a,model:d.model});
+    chip(d.verdict,a.id,d.reason,d.receipt,d.entry&&d.entry.authority);
+    bump(d.verdict); if(a.lastUsed)burn+=a.lastUsed;
+    if(d.verdict==='escalate') openEsc(a);
+  }
+
+  // ── Escalation modal (LIVE: posts to server; DEMO: local) ──
+  let escId=null,escTimer=null;
+  function openEsc(a){
+    escId=a.id;
+    $('escTitle').textContent=a.id+' is asking for more fuel';
+    $('escCtx').innerHTML=`agent &nbsp; <b>${a.id}</b><br>spent &nbsp; <b>${fmt(a.tokens)}</b> of ${fmt(a.budget)} tokens<br>reason &nbsp; hit its soft cap mid-task<br>ask &nbsp;&nbsp;&nbsp; +50% budget to finish, or hold`;
+    $('escModal').classList.add('show'); let left=12; $('escTimer').textContent=' · '+left+'s';
+    escTimer=setInterval(()=>{left--;$('escTimer').textContent=' · '+left+'s';if(left<=0)resolveEsc(false,true);},1000);
+  }
+  async function resolveEsc(approve,timeout){
+    if(!escId)return; clearInterval(escTimer); $('escModal').classList.remove('show'); const id=escId; escId=null;
+    if(LIVE){ try{ await fetch(approve?'/approve':'/deny',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({agent:id})}); }catch{} }
+    else demoResolve(id,approve,timeout);
+  }
+  $('escApprove').onclick=()=>resolveEsc(true); $('escDeny').onclick=()=>resolveEsc(false);
+
+  async function killAgent(id){ if(LIVE){ try{ await fetch('/kill',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({agent:id})}); }catch{} } else demoKill(id); }
+
+  // ── Switches ──
+  function pushConfig(){ if(!LIVE)return; fetch('/config',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({budgetOn:policy.budget,loopOn:policy.loop,softAction:policy.soft})}).catch(()=>{}); }
+  function syncSw(){ $('swBudget').classList.toggle('dis',!policy.enforcer); $('swLoop').classList.toggle('dis',!policy.enforcer); document.querySelector('.seg').style.opacity=policy.enforcer?'1':'.4'; document.body.classList.toggle('ungoverned',!policy.enforcer); }
+  $('swEnforcer').onclick=()=>{ policy.enforcer=!policy.enforcer; $('swEnforcer').className='sw master '+(policy.enforcer?'on':'off'); if(!policy.enforcer&&escId)resolveEsc(false); syncSw(); if(LIVE){ policy.budget=policy.enforcer&&policy.budget; } };
+  const tog=(id,k)=>$(id).onclick=()=>{ if(!policy.enforcer)return; policy[k]=!policy[k]; $(id).classList.toggle('on',policy[k]); pushConfig(); };
+  tog('swBudget','budget'); tog('swLoop','loop');
+  $('segEsc').onclick=()=>{policy.soft='escalate';$('segEsc').classList.add('on');$('segDeny').classList.remove('on');pushConfig();};
+  $('segDeny').onclick=()=>{policy.soft='deny';$('segDeny').classList.add('on');$('segEsc').classList.remove('on');pushConfig();};
+
+  $('verifyBtn').onclick=async()=>{ const b=$('verifyBtn'); b.textContent='verifying...';
+    if(LIVE){ try{ const r=await(await fetch('/verify')).json(); $('mChain').innerHTML=r.ok?`<span class="chainok">verified &#10003; ${r.receipts}</span>`:`<span class="chainbad">broken</span>`; b.textContent=r.ok?`Chain verified · ${r.receipts}`:'Chain broken'; }catch{ b.textContent='governor offline'; } }
+    else demoVerify(b);
+    setTimeout(()=>b.textContent='Verify chain',3500);
+  };
+  setInterval(()=>{ $('mBurn').textContent=fmt(burn*30); burn=0; },2000);
+
+  // ── LIVE driver ──
+  if (LIVE){
+    const es=new EventSource('/events');
+    es.addEventListener('snapshot',e=>{ const s=JSON.parse(e.data); s.agents.forEach(a=>paint(a.id,{...a})); });
+    es.addEventListener('decision',e=>onDecision(JSON.parse(e.data)));
+    es.addEventListener('config',e=>{ const c=JSON.parse(e.data); policy.budget=c.budgetOn; policy.loop=c.loopOn; policy.soft=c.softAction; $('swBudget').classList.toggle('on',c.budgetOn); $('swLoop').classList.toggle('on',c.loopOn); $('segEsc').classList.toggle('on',c.softAction==='escalate'); $('segDeny').classList.toggle('on',c.softAction==='deny'); });
+    es.onerror=()=>{}; // reconnects automatically
+    if(!Object.keys(cards).length) $('fleet').innerHTML='<div class="empty">Waiting for agents. Run Claude Code (with the hook installed) or point an agent at the proxy, and it will appear here.</div>';
+    return;
+  }
+
+  // ── DEMO driver (self-contained simulator, real policy logic) ──
+  window.__runDemo(paint, onDecision, () => policy, {
+    setResolvers(k,v,ver){ demoKill=k; demoResolve=v; demoVerify=ver; },
+  });
+  var demoKill=()=>{}, demoResolve=()=>{}, demoVerify=(b)=>{b.textContent='demo';};
+})();
+</script>
+<script>
+// Demo simulator kept separate so the live path never loads it needlessly.
+window.__runDemo = (paint, onDecision, getPolicy, wire) => {
+  const rand=(a,b)=>a+Math.random()*(b-a), pick=a=>a[Math.floor(Math.random()*a.length)];
+  const enc=new TextEncoder(); const sha=async s=>{const h=await crypto.subtle.digest('SHA-256',enc.encode(s));return[...new Uint8Array(h)].map(b=>b.toString(16).padStart(2,'0')).join('');};
+  const AG=[
+    {id:'data-pipeline-01',model:'claude-sonnet',budget:180000,soft:.75,burn:[900,1800],plan:'steady'},
+    {id:'research-swarm-03',model:'claude-opus',budget:220000,soft:.60,burn:[2600,4200],plan:'escalate'},
+    {id:'scraper-07',model:'claude-haiku',budget:150000,soft:.80,burn:[700,1400],plan:'loop'},
+    {id:'report-gen-02',model:'claude-sonnet',budget:160000,soft:.75,burn:[800,1500],plan:'steady'},
+    {id:'test-runner-05',model:'claude-haiku',budget:120000,soft:.80,burn:[500,1100],plan:'steady'},
+    {id:'summarizer-09',model:'claude-sonnet',budget:150000,soft:.75,burn:[700,1300],plan:'steady'},
+  ];
+  const STEADY=['read src/api.ts','edit handler.go','run test suite','grep usage','read schema.sql','write report.md','call mcp:search'];
+  const st={}; let prev='genesis'; const chain=[]; let escA=null;
+  AG.forEach(a=>{ st[a.id]={...a,tokens:0,recent:[],escalated:false,status:'active'}; paint(a.id,{tokens:0,budget:a.budget,status:'active',model:a.model,loopStreak:0}); });
+  async function rcpt(a,verb,rule,authority){ const e={ts:Date.now(),agent:a.id,verb,rule,tokens:Math.round(a.tokens)}; if(authority)e.authority=authority; const j=JSON.stringify(e); const h=await sha(prev+j); chain.push({j,h}); prev=h; return {verdict:verb,reason:rule,receipt:'rcpt_'+h.slice(0,12),agent:{id:a.id,tokens:Math.round(a.tokens),budget:a.budget,status:a.status,loopStreak:a.loopStreak||0},model:a.model,entry:e}; }
+  function actionFor(a){ if(a.plan==='loop'&&a.tokens>a.budget*.32)return 'GET /page?id=42'; if(a.plan==='loop')return pick(['GET /list','parse','GET /page?id='+Math.floor(rand(1,40))]); return pick(STEADY); }
+  async function step(a){
+    const P=getPolicy(); if(a.status==='grounded'||a.status==='paused')return;
+    const act=actionFor(a), cost=rand(a.burn[0],a.burn[1]); a.tokens+=cost;
+    if(!P.enforcer){ a.status='free'; onDecision({verdict:'gap',reason:'executed with no policy check',agent:{id:a.id,tokens:a.tokens,budget:a.budget,status:'free'}}); return; }
+    if(a.status==='free')a.status='active';
+    a.recent.push(act); if(a.recent.length>6)a.recent.shift(); let streak=1; for(let i=a.recent.length-2;i>=0;i--){if(a.recent[i]===act)streak++;else break;} a.loopStreak=streak;
+    if(P.loop&&streak>=4){a.status='grounded';onDecision(await rcpt(a,'deny','waste: identical action x'+streak));return;}
+    if(P.budget&&a.tokens>=a.budget){a.status='grounded';onDecision(await rcpt(a,'deny','hard budget reached'));return;}
+    if(P.budget&&!a.escalated&&a.tokens>=a.budget*a.soft){ a.escalated=true; if(P.soft==='escalate'){a.status='paused';escA=a;onDecision(await rcpt(a,'escalate','soft cap '+Math.round(a.soft*100)+'% reached'));return;} a.status='grounded';onDecision(await rcpt(a,'deny','soft cap reached (auto-deny)'));return; }
+    onDecision(await rcpt(a,'allow','within budget, on task'));
+  }
+  wire.setResolvers(
+    async id=>{ const a=st[id]; if(!a||a.status==='grounded')return; a.status='grounded'; onDecision(await rcpt(a,'deny','manual kill switch','human: you')); },
+    async (id,approve,timeout)=>{ const a=st[id]; if(!a)return; escA=null; if(approve){a.budget=Math.round(a.budget*1.5);a.status='active';a.escalated=false;onDecision(await rcpt(a,'allow','budget raised +50%','human: you'));} else {a.status='grounded';onDecision(await rcpt(a,'deny',timeout?'escalation expired, fail-closed':'escalation denied',timeout?'fail-closed':'human: you'));} },
+    async b=>{ let h='genesis',ok=true; for(const l of chain){h=await sha(h+l.j);if(h!==l.h){ok=false;break;}} document.getElementById('mChain').innerHTML=ok?`<span class="chainok">verified &#10003; ${chain.length}</span>`:`<span class="chainbad">broken</span>`; b.textContent=ok?`Chain verified · ${chain.length}`:'Chain broken'; }
+  );
+  (async function loop(){ const red=matchMedia('(prefers-reduced-motion:reduce)').matches; while(true){ for(const a of AG){ if(escA)break; await step(st[a.id]); await new Promise(r=>setTimeout(r,red?260:120)); } await new Promise(r=>setTimeout(r,escA?300:(red?1400:850))); } })();
+};
+</script>
+</body>
+</html>
