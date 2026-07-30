@@ -208,10 +208,11 @@
   }
 
   // ── DEMO driver (self-contained simulator, real policy logic) ──
-  window.__runDemo(paint, onDecision, () => policy, {
-    setResolvers(k,v,ver){ demoKill=k; demoResolve=v; demoVerify=ver; },
-  });
   var demoKill=()=>{}, demoResolve=()=>{}, demoVerify=(b)=>{b.textContent='demo';};
+  // Deferred one tick so the simulator script below has defined window.__runDemo.
+  setTimeout(() => window.__runDemo(paint, onDecision, () => policy, {
+    setResolvers(k,v,ver){ demoKill=k; demoResolve=v; demoVerify=ver; },
+  }), 0);
 })();
 </script>
 <script>
