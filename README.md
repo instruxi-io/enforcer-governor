@@ -1,16 +1,24 @@
 # Enforcer Governor
 
-**Real-time spend control for AI agents. Free, open, and self-hosted.**
+**Stop your AI agents from wasting your money. Free, open, runs on your own computer.**
 
-Every tool that tracks agent token usage today does the same thing: it reports the damage *after* it happens. Enforcer Governor is different. It sits in front of your agents and decides, on every action, one of three things:
+AI agents burn tokens, and tokens are money. They get stuck in loops, repeat work, and blow through budgets, and every existing tool just *reports* the damage afterwards. Enforcer Governor is a guard that stands in front of your agents and answers one question before every action:
 
-- **allow** &mdash; in budget and on task
-- **deny** &mdash; over budget, or stuck in a loop
-- **escalate** &mdash; needs more fuel, so a human decides
+> **May this agent do this, right now?**
 
-Every decision leaves a **hash-chained receipt**, so you can prove exactly what each agent did and under whose authority. It runs entirely on your machine, against your own keys. We never see your data.
+- **allow** &mdash; in budget and on task, carry on
+- **deny** &mdash; over budget or stuck in a loop, blocked
+- **escalate** &mdash; wants more budget, so it pauses and asks YOU
 
-Live demo (simulated fleet): **https://enforcer-governor.vercel.app**
+Every decision leaves a **tamper-proof receipt**, so you can always prove what your agents did and who approved what. Everything runs on your own computer with your own keys. Nothing is sent to us, ever.
+
+**See it in 10 seconds** (no install, simulated agents): **https://enforcer-governor.vercel.app**
+
+---
+
+## What you need
+
+One thing: **Node.js**, a free tool most developers already have. Check by typing `node --version` in a terminal. If that fails, install it from [nodejs.org](https://nodejs.org) (big green button, two clicks).
 
 ---
 
@@ -24,21 +32,25 @@ It does **not** claim to detect hallucination &mdash; nobody can do that reliabl
 
 ---
 
-## Quickstart (60 seconds)
+## Start it (one command)
+
+Open a terminal and run:
+
+```bash
+npx --yes github:instruxi-io/enforcer-governor start
+```
+
+The first run downloads it (a few seconds), then **your dashboard opens in the browser by itself**. Leave this terminal running; it is the guard. The dashboard tells you what to do next. Stop it any time with Ctrl+C, and your agents keep working normally.
 
 ### Govern Claude Code
 
-```bash
-# 1. start the governor (this terminal)
-npx --yes github:instruxi-io/enforcer-governor start
+In a **second** terminal, go into the project you want watched and run:
 
-# 2. wire the hook into your project (another terminal, in your repo)
+```bash
 npx --yes github:instruxi-io/enforcer-governor install-hook
 ```
 
-That is it. Open **http://localhost:4000** to watch. Every tool call in that project now checks the governor first. Over budget, and Claude Code is told to stop. At the soft cap, it asks you to approve. Add `--global` to the install command to govern every project.
-
-Restart any Claude Code session that was already open (hooks are read at session start). New sessions pick the hook up automatically.
+Then start a **new** Claude Code session in that project. That is all. From now on, every action Claude Code takes is checked first: over budget and it is stopped, near the limit and it asks you. Add `--global` to the command to watch every project at once.
 
 ### Govern any other agent (ChatGPT, OpenAI, Anthropic SDK, custom agents)
 

@@ -158,10 +158,24 @@ const server = http.createServer(async (req, res) => {
 function getAgentModel(id, model) { /* reserved: model registry */ }
 
 server.listen(CONFIG.port, () => {
-  console.log(`\n  Enforcer Governor running`);
-  console.log(`  dashboard   http://localhost:${CONFIG.port}`);
-  console.log(`  decide API  POST http://localhost:${CONFIG.port}/decide`);
-  console.log(`  proxy       set ANTHROPIC_BASE_URL / OPENAI_BASE_URL to http://localhost:${CONFIG.port}`);
-  console.log(`  budget      ${CONFIG.budget.toLocaleString()} tokens/agent  ·  soft cap ${Math.round(CONFIG.soft * 100)}%  ·  on soft cap: ${CONFIG.softAction}`);
-  console.log(`  receipts    ${RECEIPTS}\n`);
+  const url = `http://localhost:${CONFIG.port}`;
+  console.log(`\n  Enforcer Governor is running.`);
+  console.log(`\n  Your dashboard:  ${url}  (opening it now)`);
+  console.log(`\n  Next step, govern your agents:`);
+  console.log(`    Claude Code:  npx --yes github:instruxi-io/enforcer-governor install-hook`);
+  console.log(`                  (run it inside your project, then start a NEW Claude Code session)`);
+  console.log(`    Other agents: point them at this address, e.g. OPENAI_BASE_URL=${url}/v1`);
+  console.log(`\n  Budget: ${CONFIG.budget.toLocaleString()} effective tokens per agent, ask-a-human at ${Math.round(CONFIG.soft * 100)}%.`);
+  console.log(`  Receipts: ${RECEIPTS}`);
+  console.log(`  Stop it any time with Ctrl+C. Your agents keep working if it is off.\n`);
+  // Auto-open the dashboard so nobody has to know what localhost means.
+  // ponytail: darwin/win/linux openers only; anything exotic just reads the URL above.
+  if (process.stdout.isTTY && !process.env.CI && !process.argv.includes('--no-open')) {
+    import('node:child_process').then(({ spawn }) => {
+      const cmd = process.platform === 'darwin' ? ['open', url]
+        : process.platform === 'win32' ? ['cmd', '/c', 'start', '', url]
+        : ['xdg-open', url];
+      try { spawn(cmd[0], cmd.slice(1), { stdio: 'ignore', detached: true }).unref(); } catch {}
+    });
+  }
 });
