@@ -30,13 +30,15 @@ It does **not** claim to detect hallucination &mdash; nobody can do that reliabl
 
 ```bash
 # 1. start the governor (this terminal)
-npx @instruxi/enforcer-governor start
+npx --yes github:instruxi-io/enforcer-governor start
 
 # 2. wire the hook into your project (another terminal, in your repo)
-npx @instruxi/enforcer-governor install-hook
+npx --yes github:instruxi-io/enforcer-governor install-hook
 ```
 
 That is it. Open **http://localhost:4000** to watch. Every tool call in that project now checks the governor first. Over budget, and Claude Code is told to stop. At the soft cap, it asks you to approve. Add `--global` to the install command to govern every project.
+
+Restart any Claude Code session that was already open (hooks are read at session start). New sessions pick the hook up automatically.
 
 ### Govern any other agent (ChatGPT, OpenAI, Anthropic SDK, custom agents)
 
@@ -62,13 +64,15 @@ Drop a `governor.config.json` in the directory you run it from:
 
 ```json
 {
-  "budget": 200000,
+  "budget": 5000000,
   "soft": 0.75,
   "loopLimit": 4,
   "softAction": "escalate",
   "port": 4000
 }
 ```
+
+**Budgets are cost-weighted effective tokens**, not raw counts. Cached sessions re-read their whole context every turn, so raw sums explode into the billions while costing very little. The governor weights by price instead: input 1x, output 5x, cache-create 1.25x, cache-read 0.1x. Think of the budget as a dollar meter expressed in input-token units. The 5M default is roughly a heavy day of agent work.
 
 `softAction` is `"escalate"` (ask a human) or `"deny"` (auto-block at the soft cap). Everything is also flippable live from the dashboard switches.
 

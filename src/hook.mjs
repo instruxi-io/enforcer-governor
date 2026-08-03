@@ -12,7 +12,11 @@ function readStdin() {
   try { return readFileSync(0, 'utf8'); } catch { return ''; }
 }
 
-// Sum every message's usage in the session transcript (JSONL).
+// Cost-weighted effective tokens from the session transcript (JSONL).
+// Raw sums mislead: every turn re-reads the whole cached context, so cache
+// reads dominate any long session at ~10% of the price of fresh input.
+// Weights are price-proportional (input=1): output 5x, cache-create 1.25x,
+// cache-read 0.1x. Think of it as a dollar meter in input-token units.
 function tokensFromTranscript(path) {
   if (!path) return 0;
   let total = 0;
@@ -22,10 +26,12 @@ function tokensFromTranscript(path) {
       let m;
       try { m = JSON.parse(line); } catch { continue; }
       const u = m?.message?.usage;
-      if (u) total += (u.input_tokens || 0) + (u.output_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0);
+      if (u) total += (u.input_tokens || 0) + 5 * (u.output_tokens || 0)
+                    + 1.25 * (u.cache_creation_input_tokens || 0)
+                    + 0.1 * (u.cache_read_input_tokens || 0);
     }
   } catch {}
-  return total;
+  return Math.round(total);
 }
 
 function emit(decision, reason) {

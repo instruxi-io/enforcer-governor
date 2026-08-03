@@ -56,12 +56,15 @@ const UPSTREAMS = {
   '/v1/messages': 'https://api.anthropic.com/v1/messages',
   '/v1/chat/completions': 'https://api.openai.com/v1/chat/completions',
 };
+// Cost-weighted effective tokens (same weights as the hook: input=1,
+// output 5x, cache-create 1.25x, cache-read 0.1x).
 function extractUsage(body, path) {
   try {
     const j = JSON.parse(body);
     const u = j.usage || {};
-    if (path.includes('chat/completions')) return (u.prompt_tokens || 0) + (u.completion_tokens || 0);
-    return (u.input_tokens || 0) + (u.output_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0);
+    if (path.includes('chat/completions')) return Math.round((u.prompt_tokens || 0) + 5 * (u.completion_tokens || 0));
+    return Math.round((u.input_tokens || 0) + 5 * (u.output_tokens || 0)
+      + 1.25 * (u.cache_creation_input_tokens || 0) + 0.1 * (u.cache_read_input_tokens || 0));
   } catch { return 0; }
 }
 async function handleProxy(req, res, path) {

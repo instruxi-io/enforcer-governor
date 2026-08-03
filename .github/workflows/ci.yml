@@ -1,0 +1,27 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: policy engine self-test
+        run: npm test
+      - name: daemon smoke test
+        run: |
+          GOVERNOR_PORT=4123 GOVERNOR_BUDGET=50000 node src/governor.mjs &
+          sleep 2
+          # allow under budget
+          test "$(curl -s -X POST localhost:4123/decide -d '{"agent":"ci","tokens":100,"action":"a"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["verdict"])')" = "allow"
+          # deny over budget
+          test "$(curl -s -X POST localhost:4123/decide -d '{"agent":"ci","tokens":60000,"action":"b"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["verdict"])')" = "deny"
+          # chain verifies
+          test "$(curl -s localhost:4123/verify | python3 -c 'import sys,json;print(json.load(sys.stdin)["ok"])')" = "True"
+          echo "daemon smoke: all green"

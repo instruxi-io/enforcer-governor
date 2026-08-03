@@ -6,7 +6,10 @@ import { createHash } from 'node:crypto';
 export const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 
 export const DEFAULTS = {
-  budget: 200000,     // hard token cap per agent per session
+  // Budgets are COST-WEIGHTED effective tokens (input=1, output 5x,
+  // cache-create 1.25x, cache-read 0.1x), so long cached sessions are
+  // measured by what they cost, not by raw context re-reads.
+  budget: 5000000,    // hard effective-token cap per agent per session
   soft: 0.75,         // escalate / warn at this fraction of budget
   loopLimit: 4,       // identical action repeats that trip a loop block
   loopWindow: 8,      // how many recent actions to remember
