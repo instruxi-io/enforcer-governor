@@ -18,6 +18,27 @@ Every decision leaves a **tamper-proof receipt**, so you can always prove what y
 
 ---
 
+## Why nothing else does this
+
+We checked the whole landscape before building. Here is where it stands:
+
+| | Sees the spend | Stops the spend | Asks a human | Proves it afterwards |
+|---|---|---|---|---|
+| Provider dashboards (Anthropic, OpenAI) | after the fact | no | no | no |
+| Observability tools (Helicone, Langfuse, ccusage) | yes | no | no | logs, editable |
+| LLM gateways (LiteLLM, Portkey) | yes | hard cutoff, bare error | no | logs, editable |
+| **Enforcer Governor** | **live** | **per agent, with a reason** | **pauses and waits for you** | **hash-chained receipts** |
+
+Three things you will not find together anywhere else:
+
+1. **A third verb.** Everything else is allow or block. The Governor can **escalate**: the agent freezes mid-task, you get the spend context and a yes/no, and your decision is recorded with the receipt. That is the difference between a fuse and a cockpit.
+2. **Receipts, not logs.** Every decision is chained by SHA-256, each hash folding in the last. Edit or delete one entry and the whole chain visibly breaks. A log says trust me; a receipt chain says check for yourself (there is a Verify button on the dashboard that does exactly that).
+3. **Enforcement where it can act.** The Claude Code hook blocks the action *before it runs*, and the gateway refuses the request *before it is billed*. Anthropic has declined to build spend caps or a kill switch into Claude Code itself, and the community's answer so far has been meters with tens of thousands of stars that can only watch. This one acts.
+
+---
+
+---
+
 ## What you need
 
 One thing: **Node.js**, a free tool most developers already have. Check by typing `node --version` in a terminal. If that fails, install it from [nodejs.org](https://nodejs.org) (big green button, two clicks).
@@ -117,6 +138,16 @@ other agents ─proxy─┘        │
 npm test
 ```
 
+## The bigger picture: Enforcer
+
+The Governor is one idea applied to one resource. The idea is **Enforcer**, Instruxi's policy engine, and it asks a single question in front of every system it guards:
+
+> **May this identity do this, right now?**
+
+Answered three ways (allow, deny, escalate to a human), with a tamper-evident receipt for every answer. Here that identity is an AI agent and the resource is your money. In the full Enforcer platform the same verbs govern who reads a record, who moves funds, who issues a credential, and who approved the exception, across people, services, and agents, for teams that have to prove it to an auditor afterwards.
+
+So this repo is also a working argument: if three verbs and a receipt chain can tame runaway agents on your laptop, the same primitive scales to the systems behind them. That is what we build. **[instruxi.io](https://instruxi.io)**
+
 ## License
 
-MIT. Built by [Instruxi](https://instruxi.io). Part of the Enforcer family: one question, "may this identity do this right now?", answered with a decision and a receipt.
+MIT. Built by [Instruxi](https://instruxi.io).
