@@ -1,5 +1,7 @@
 # Enforcer Governor
 
+[![ci](https://github.com/instruxi-io/enforcer-governor/actions/workflows/ci.yml/badge.svg)](https://github.com/instruxi-io/enforcer-governor/actions/workflows/ci.yml)
+
 **Stop your AI agents from wasting your money. Free, open, runs on your own computer.**
 
 AI agents burn tokens, and tokens are money. They get stuck in loops, repeat work, and blow through budgets, and every existing tool just *reports* the damage afterwards. Enforcer Governor is a guard that stands in front of your agents and answers one question before every action:
