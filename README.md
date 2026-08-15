@@ -150,4 +150,4 @@ So this repo is also a working argument: if three verbs and a receipt chain can 
 
 ## License
 
-Business Source License 1.1. Free to run on your own agents, in production, including commercially. You may not resell it as a hosted or managed service of your own. Converts to Apache 2.0 on 2030-08-15. See [LICENSE](LICENSE). Built by [Instruxi](https://instruxi.io).
+Functional Source License 1.1 (FSL-1.1-ALv2). Free to run on your own agents, in production, including commercially. You may not offer it as a competing commercial product or service. Becomes Apache 2.0 two years after each release. See [LICENSE](LICENSE). Built by [Instruxi](https://instruxi.io).

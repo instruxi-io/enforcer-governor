@@ -27,7 +27,7 @@
     "openai",
     "anthropic"
   ],
-  "license": "BUSL-1.1",
+  "license": "FSL-1.1-ALv2",
   "engines": {
     "node": ">=18"
   }
