@@ -79,20 +79,13 @@ ok('receipt chain verifies, and tampering breaks it', () => {
 console.log(`\n${pass} checks passed.`);
 
 // ── Dollar budgets ─────────────────────────────────────────────────────────
-// The whole promise of the spend control is "$20 means $20". These four
-// asserts fail the moment the rate table or the conversion drifts.
-import { RATES, tokensForDollars, dollarsForTokens, rateFor } from '../src/policy.mjs';
+// The whole promise of the spend control is "$20 means $20". These asserts
+// fail the moment the price table or the conversion drifts.
+import { tokensForDollars, dollarsForTokens } from '../src/policy.mjs';
 
-// Every model prices output at exactly 5x input, which is why one
-// effective token (output weighted 5x) equals one input-token of cost.
-for (const [k, r] of Object.entries(RATES)) {
-  assert(r.perM > 0, `rate for ${k} must be positive`);
-}
-assert(tokensForDollars(20, RATES.opus.perM) === 4_000_000, '$20 of Opus is 4M effective tokens');
-assert(tokensForDollars(20, RATES.haiku.perM) === 20_000_000, '$20 of Haiku is 20M effective tokens');
-assert(Math.abs(dollarsForTokens(4_000_000, RATES.opus.perM) - 20) < 1e-9, '4M Opus tokens is $20');
-assert(rateFor('claude-sonnet-4-5') === 'sonnet', 'model string maps to its rate');
-assert(rateFor('') === 'opus', 'unknown model falls back to the priciest rate');
+assert(tokensForDollars(20, 5) === 4_000_000, '$20 at $5/Mtok is 4M effective tokens');
+assert(tokensForDollars(20, 1) === 20_000_000, '$20 at $1/Mtok is 20M effective tokens');
+assert(Math.abs(dollarsForTokens(4_000_000, 5) - 20) < 1e-9, 'and back again');
 console.log('  dollar budget conversion ok');
 
 // ── Loop detection catches alternating loops, not just back-to-back ────────
@@ -115,3 +108,35 @@ console.log('  dollar budget conversion ok');
   assert(v.verdict === 'allow', 'varied real work is not mistaken for a loop');
 }
 console.log('  alternating-loop detection ok');
+
+// ── Cross-provider pricing ────────────────────────────────────────────────
+// The old code assumed output is always 5x input. That is true of every
+// Anthropic model and true of NO OpenAI model, so a flat 5x mis-billed every
+// GPT agent. These asserts pin the real ratios to the published prices.
+import { MODELS, priceOf, weightsFor } from '../src/policy.mjs';
+
+for (const [k, m] of Object.entries(MODELS)) {
+  assert(m.in > 0 && m.out > 0, `${k} needs real prices`);
+  if (m.p === 'anthropic') {
+    assert.equal(m.out / m.in, 5, `${k}: Anthropic output is 5x input`);
+  }
+}
+// Ratios verified against the OpenAI pricing page.
+assert.equal(weightsFor('gpt-5.6-sol').out, 6, 'gpt-5.6 output is 6x input');
+assert.equal(weightsFor('gpt-5').out, 8, 'gpt-5 output is 8x input');
+assert.equal(weightsFor('gpt-4o').out, 4, 'gpt-4o output is 4x input');
+assert.equal(weightsFor('claude-opus-5').out, 5, 'Claude output is 5x input');
+
+// Longest-match wins, or 'gpt-5.6-sol' would resolve to plain 'gpt-5'.
+assert.equal(priceOf('gpt-5.6-sol').key, 'gpt-5.6-sol', 'specific model beats prefix');
+assert.equal(priceOf('gpt-5-mini-2026').key, 'gpt-5-mini', 'dated suffix still matches');
+assert.equal(priceOf('claude-sonnet-4-6-20260101').key, 'claude-sonnet-4-6', 'dated Claude matches');
+// Unknown models must not silently price as something cheap.
+assert.equal(priceOf('gpt-9-unreleased').p, 'openai', 'unknown GPT stays on OpenAI pricing');
+assert.equal(priceOf('').key, 'claude-opus-5', 'no model reported falls back to the default');
+
+// $20 buys the right number of effective tokens on each provider.
+assert.equal(tokensForDollars(20, priceOf('claude-opus-5').in), 4_000_000);
+assert.equal(tokensForDollars(20, priceOf('gpt-5').in), 16_000_000);
+assert.equal(tokensForDollars(20, priceOf('gpt-4o').in), 8_000_000);
+console.log('  cross-provider pricing ok');

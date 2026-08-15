@@ -100,7 +100,7 @@ Drop a `governor.config.json` in the directory you run it from:
 ```json
 {
   "dollars": 20,
-  "rate": "opus",
+  "model": "claude-opus-5",
   "soft": 0.75,
   "loopLimit": 4,
   "softAction": "escalate",
@@ -108,11 +108,15 @@ Drop a `governor.config.json` in the directory you run it from:
 }
 ```
 
-**Set the limit in dollars.** `dollars` is the spend cap per agent per session and `rate` is the price list to convert it with (`opus`, `sonnet`, or `haiku`). The dashboard shows you what that buys before anything runs: how many tokens, and roughly how long an agent can work on it. Change it there at any time; agents already running pick up the new limit immediately, and one that was stopped for hitting the old limit is released.
+**Set the limit in dollars.** `dollars` is the spend cap per agent per session; `model` is which model's prices convert it into a token budget. The dashboard shows you what that buys before anything runs: how many tokens, and roughly how long an agent can work on it. Change it there at any time; agents already running pick up the new limit immediately, and one that was stopped for hitting the old limit is released.
 
-Under the hood the cap is **cost-weighted effective tokens**, not raw counts. Cached sessions re-read their whole context every turn, so raw sums explode into the billions while costing very little. The governor weights by price instead: input 1x, output 5x, cache-create 1.25x, cache-read 0.1x. Those weights are exactly Anthropic's own price ratios on every current model, so one effective token is one input-token of cost and `dollars` converts with a single multiply. `$20` at Opus rates is 4,000,000 effective tokens. Set `budget` directly instead if you would rather think in tokens.
+**Claude and ChatGPT are both supported, and the model is detected for you.** Every agent reports which model answered, so the governor prices each one at its own rate and the dashboard's picker follows whatever it sees. `$20` means $20 whether that agent is on Opus 5 or GPT-5 mini. Pick a model by hand and your choice sticks.
 
-Prices are Anthropic's published API rates. **On a Claude subscription you are not billed per token**, so read the dollar figures as equivalent API cost rather than an invoice.
+Under the hood the cap is **cost-weighted effective tokens**, not raw counts. Cached sessions re-read their whole context every turn, so raw sums explode into the billions while costing very little. The governor weights by price instead, so one effective token is one input-token of cost at that model's price and `dollars` converts with a single multiply.
+
+The weights are per model, because the output multiplier is not a constant: Anthropic prices output at 5x input across its range, while OpenAI is 6x on the GPT-5.6 family, 8x on GPT-5, and 4x on GPT-4o. Cached input differs too. `$20` is 4,000,000 effective tokens on Opus 5 and 16,000,000 on GPT-5. Set `budget` directly instead if you would rather think in tokens.
+
+Prices are the providers' published list rates. **On a Claude or ChatGPT subscription you are not billed per token**, so read the dollar figures as equivalent API cost rather than an invoice.
 
 `softAction` is `"escalate"` (ask a human) or `"deny"` (auto-block at the soft cap). Everything is also flippable live from the dashboard switches.
 

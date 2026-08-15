@@ -6,7 +6,7 @@ import { readFile, appendFile, mkdir } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { makeState, decide, resolve, kill, release, verifyChain, getAgent, rateFor, DEFAULTS, RATES, tokensForDollars } from './policy.mjs';
+import { makeState, decide, resolve, kill, release, verifyChain, getAgent, priceOf, weightsFor, MODELS, DEFAULTS, tokensForDollars } from './policy.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dir, '..');
@@ -18,8 +18,7 @@ const RECEIPTS = join(DATA_DIR, 'receipts.jsonl');
 // Dollars are the source of truth; budget (effective tokens) is derived, so
 // nobody has to think in tokens unless they want to.
 function syncBudget(cfg) {
-  const perM = (RATES[cfg.rate] || RATES.opus).perM;
-  cfg.budget = tokensForDollars(cfg.dollars, perM);
+  cfg.budget = tokensForDollars(cfg.dollars, priceOf(cfg.model).in);
   return cfg;
 }
 function loadConfig() {
@@ -27,7 +26,7 @@ function loadConfig() {
   const f = join(process.cwd(), 'governor.config.json');
   if (existsSync(f)) { try { cfg = { ...cfg, ...JSON.parse(readFileSync(f, 'utf8')) }; } catch {} }
   if (process.env.GOVERNOR_DOLLARS) cfg.dollars = +process.env.GOVERNOR_DOLLARS;
-  if (process.env.GOVERNOR_RATE) cfg.rate = process.env.GOVERNOR_RATE;
+  if (process.env.GOVERNOR_MODEL) cfg.model = process.env.GOVERNOR_MODEL;
   syncBudget(cfg);
   // Explicit token budget still wins, for anyone who really does think in tokens.
   if (process.env.GOVERNOR_BUDGET) cfg.budget = +process.env.GOVERNOR_BUDGET;
@@ -39,8 +38,7 @@ function loadConfig() {
 // at each agent's OWN model price. A flat token cap would silently give a
 // Haiku agent a quarter of the money an Opus agent gets.
 function budgetFor(a) {
-  const perM = (RATES[rateFor(a.model, CONFIG.rate)] || RATES.opus).perM;
-  return tokensForDollars(CONFIG.dollars, perM);
+  return tokensForDollars(CONFIG.dollars, priceOf(a.model, CONFIG.model).in);
 }
 
 const CONFIG = loadConfig();
@@ -59,7 +57,7 @@ function snapshot() {
   })), config: {
     budget: CONFIG.budget, soft: CONFIG.soft, loopLimit: CONFIG.loopLimit,
     softAction: CONFIG.softAction, budgetOn: CONFIG.budgetOn, loopOn: CONFIG.loopOn,
-    dollars: CONFIG.dollars, rate: CONFIG.rate, rates: RATES,
+    dollars: CONFIG.dollars, model: CONFIG.model, models: MODELS,
   } };
 }
 
@@ -79,16 +77,26 @@ const UPSTREAMS = {
   '/v1/messages': 'https://api.anthropic.com/v1/messages',
   '/v1/chat/completions': 'https://api.openai.com/v1/chat/completions',
 };
-// Cost-weighted effective tokens (same weights as the hook: input=1,
-// output 5x, cache-create 1.25x, cache-read 0.1x).
+// Effective tokens from a provider response, weighted by THAT model's own
+// price ratios. The response says which model served it, so a mixed fleet is
+// billed correctly without anyone configuring anything.
 function extractUsage(body, path) {
   try {
     const j = JSON.parse(body);
     const u = j.usage || {};
-    if (path.includes('chat/completions')) return Math.round((u.prompt_tokens || 0) + 5 * (u.completion_tokens || 0));
-    return Math.round((u.input_tokens || 0) + 5 * (u.output_tokens || 0)
-      + 1.25 * (u.cache_creation_input_tokens || 0) + 0.1 * (u.cache_read_input_tokens || 0));
-  } catch { return 0; }
+    const model = j.model || '';
+    const w = weightsFor(model);
+    if (path.includes('chat/completions')) {
+      // OpenAI counts cached tokens INSIDE prompt_tokens. Billing the whole
+      // prompt at full price and then adding the cache on top double-charges
+      // the cached prefix, which is most of a long agent conversation.
+      const cached = u.prompt_tokens_details?.cached_tokens || 0;
+      const fresh = Math.max(0, (u.prompt_tokens || 0) - cached);
+      return { model, tokens: Math.round(fresh + w.cacheRead * cached + w.out * (u.completion_tokens || 0)) };
+    }
+    return { model, tokens: Math.round((u.input_tokens || 0) + w.out * (u.output_tokens || 0)
+      + w.cacheWrite * (u.cache_creation_input_tokens || 0) + w.cacheRead * (u.cache_read_input_tokens || 0)) };
+  } catch { return { model: '', tokens: 0 }; }
 }
 async function handleProxy(req, res, path) {
   const agent = req.headers['x-enforcer-agent'] || 'proxy-agent';
@@ -105,10 +113,14 @@ async function handleProxy(req, res, path) {
     upstream = await fetch(UPSTREAMS[path], { method: 'POST', headers, body });
   } catch (e) { return json(res, 502, { error: { message: 'upstream unreachable: ' + e.message } }); }
   const respBody = await upstream.text();
-  const used = extractUsage(respBody, path);
+  const { tokens: used, model } = extractUsage(respBody, path);
+  // Price this agent at whatever model actually answered, before judging it.
+  const known = getAgent(state, agent, CONFIG);
+  if (model) known.model = model;
+  if (!known.budgetRaised) known.budget = budgetFor(known);
   const post = decide(state, { agent, deltaTokens: used, action: 'proxy:' + path }, CONFIG);
   post.agent.lastUsed = used;
-  broadcast('decision', { ...post, model: 'proxy' }); await persist(post);
+  broadcast('decision', { ...post, model: model || 'proxy' }); await persist(post);
   res.writeHead(upstream.status, { 'content-type': upstream.headers.get('content-type') || 'application/json', 'x-enforcer-verdict': post.verdict, 'x-enforcer-receipt': post.receipt });
   res.end(respBody);
 }
@@ -158,12 +170,12 @@ const server = http.createServer(async (req, res) => {
   }
   if (req.method === 'POST' && path === '/config') {
     const patch = JSON.parse((await readBody(req)).toString() || '{}');
-    for (const k of ['budgetOn', 'loopOn', 'softAction', 'budget', 'soft', 'dollars', 'rate']) {
+    for (const k of ['budgetOn', 'loopOn', 'softAction', 'budget', 'soft', 'dollars', 'model']) {
       if (k in patch) CONFIG[k] = patch[k];
     }
     // Raising the limit has to affect the agent already running, not just the
     // next one. Without this, changing it mid-session looks like a dead control.
-    if ('dollars' in patch || 'rate' in patch) {
+    if ('dollars' in patch || 'model' in patch) {
       if (!('budget' in patch)) syncBudget(CONFIG);
       for (const a of Object.values(state.agents)) {
         a.budgetRaised = false; a.budget = budgetFor(a);
@@ -211,7 +223,7 @@ server.listen(CONFIG.port, () => {
   }).catch(() => {
     console.log(`\n  Point any agent at this address: OPENAI_BASE_URL=${url}/v1`);
   });
-  const r = RATES[CONFIG.rate] || RATES.opus;
+  const r = priceOf(CONFIG.model);
   console.log(`\n  Spend limit: $${CONFIG.dollars} per agent at ${r.label} rates (${CONFIG.budget.toLocaleString()} tokens), ask-a-human at ${Math.round(CONFIG.soft * 100)}%.`);
   console.log(`  Change it in the dashboard, no restart needed.`);
   console.log(`  Receipts: ${RECEIPTS}`);

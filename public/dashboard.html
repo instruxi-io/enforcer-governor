@@ -34,6 +34,16 @@
   .presets,.rates{display:flex;gap:6px;align-items:center;}
   .rates{margin-left:auto;}
   .rates .rl{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-right:3px;}
+  .modelsel{font-family:var(--mono);font-size:11.5px;color:var(--ink);background:#0A0E13;
+    border:1px solid var(--lineS);border-radius:6px;padding:7px 9px;cursor:pointer;max-width:270px;
+    transition:border-color .18s cubic-bezier(.2,0,0,1);}
+  .modelsel:hover,.modelsel:focus{border-color:rgba(87,196,184,.5);outline:none;}
+  .modelsel optgroup{background:#0A0E13;color:var(--faint);}
+  .modelsel option{background:#0A0E13;color:var(--ink);}
+  .autotag{font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--allow);border:1px solid rgba(63,185,112,.4);border-radius:20px;padding:2px 7px;opacity:0;
+    transition:opacity .25s cubic-bezier(.2,0,0,1);}
+  .autotag.on{opacity:1;}
   .translate{margin-top:15px;padding-top:14px;border-top:1px solid var(--lineS);display:flex;gap:clamp(20px,4vw,42px);flex-wrap:wrap;}
   .tr .v{font-family:var(--mono);font-size:15px;color:var(--ink);font-variant-numeric:tabular-nums;line-height:1;}
   .tr .v em{font-style:normal;color:var(--teal);}
@@ -167,7 +177,10 @@
         <button class="chipbtn" data-d="50">$50</button>
         <button class="chipbtn" data-d="100">$100</button>
       </div>
-      <div class="rates" id="rates"><span class="rl">model</span></div>
+      <div class="rates" id="rates"><span class="rl">model</span>
+        <select id="modelSel" class="modelsel" aria-label="Model to price the limit against"></select>
+        <span class="autotag" id="autoTag">auto-detected</span>
+      </div>
     </div>
     <div class="translate">
       <div class="tr"><div class="v" id="trTok">4.0M</div><div class="k">tokens that buys</div></div>
@@ -219,26 +232,57 @@
   $('fleetHint').textContent = LIVE?'agents appear as your tools run · kill any of them':'watch scraper-07 loop · approve research-swarm-03 when it asks';
 
   // ── Money ────────────────────────────────────────────────────────────────
-  // Anthropic's published INPUT price per million tokens. The governor counts
-  // cost-weighted effective tokens (output 5x, cache-write 1.25x, cache-read
-  // 0.1x) and those weights are exactly Anthropic's own price ratios on every
-  // model, so one effective token is one input-token of cost and the whole
-  // conversion is a single multiply.
-  const RATES={opus:{label:'Opus',perM:5},sonnet:{label:'Sonnet',perM:3},haiku:{label:'Haiku',perM:1}};
-  let rateKey='opus', dollars=20;
-  const perM=()=>(RATES[rateKey]||RATES.opus).perM;
+  // Published list prices, USD per million tokens: in / out / cached-in.
+  // Mirrors src/policy.mjs. In LIVE mode the server's table replaces this, so
+  // the tool only has to be updated in one place.
+  let MODELS={
+    'claude-opus-5':{p:'anthropic',label:'Opus 5',in:5,out:25},
+    'claude-opus-4-8':{p:'anthropic',label:'Opus 4.8',in:5,out:25},
+    'claude-sonnet-5':{p:'anthropic',label:'Sonnet 5',in:3,out:15},
+    'claude-sonnet-4-6':{p:'anthropic',label:'Sonnet 4.6',in:3,out:15},
+    'claude-haiku-4-5':{p:'anthropic',label:'Haiku 4.5',in:1,out:5},
+    'gpt-5.6-sol':{p:'openai',label:'GPT-5.6 Sol',in:5,out:30,cin:0.5},
+    'gpt-5.6-terra':{p:'openai',label:'GPT-5.6 Terra',in:2,out:12,cin:0.2},
+    'gpt-5.6-luna':{p:'openai',label:'GPT-5.6 Luna',in:0.2,out:1.2,cin:0.02},
+    'gpt-5.5-pro':{p:'openai',label:'GPT-5.5 Pro',in:30,out:180},
+    'gpt-5.5':{p:'openai',label:'GPT-5.5',in:5,out:30,cin:0.5},
+    'gpt-5.4-mini':{p:'openai',label:'GPT-5.4 mini',in:0.75,out:4.5,cin:0.075},
+    'gpt-5.4-nano':{p:'openai',label:'GPT-5.4 nano',in:0.2,out:1.25,cin:0.02},
+    'gpt-5.4-pro':{p:'openai',label:'GPT-5.4 Pro',in:30,out:180},
+    'gpt-5.4':{p:'openai',label:'GPT-5.4',in:2.5,out:15,cin:0.25},
+    'gpt-5.1':{p:'openai',label:'GPT-5.1',in:1.25,out:10,cin:0.125},
+    'gpt-5-mini':{p:'openai',label:'GPT-5 mini',in:0.25,out:2,cin:0.025},
+    'gpt-5-nano':{p:'openai',label:'GPT-5 nano',in:0.05,out:0.4,cin:0.005},
+    'gpt-5-pro':{p:'openai',label:'GPT-5 Pro',in:15,out:120},
+    'gpt-5':{p:'openai',label:'GPT-5',in:1.25,out:10,cin:0.125},
+    'gpt-4.1-mini':{p:'openai',label:'GPT-4.1 mini',in:0.4,out:1.6,cin:0.1},
+    'gpt-4.1-nano':{p:'openai',label:'GPT-4.1 nano',in:0.1,out:0.4,cin:0.025},
+    'gpt-4.1':{p:'openai',label:'GPT-4.1',in:2,out:8,cin:0.5},
+    'gpt-4o-mini':{p:'openai',label:'GPT-4o mini',in:0.15,out:0.6,cin:0.075},
+    'gpt-4o':{p:'openai',label:'GPT-4o',in:2.5,out:10,cin:1.25},
+    'o4-mini':{p:'openai',label:'o4-mini',in:1.1,out:4.4,cin:0.275},
+    'o3-mini':{p:'openai',label:'o3-mini',in:1.1,out:4.4,cin:0.55},
+    'o3':{p:'openai',label:'o3',in:2,out:8,cin:0.5},
+  };
+  let KEYS=[]; const reKeys=()=>{ KEYS=Object.keys(MODELS).sort((a,b)=>b.length-a.length); };
+  reKeys();
+  let modelKey='claude-opus-5', dollars=20, autoModel=true;
+  // Longest key first, so 'gpt-5.6-sol' matches before the 'gpt-5' substring.
+  function priceOf(model){
+    const m=String(model||'').toLowerCase();
+    const k=KEYS.find(k=>m.includes(k));
+    if(k) return {key:k,...MODELS[k]};
+    if(/^(gpt|o[134]\b|chatgpt)/.test(m)&&MODELS['gpt-5.5']) return {key:'gpt-5.5',...MODELS['gpt-5.5']};
+    return {key:modelKey,...(MODELS[modelKey]||{p:'anthropic',label:'Opus 5',in:5,out:25})};
+  }
+  const perM=()=>(MODELS[modelKey]||{in:5}).in;
   const tokensFor=usd=>Math.round(usd/perM()*1e6);
-  // A mixed fleet must not all be billed at the picker's rate. Each agent
-  // reports its model, so charge it at that model's price and only fall back
-  // to the picker when it reported nothing.
-  const rateForModel=m=>{ const s=String(m||'').toLowerCase(); return Object.keys(RATES).find(k=>s.includes(k))||rateKey; };
-  const usdForAgent=(tok,model)=>tok/1e6*(RATES[rateForModel(model)]||RATES.opus).perM;
-  // The token cap that the current dollar limit buys for a given model. The
-  // demo fleet uses this too, so simulated cards read in the same money as real
-  // ones instead of showing hardcoded token budgets nobody can interpret.
-  const capFor=model=>Math.round(dollars/((RATES[rateForModel(model)]||RATES.opus).perM)*1e6);
-  window.__capFor=capFor;
   const money=u=>'$'+(u<100?u.toFixed(2):String(Math.round(u))).replace(/\.00$/,'');
+  // A mixed fleet must not all be billed at the picker's rate. Each agent
+  // reports its model, so charge it at that model's price.
+  const usdForAgent=(tok,model)=>tok/1e6*priceOf(model).in;
+  const capFor=model=>Math.round(dollars/priceOf(model).in*1e6);
+  window.__capFor=capFor;
   // Starting guess for an actively working coding agent, replaced by the real
   // rate the moment we have ~30s of its own data.
   // ponytail: one global assumption, not per-model. Good enough to size a
@@ -255,13 +299,39 @@
     return m>0.5?Math.max(0,fleetTokens-baseTokens)/m:0;
   }
   function human(mins){
-    if(!isFinite(mins)||mins<=0)return '—';
+    if(!isFinite(mins)||mins<=0)return '\u2014';
     if(mins<1)return 'under a minute';
     if(mins<60)return Math.round(mins)+' min';
     const h=Math.floor(mins/60), m=Math.round(mins%60);
     return m?h+'h '+m+'m':h+'h';
   }
   function runway(tokens){ const r=burnRate(); return {mins:tokens/(r||ASSUMED_BURN),measured:r>0}; }
+
+  // Group the picker by provider so it is obvious both are supported, and so
+  // Claude users never scroll past twenty GPT models to find Opus.
+  function buildModelSelect(){
+    const sel=$('modelSel'); if(!sel) return;
+    sel.innerHTML='';
+    for(const [prov,lbl] of [['anthropic','Claude \u00b7 Anthropic'],['openai','ChatGPT \u00b7 OpenAI']]){
+      const og=document.createElement('optgroup'); og.label=lbl;
+      for(const [k,m] of Object.entries(MODELS)) if(m.p===prov){
+        const o=document.createElement('option'); o.value=k;
+        o.textContent=m.label+'  \u00b7  $'+m.in+' / $'+m.out+' per Mtok';
+        og.appendChild(o);
+      }
+      if(og.children.length) sel.appendChild(og);
+    }
+    sel.value=modelKey;
+  }
+  // An agent told us what it is running. Follow it, until a human overrides.
+  function noticeModel(reported){
+    if(!autoModel||!reported) return;
+    const k=priceOf(reported).key;
+    if(!k||k===modelKey||!MODELS[k]) return;
+    modelKey=k; const sel=$('modelSel'); if(sel) sel.value=k;
+    $('autoTag').classList.add('on');
+    setDollars(dollars);
+  }
 
   function renderSpend(){
     const tok=tokensFor(dollars), {mins,measured}=runway(tok);
@@ -270,11 +340,14 @@
     $('trAsk').textContent=money(dollars*0.75);
     $('trStop').textContent=money(dollars);
     document.querySelectorAll('#presets .chipbtn').forEach(b=>b.classList.toggle('on',+b.dataset.d===dollars));
-    document.querySelectorAll('#rates .chipbtn').forEach(b=>b.classList.toggle('on',b.dataset.r===rateKey));
+    const sel=$('modelSel'); if(sel&&sel.value!==modelKey) sel.value=modelKey;
+    const m=MODELS[modelKey]||{}, prov=m.p==='openai'?'OpenAI':'Anthropic';
     $('spendNote').textContent = (measured
       ? 'Time is measured from what your agents are actually burning ('+fmt(Math.round(burnRate()))+' tokens/min). '
       : 'Time is an estimate until an agent runs, then it switches to the real rate. ')
-      + 'Priced at Anthropic’s published API rates. On a Claude subscription you are not billed per token, so read this as the equivalent API cost.';
+      + 'Priced at '+prov+'\u2019s published list rates for '+(m.label||modelKey)
+      + ' ($'+m.in+' in / $'+m.out+' out per million). The model is detected from your agents; change it above to price against a different one. '
+      + 'On a Claude or ChatGPT subscription you are not billed per token, so read this as the equivalent API cost.';
   }
 
   let pushT=null;
@@ -284,15 +357,17 @@
     if(window.__demoBudget) window.__demoBudget();
     if(!LIVE)return;
     clearTimeout(pushT);
-    pushT=setTimeout(()=>{ fetch('/config',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({dollars,rate:rateKey})}).catch(()=>{}); },350);
+    pushT=setTimeout(()=>{ fetch('/config',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({dollars,model:modelKey})}).catch(()=>{}); },350);
   }
   $('dollars').oninput=()=>setDollars(+$('dollars').value);
   document.querySelectorAll('#presets .chipbtn').forEach(b=>b.onclick=()=>{ $('dollars').value=b.dataset.d; setDollars(+b.dataset.d); });
-  for(const [k,v] of Object.entries(RATES)){
-    const b=document.createElement('button'); b.className='chipbtn'+(k===rateKey?' on':'');
-    b.dataset.r=k; b.textContent=v.label; b.onclick=()=>{ rateKey=k; setDollars(dollars); };
-    $('rates').appendChild(b);
-  }
+  buildModelSelect();
+  $('modelSel').onchange=()=>{
+    modelKey=$('modelSel').value;
+    autoModel=false;                      // a human chose; stop following agents
+    $('autoTag').classList.remove('on');
+    setDollars(dollars);
+  };
 
   function card(id, model, budget, soft){
     if (cards[id]) return cards[id];
@@ -329,7 +404,7 @@
   }
   function paint(id, {tokens,budget,status,model,task,loopStreak}){
     const c=card(id,model,budget); if(budget)c.budget=budget;
-    if(model)c.model=model;
+    if(model){ c.model=model; noticeModel(model); }
     if(task && task!==c.task){ c.task=task; const t=c.el.querySelector('.a-task'); t.textContent=task; t.classList.remove('idle'); }
     // Burn trace: one bar per action, height relative to the priciest action in
     // the window. Steady work reads as an even skyline; one expensive action
@@ -433,7 +508,8 @@
       if(typeof c.budgetOn==='boolean'){ policy.budget=c.budgetOn; $('swBudget').classList.toggle('on',c.budgetOn); }
       if(typeof c.loopOn==='boolean'){ policy.loop=c.loopOn; $('swLoop').classList.toggle('on',c.loopOn); }
       if(c.softAction){ policy.soft=c.softAction; $('segEsc').classList.toggle('on',c.softAction==='escalate'); $('segDeny').classList.toggle('on',c.softAction==='deny'); }
-      if(c.rate) rateKey=c.rate;
+      if(c.models&&Object.keys(c.models).length){ MODELS=c.models; reKeys(); buildModelSelect(); }
+      if(c.model&&MODELS[c.model]) modelKey=c.model;
       // Never yank the field out from under someone mid-keystroke.
       if(typeof c.dollars==='number' && document.activeElement!==$('dollars')){ dollars=c.dollars; $('dollars').value=c.dollars; }
       renderSpend();
