@@ -30,3 +30,28 @@ export function install(global = false) {
   console.log(`  Every tool call in ${global ? 'ALL projects' : 'this project'} now checks the governor first.`);
   return file;
 }
+
+// The way out. Nobody should ever have to hand-edit JSON to stop this thing.
+export function uninstall(global = false) {
+  const dir = global ? join(HOME, '.claude') : join(process.cwd(), '.claude');
+  const file = join(dir, 'settings.json');
+  if (!existsSync(file)) { console.log(`\n  Nothing to remove: ${file} does not exist.\n`); return null; }
+  let settings = {};
+  try { settings = JSON.parse(readFileSync(file, 'utf8')); }
+  catch { console.error(`  Could not parse ${file}; not touching it.`); return null; }
+
+  const before = JSON.stringify(settings.hooks?.PreToolUse ?? []);
+  if (settings.hooks?.PreToolUse) {
+    settings.hooks.PreToolUse = settings.hooks.PreToolUse
+      .filter(h => !JSON.stringify(h).includes('enforcer-governor') && !JSON.stringify(h).includes('hook.mjs'));
+    if (!settings.hooks.PreToolUse.length) delete settings.hooks.PreToolUse;
+    if (settings.hooks && !Object.keys(settings.hooks).length) delete settings.hooks;
+  }
+  if (before === JSON.stringify(settings.hooks?.PreToolUse ?? [])) {
+    console.log(`\n  The Enforcer hook was not in ${file}. Nothing changed.\n`); return file;
+  }
+  writeFileSync(file, JSON.stringify(settings, null, 2));
+  console.log(`\n  Removed the Enforcer hook from ${file}`);
+  console.log(`  Your agents are no longer governed. Start a new session to be sure.\n`);
+  return file;
+}

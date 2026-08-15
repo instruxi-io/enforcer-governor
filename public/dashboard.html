@@ -65,6 +65,28 @@
   .ebtns{display:flex;gap:10px;} .esc-btn{flex:1;font-family:var(--mono);font-size:13px;font-weight:600;cursor:pointer;border-radius:7px;padding:11px;border:1px solid;} .esc-approve{background:rgba(63,185,112,.14);border-color:var(--allow);color:var(--allow);} .esc-deny{background:none;border-color:var(--line);color:var(--dim);}
   footer{border-top:1px solid var(--lineS);padding:22px 0 40px;font-family:var(--mono);font-size:11px;color:var(--faint);display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001s!important;}}
+
+  /* first-run: confirm it worked before instructing anything */
+  .e-live{display:flex;align-items:center;gap:10px;font-family:var(--mono,monospace);font-size:13px;
+    color:#43BE74;margin-bottom:22px;letter-spacing:.02em}
+  .e-dot{width:8px;height:8px;border-radius:50%;background:#43BE74;box-shadow:0 0 0 0 rgba(67,190,116,.6);
+    animation:eLive 2s cubic-bezier(.2,0,0,1) infinite;flex:none}
+  @keyframes eLive{70%{box-shadow:0 0 0 9px rgba(67,190,116,0)}100%{box-shadow:0 0 0 0 rgba(67,190,116,0)}}
+  .e-steps{list-style:none;counter-reset:s;margin:14px 0 4px;padding:0}
+  .e-steps li{counter-increment:s;position:relative;padding:0 0 16px 34px}
+  .e-steps li::before{content:counter(s);position:absolute;left:0;top:-1px;width:22px;height:22px;border-radius:50%;
+    border:1px solid rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center;
+    font-family:var(--mono,monospace);font-size:11px;color:#8E96A3}
+  .e-steps li b{display:block;font-weight:500;margin-bottom:3px}
+  .e-steps li span{color:#8E96A3;font-size:13.5px;line-height:1.6}
+  .e-alt{margin-top:14px;padding-top:16px;border-top:1px solid rgba(255,255,255,.07);color:#8E96A3;font-size:13px}
+  /* the arrival moment */
+  @keyframes arrive{0%{opacity:0;transform:translateY(10px) scale(.99)}100%{opacity:1;transform:none}}
+  .agent.arriving{animation:arrive .26s cubic-bezier(.34,1.5,.5,1)}
+  .connected-flash{position:fixed;left:50%;top:22px;transform:translateX(-50%);z-index:80;
+    font-family:var(--mono,monospace);font-size:12.5px;letter-spacing:.06em;color:#04240F;background:#43BE74;
+    padding:10px 18px;border-radius:4px;box-shadow:0 14px 40px -12px rgba(67,190,116,.8);animation:flashIn .3s cubic-bezier(.34,1.5,.5,1)}
+  @keyframes flashIn{from{opacity:0;transform:translate(-50%,-8px)}to{opacity:1;transform:translate(-50%,0)}}
 </style>
 </head>
 <body>
@@ -128,14 +150,31 @@
 
   function card(id, model, budget, soft){
     if (cards[id]) return cards[id];
-    if ($('fleet').querySelector('.empty')) $('fleet').innerHTML='';
-    const el=document.createElement('div'); el.className='agent';
+    // The first real agent to show up is the moment this becomes real. Say so.
+    const wasEmpty = !!$('fleet').querySelector('.empty');
+    if (wasEmpty) {
+      $('fleet').innerHTML='';
+      if (LIVE) {
+        const f=document.createElement('div'); f.className='connected-flash';
+        f.textContent = 'Connected. '+id+' is now governed.';
+        document.body.appendChild(f);
+        setTimeout(()=>{ f.style.transition='opacity .4s'; f.style.opacity='0'; setTimeout(()=>f.remove(),400); }, 3200);
+      }
+    }
+    const el=document.createElement('div'); el.className='agent'+(wasEmpty?' arriving':'');
     el.innerHTML=`<div class="a-top"><div class="a-name"><span class="pulse"></span>${id}</div><div class="a-model">${model||''}</div></div>
       <div class="gauge"><div class="softmark" style="bottom:${(soft||.75)*100}%"></div><div class="fill"></div><div class="loopbadge">LOOP</div><div class="gpct">0%</div><div class="gtok">0 / ${fmt(budget||200000)}</div></div>
       <div class="a-foot"><div class="a-status"><span class="st-dot"></span><span class="stxt">flying</span></div><button class="kill">kill</button></div>`;
     $('fleet').appendChild(el);
     const c={el,budget:budget||200000,soft:soft||.75};
     el.querySelector('.kill').onclick=()=>killAgent(id);
+    // A grounded agent must have a visible way back, not a dead end.
+    const kb=el.querySelector('.kill');
+    el._toGrounded=()=>{ if(kb.dataset.mode==='resume')return;
+      kb.dataset.mode='resume'; kb.textContent='resume'; kb.disabled=false;
+      kb.onclick=async()=>{ try{ await fetch('/release',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({agent:id})}); }catch{}
+        kb.dataset.mode=''; kb.textContent='kill'; kb.onclick=()=>killAgent(id); };
+    };
     cards[id]=c; return c;
   }
   function paint(id, {tokens,budget,status,model,loopStreak}){
@@ -153,7 +192,10 @@
     c.el.querySelector('.gtok').textContent=fmt(tokens)+' / '+fmt(c.budget);
     if(model)c.el.querySelector('.a-model').textContent=model;
     const lb=c.el.querySelector('.loopbadge'); if(loopStreak>=3){lb.textContent='LOOP x'+loopStreak;lb.classList.add('show');}else lb.classList.remove('show');
-    c.el.querySelector('.kill').disabled = status==='grounded';
+    // Grounded used to disable the button, leaving no way back. In live mode it
+    // becomes Resume; in the demo it stays disabled so the simulation reads clean.
+    if (status==='grounded' && LIVE && c.el._toGrounded) { c.el._toGrounded(); }
+    else { const kb=c.el.querySelector('.kill'); if(!kb.dataset.mode) kb.disabled = status==='grounded'; }
   }
   function chip(verb,who,rule,hashLabel,authority){
     const c=document.createElement('div'); c.className='chip '+verb;
@@ -211,12 +253,16 @@
     es.addEventListener('config',e=>{ const c=JSON.parse(e.data); policy.budget=c.budgetOn; policy.loop=c.loopOn; policy.soft=c.softAction; $('swBudget').classList.toggle('on',c.budgetOn); $('swLoop').classList.toggle('on',c.loopOn); $('segEsc').classList.toggle('on',c.softAction==='escalate'); $('segDeny').classList.toggle('on',c.softAction==='deny'); });
     es.onerror=()=>{}; // reconnects automatically
     if(!Object.keys(cards).length) $('fleet').innerHTML=`<div class="empty">
-      <div class="e-h">The governor is running. No agents yet, connect one:</div>
-      <div class="e-step"><b>Claude Code</b><span>open a terminal in your project and run the command below, then start a NEW Claude Code session there</span>
-        <div class="e-cmd"><code>npx --yes enforcer-governor install-hook</code><button class="e-copy" data-c="npx --yes enforcer-governor install-hook">Copy</button></div></div>
-      <div class="e-step"><b>Any other agent</b><span>point it at the governor instead of the provider</span>
-        <div class="e-cmd"><code>export OPENAI_BASE_URL=http://localhost:4000/v1</code><button class="e-copy" data-c="export OPENAI_BASE_URL=http://localhost:4000/v1">Copy</button></div></div>
-      <div class="e-foot">The moment an agent acts, it appears here as a fuel gauge. This page updates by itself.</div>
+      <div class="e-live"><span class="e-dot"></span>Connected. The governor is running and watching.</div>
+      <div class="e-h">Nothing has happened yet. Two steps:</div>
+      <ol class="e-steps">
+        <li><b>Open Claude Code in this folder.</b><span>If it is already open, quit it and open it again. It only picks up the governor when it starts.</span></li>
+        <li><b>Ask it to do anything.</b><span>Every action it takes will appear on this screen, live.</span></li>
+      </ol>
+      <div class="e-alt">Not using Claude Code? Point any agent at the governor instead of the provider:
+        <div class="e-cmd"><code>export OPENAI_BASE_URL=http://localhost:4000/v1</code><button class="e-copy" data-c="export OPENAI_BASE_URL=http://localhost:4000/v1">Copy</button></div>
+      </div>
+      <div class="e-foot">To stop governing at any time: <code>npx enforcer-governor uninstall-hook</code></div>
     </div>`;
     document.querySelectorAll('.e-copy').forEach(b=>b.onclick=async()=>{ try{await navigator.clipboard.writeText(b.dataset.c);b.textContent='Copied';}catch{b.textContent='Select it';} setTimeout(()=>b.textContent='Copy',2000); });
     return;

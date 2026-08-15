@@ -6,7 +6,7 @@ import { readFile, appendFile, mkdir } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { makeState, decide, resolve, kill, verifyChain, DEFAULTS } from './policy.mjs';
+import { makeState, decide, resolve, kill, release, verifyChain, DEFAULTS } from './policy.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dir, '..');
@@ -118,6 +118,11 @@ const server = http.createServer(async (req, res) => {
     const { agent } = JSON.parse((await readBody(req)).toString() || '{}');
     const r = resolve(state, agent, false, CONFIG); if (r) { broadcast('decision', r); await persist(r); }
     return json(res, 200, r || { error: 'unknown agent' });
+  }
+  if (req.method === 'POST' && path === '/release') {
+    const { agent } = JSON.parse((await readBody(req)).toString() || '{}');
+    const r = release(state, agent || 'default');
+    broadcast('decision', r); return json(res, 200, r || { error: 'no such agent' });
   }
   if (req.method === 'POST' && path === '/kill') {
     const { agent } = JSON.parse((await readBody(req)).toString() || '{}');

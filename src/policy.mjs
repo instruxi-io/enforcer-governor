@@ -38,8 +38,21 @@ export function decide(state, ev, config = {}) {
   const cfg = { ...DEFAULTS, ...config };
   const a = getAgent(state, ev.agent || 'default', cfg);
 
-  // A grounded agent stays grounded until explicitly released.
-  if (a.status === 'grounded') return record(state, a, 'deny', 'agent grounded', a.tokens);
+  // Master switch wins over everything, including a grounded agent. Turning the
+  // governor off in the dashboard has to actually let work through, otherwise
+  // there is no way back and the user is stuck.
+  if (cfg.budgetOn === false && cfg.loopOn === false) {
+    a.status = 'active'; a.escalated = false;
+    return record(state, a, 'allow', 'governor off', a.tokens, 'human');
+  }
+
+  // A grounded agent stays grounded until released. Say how to get out of it,
+  // because a dead end with no instructions is how people abandon the tool.
+  if (a.status === 'grounded') {
+    return record(state, a, 'deny',
+      'agent grounded. Resume it in the dashboard, or run: npx enforcer-governor uninstall-hook',
+      a.tokens);
+  }
 
   // The hook/proxy reports the session's cumulative token total; trust it if given.
   if (typeof ev.tokens === 'number') a.tokens = ev.tokens;
@@ -89,6 +102,17 @@ export function resolve(state, agentId, approve, config = {}) {
   }
   a.status = 'grounded';
   return record(state, a, 'deny', 'escalation denied', a.tokens, 'human');
+}
+
+// Release a grounded agent and give it room to finish. This is the way out.
+export function release(state, agentId, extra = 1.5) {
+  const a = state.agents[agentId];
+  if (!a) return null;
+  a.budget = Math.round(Math.max(a.budget, a.tokens) * extra);
+  a.status = 'active';
+  a.escalated = false;
+  a.loopStreak = 0;
+  return record(state, a, 'allow', 'released by a human, budget raised', a.tokens, 'human');
 }
 
 export function kill(state, agentId) {
