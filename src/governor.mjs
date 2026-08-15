@@ -73,9 +73,12 @@ async function readBody(req) {
 const json = (res, code, obj) => { res.writeHead(code, { 'content-type': 'application/json', 'access-control-allow-origin': '*' }); res.end(JSON.stringify(obj)); };
 
 // ── Proxy: meter + gate real agent traffic ("any agent" path) ───────────────
+// Gemini, Groq, Together and friends all speak the OpenAI chat-completions
+// shape, so one env var makes the same route work for any of them.
+// Gemini: GOVERNOR_OPENAI_URL=https://generativelanguage.googleapis.com/v1beta/openai/chat/completions
 const UPSTREAMS = {
-  '/v1/messages': 'https://api.anthropic.com/v1/messages',
-  '/v1/chat/completions': 'https://api.openai.com/v1/chat/completions',
+  '/v1/messages': process.env.GOVERNOR_ANTHROPIC_URL || 'https://api.anthropic.com/v1/messages',
+  '/v1/chat/completions': process.env.GOVERNOR_OPENAI_URL || 'https://api.openai.com/v1/chat/completions',
 };
 // Effective tokens from a provider response, weighted by THAT model's own
 // price ratios. The response says which model served it, so a mixed fleet is
@@ -178,7 +181,13 @@ const server = http.createServer(async (req, res) => {
     if ('dollars' in patch || 'model' in patch) {
       if (!('budget' in patch)) syncBudget(CONFIG);
       for (const a of Object.values(state.agents)) {
-        a.budgetRaised = false; a.budget = budgetFor(a);
+        // A limit a human deliberately raised must survive a config change.
+        // Clearing budgetRaised here silently undid every "let it keep going"
+        // the moment the dashboard pushed config (which it does on its own,
+        // when it auto-detects the model) -- so approving looked like a no-op.
+        // A global raise can still lift them; it just can never lower them.
+        const next = budgetFor(a);
+        a.budget = a.budgetRaised ? Math.max(a.budget, next) : next;
         if (a.status === 'grounded' && a.tokens < a.budget) { a.status = 'active'; a.escalated = false; }
       }
     }

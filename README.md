@@ -75,7 +75,7 @@ npx --yes enforcer-governor install-hook
 
 Then start a **new** Claude Code session in that project. That is all. From now on, every action Claude Code takes is checked first: over budget and it is stopped, near the limit and it asks you. Add `--global` to the command to watch every project at once.
 
-### Govern any other agent (ChatGPT, OpenAI, Anthropic SDK, custom agents)
+### Govern any other agent (ChatGPT, Gemini, OpenAI or Anthropic SDKs, custom agents)
 
 Point the agent's API base URL at the governor:
 
@@ -85,6 +85,14 @@ export OPENAI_BASE_URL=http://localhost:4000/v1
 
 # Anthropic SDK agents
 export ANTHROPIC_BASE_URL=http://localhost:4000
+```
+
+Gemini, Groq, Together and anything else that speaks the OpenAI chat-completions shape works through the same route -- tell the governor where to forward:
+
+```bash
+# Gemini
+GOVERNOR_OPENAI_URL=https://generativelanguage.googleapis.com/v1beta/openai/chat/completions \
+  npx --yes enforcer-governor start
 ```
 
 Every request now passes through the governor. It meters real usage from each response and refuses (HTTP 429) once an agent is over budget or grounded. Tag requests per agent with an `x-enforcer-agent: <name>` header so they show up separately on the dashboard.
@@ -110,13 +118,13 @@ Drop a `governor.config.json` in the directory you run it from:
 
 **Set the limit in dollars.** `dollars` is the spend cap per agent per session; `model` is which model's prices convert it into a token budget. The dashboard shows you what that buys before anything runs: how many tokens, and roughly how long an agent can work on it. Change it there at any time; agents already running pick up the new limit immediately, and one that was stopped for hitting the old limit is released.
 
-**Claude and ChatGPT are both supported, and the model is detected for you.** Every agent reports which model answered, so the governor prices each one at its own rate and the dashboard's picker follows whatever it sees. `$20` means $20 whether that agent is on Opus 5 or GPT-5 mini. Pick a model by hand and your choice sticks.
+**Claude, ChatGPT and Gemini are all supported, and the model is detected for you.** Every agent reports which model answered, so the governor prices each one at its own rate and the dashboard's picker follows whatever it sees. `$20` means $20 whether that agent is on Opus 5, GPT-5 mini or Gemini 2.5 Pro. Pick a model by hand and your choice sticks.
 
 Under the hood the cap is **cost-weighted effective tokens**, not raw counts. Cached sessions re-read their whole context every turn, so raw sums explode into the billions while costing very little. The governor weights by price instead, so one effective token is one input-token of cost at that model's price and `dollars` converts with a single multiply.
 
-The weights are per model, because the output multiplier is not a constant: Anthropic prices output at 5x input across its range, while OpenAI is 6x on the GPT-5.6 family, 8x on GPT-5, and 4x on GPT-4o. Cached input differs too. `$20` is 4,000,000 effective tokens on Opus 5 and 16,000,000 on GPT-5. Set `budget` directly instead if you would rather think in tokens.
+The weights are per model, because the output multiplier is not a constant: Anthropic prices output at 5x input across its range, OpenAI runs 4x to 8x, and Gemini runs 4x to 8.33x. Cached input differs too. Two Gemini caveats are baked in: the Flash 3.7/3.6 rates are the ones in force through 2026-12-31, and the Pro rates are the sub-200k-prompt tier. `$20` is 4,000,000 effective tokens on Opus 5 and 16,000,000 on GPT-5. Set `budget` directly instead if you would rather think in tokens.
 
-Prices are the providers' published list rates. **On a Claude or ChatGPT subscription you are not billed per token**, so read the dollar figures as equivalent API cost rather than an invoice.
+Prices are the providers' published list rates. **On a Claude, ChatGPT or Gemini subscription you are not billed per token**, so read the dollar figures as equivalent API cost rather than an invoice.
 
 `softAction` is `"escalate"` (ask a human) or `"deny"` (auto-block at the soft cap). Everything is also flippable live from the dashboard switches.
 

@@ -140,3 +140,23 @@ assert.equal(tokensForDollars(20, priceOf('claude-opus-5').in), 4_000_000);
 assert.equal(tokensForDollars(20, priceOf('gpt-5').in), 16_000_000);
 assert.equal(tokensForDollars(20, priceOf('gpt-4o').in), 8_000_000);
 console.log('  cross-provider pricing ok');
+
+// ── A human's decision must outlive a config change ───────────────────────
+// The dashboard pushes /config on its own when it auto-detects a model. If
+// that recomputes every budget from scratch, it silently undoes "let it keep
+// going" a second after you click it, and approving looks like a no-op.
+{
+  const s = makeState();
+  decide(s, { agent: 'a', tokens: 80000, action: 'x' }, { budget: 100000, soft: 0.75 });
+  resolve(s, 'a', true, { budget: 100000 });
+  const raised = s.agents['a'].budget;
+  assert(raised > 100000, 'approve raises the limit');
+  assert(s.agents['a'].budgetRaised === true, 'and marks it as a human override');
+  // simulate the governor's config recompute, which must respect that flag
+  const recompute = (a, next) => { a.budget = a.budgetRaised ? Math.max(a.budget, next) : next; };
+  recompute(s.agents['a'], 100000);
+  assert.equal(s.agents['a'].budget, raised, 'a config push cannot lower a human-raised limit');
+  recompute(s.agents['a'], raised * 2);
+  assert.equal(s.agents['a'].budget, raised * 2, 'but a bigger global limit still lifts it');
+}
+console.log('  human overrides survive config changes ok');

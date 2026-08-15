@@ -209,7 +209,7 @@
   <div class="tape-wrap">
     <div class="tape-top"><span class="lbl">Every decision, receipted</span>
       <span class="legend"><span><i style="background:var(--allow)"></i>allow</span><span><i style="background:var(--deny)"></i>deny</span><span><i style="background:var(--esc)"></i>escalate</span></span>
-      <button class="verify" id="verifyBtn">Verify chain</button>
+      <button class="verify" id="verifyBtn">Check the records</button>
     </div>
     <div class="tape" id="tape" aria-live="polite"></div>
   </div>
@@ -264,6 +264,15 @@
     'o4-mini':{p:'openai',label:'o4-mini',in:1.1,out:4.4,cin:0.275},
     'o3-mini':{p:'openai',label:'o3-mini',in:1.1,out:4.4,cin:0.55},
     'o3':{p:'openai',label:'o3',in:2,out:8,cin:0.5},
+    'gemini-3.7-flash':{p:'google',label:'Gemini 3.7 Flash',in:0.75,out:3.75,cin:0.075},
+    'gemini-3.6-flash':{p:'google',label:'Gemini 3.6 Flash',in:0.75,out:3.75,cin:0.075},
+    'gemini-3.5-flash-lite':{p:'google',label:'Gemini 3.5 Flash-Lite',in:0.3,out:2.5,cin:0.03},
+    'gemini-3.5-flash':{p:'google',label:'Gemini 3.5 Flash',in:1.5,out:9,cin:0.15},
+    'gemini-3.1-flash-lite':{p:'google',label:'Gemini 3.1 Flash-Lite',in:0.25,out:1.5,cin:0.025},
+    'gemini-3.1-pro':{p:'google',label:'Gemini 3.1 Pro',in:2,out:12,cin:0.2},
+    'gemini-2.5-flash-lite':{p:'google',label:'Gemini 2.5 Flash-Lite',in:0.1,out:0.4,cin:0.01},
+    'gemini-2.5-flash':{p:'google',label:'Gemini 2.5 Flash',in:0.3,out:2.5,cin:0.03},
+    'gemini-2.5-pro':{p:'google',label:'Gemini 2.5 Pro',in:1.25,out:10,cin:0.125},
   };
   let KEYS=[]; const reKeys=()=>{ KEYS=Object.keys(MODELS).sort((a,b)=>b.length-a.length); };
   reKeys();
@@ -274,6 +283,7 @@
     const k=KEYS.find(k=>m.includes(k));
     if(k) return {key:k,...MODELS[k]};
     if(/^(gpt|o[134]\b|chatgpt)/.test(m)&&MODELS['gpt-5.5']) return {key:'gpt-5.5',...MODELS['gpt-5.5']};
+    if(/(gemini|bard|palm)/.test(m)&&MODELS['gemini-3.1-pro']) return {key:'gemini-3.1-pro',...MODELS['gemini-3.1-pro']};
     return {key:modelKey,...(MODELS[modelKey]||{p:'anthropic',label:'Opus 5',in:5,out:25})};
   }
   const perM=()=>(MODELS[modelKey]||{in:5}).in;
@@ -313,7 +323,7 @@
   function buildModelSelect(){
     const sel=$('modelSel'); if(!sel) return;
     sel.innerHTML='';
-    for(const [prov,lbl] of [['anthropic','Claude \u00b7 Anthropic'],['openai','ChatGPT \u00b7 OpenAI']]){
+    for(const [prov,lbl] of [['anthropic','Claude \u00b7 Anthropic'],['openai','ChatGPT \u00b7 OpenAI'],['google','Gemini \u00b7 Google']]){
       const og=document.createElement('optgroup'); og.label=lbl;
       for(const [k,m] of Object.entries(MODELS)) if(m.p===prov){
         const o=document.createElement('option'); o.value=k;
@@ -346,7 +356,7 @@
     $('trStop').textContent=money(dollars);
     document.querySelectorAll('#presets .chipbtn').forEach(b=>b.classList.toggle('on',+b.dataset.d===dollars));
     const sel=$('modelSel'); if(sel&&sel.value!==modelKey) sel.value=modelKey;
-    const m=MODELS[modelKey]||{}, prov=m.p==='openai'?'OpenAI':'Anthropic';
+    const m=MODELS[modelKey]||{}, prov={openai:'OpenAI',google:'Google'}[m.p]||'Anthropic';
     $('spendNote').innerHTML = (measured
         ? 'Timing is measured from what your agents are actually burning.'
         : 'Timing is an estimate until an agent runs, then it uses the real rate.')
@@ -481,16 +491,37 @@
   // ── Switches ──
   function pushConfig(){ if(!LIVE)return; fetch('/config',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({budgetOn:policy.budget,loopOn:policy.loop,softAction:policy.soft})}).catch(()=>{}); }
   function syncSw(){ $('swBudget').classList.toggle('dis',!policy.enforcer); $('swLoop').classList.toggle('dis',!policy.enforcer); document.querySelector('.seg').style.opacity=policy.enforcer?'1':'.4'; document.body.classList.toggle('ungoverned',!policy.enforcer); }
-  $('swEnforcer').onclick=()=>{ policy.enforcer=!policy.enforcer; $('swEnforcer').className='sw master '+(policy.enforcer?'on':'off'); if(!policy.enforcer&&escId)resolveEsc(false); syncSw(); if(LIVE){ policy.budget=policy.enforcer&&policy.budget; } };
+  // Master switch. It MUST reach the server: turning it off only in the browser
+  // leaves the screen saying "checks are off" while the governor keeps blocking,
+  // which reads as broken and leaves no way out. Remember the individual rules
+  // so switching back on restores what you had, rather than silently re-enabling
+  // something you had deliberately turned off.
+  let savedRules=null;
+  $('swEnforcer').onclick=()=>{
+    policy.enforcer=!policy.enforcer;
+    $('swEnforcer').className='sw master '+(policy.enforcer?'on':'off');
+    if(!policy.enforcer&&escId)resolveEsc(false);
+    if(!policy.enforcer){
+      savedRules={budget:policy.budget,loop:policy.loop};
+      policy.budget=false; policy.loop=false;
+    }else{
+      const r=savedRules||{budget:true,loop:true}; savedRules=null;
+      policy.budget=r.budget; policy.loop=r.loop;
+    }
+    $('swBudget').classList.toggle('on',policy.budget);
+    $('swLoop').classList.toggle('on',policy.loop);
+    syncSw();
+    pushConfig();
+  };
   const tog=(id,k)=>$(id).onclick=()=>{ if(!policy.enforcer)return; policy[k]=!policy[k]; $(id).classList.toggle('on',policy[k]); pushConfig(); };
   tog('swBudget','budget'); tog('swLoop','loop');
   $('segEsc').onclick=()=>{policy.soft='escalate';$('segEsc').classList.add('on');$('segDeny').classList.remove('on');pushConfig();};
   $('segDeny').onclick=()=>{policy.soft='deny';$('segDeny').classList.add('on');$('segEsc').classList.remove('on');pushConfig();};
 
-  $('verifyBtn').onclick=async()=>{ const b=$('verifyBtn'); b.textContent='verifying...';
-    if(LIVE){ try{ const r=await(await fetch('/verify')).json(); $('mChain').innerHTML=r.ok?`<span class="chainok">verified &#10003; ${r.receipts}</span>`:`<span class="chainbad">broken</span>`; b.textContent=r.ok?`Chain verified · ${r.receipts}`:'Chain broken'; }catch{ b.textContent='governor offline'; } }
+  $('verifyBtn').onclick=async()=>{ const b=$('verifyBtn'); b.textContent='checking...';
+    if(LIVE){ try{ const r=await(await fetch('/verify')).json(); $('mChain').innerHTML=r.ok?`<span class="chainok">all ${r.receipts} match</span>`:`<span class="chainbad">do not match</span>`; b.textContent=r.ok?`All ${r.receipts} records check out`:'Records do not match'; }catch{ b.textContent='governor offline'; } }
     else demoVerify(b);
-    setTimeout(()=>b.textContent='Verify chain',3500);
+    setTimeout(()=>b.textContent='Check the records',3500);
   };
   // One ticker keeps the money honest: spend is what the fleet actually burned,
   // runway is what the busiest agent has left before it gets grounded.
@@ -607,7 +638,7 @@ window.__runDemo = (paint, onDecision, getPolicy, wire) => {
   wire.setResolvers(
     async id=>{ const a=st[id]; if(!a||a.status==='grounded')return; a.status='grounded'; onDecision(await rcpt(a,'deny','manual kill switch','human: you')); },
     async (id,approve,timeout)=>{ const a=st[id]; if(!a)return; escA=null; if(approve){a.budget=Math.round(a.budget*1.5);a.status='active';a.escalated=false;onDecision(await rcpt(a,'allow','budget raised +50%','human: you'));} else {a.status='grounded';onDecision(await rcpt(a,'deny',timeout?'escalation expired, fail-closed':'escalation denied',timeout?'fail-closed':'human: you'));} },
-    async b=>{ let h='genesis',ok=true; for(const l of chain){h=await sha(h+l.j);if(h!==l.h){ok=false;break;}} document.getElementById('mChain').innerHTML=ok?`<span class="chainok">verified &#10003; ${chain.length}</span>`:`<span class="chainbad">broken</span>`; b.textContent=ok?`Chain verified · ${chain.length}`:'Chain broken'; }
+    async b=>{ let h='genesis',ok=true; for(const l of chain){h=await sha(h+l.j);if(h!==l.h){ok=false;break;}} document.getElementById('mChain').innerHTML=ok?`<span class="chainok">all ${chain.length} match</span>`:`<span class="chainbad">do not match</span>`; b.textContent=ok?`All ${chain.length} records check out`:'Records do not match'; }
   );
   (async function loop(){ const red=matchMedia('(prefers-reduced-motion:reduce)').matches; while(true){ for(const a of AG){ if(escA)break; await step(st[a.id]); await new Promise(r=>setTimeout(r,red?260:120)); } await new Promise(r=>setTimeout(r,escA?300:(red?1400:850))); } })();
 };

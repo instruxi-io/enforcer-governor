@@ -47,6 +47,22 @@ export const MODELS = {
   'o4-mini':           { p: 'openai', label: 'o4-mini',        in: 1.10, out: 4.40, cin: 0.275 },
   'o3-mini':           { p: 'openai', label: 'o3-mini',        in: 1.10, out: 4.40, cin: 0.55 },
   'o3':                { p: 'openai', label: 'o3',             in: 2,    out: 8,   cin: 0.50  },
+  // ── Google ──  context-cache priced explicitly, no separate cache-write charge.
+  // Two caveats baked into these numbers, both taken from Google's pricing page:
+  // the Flash 3.7/3.6 rates are the ones in force through 2026-12-31 (they rise
+  // in 2027), and the Pro rates are the <=200k-prompt tier (longer prompts cost
+  // about double). Both are the common case; a long-prompt Pro session is
+  // therefore under-counted, which is the direction that lets an agent run
+  // slightly past its limit rather than being cut off early.
+  'gemini-3.7-flash':      { p: 'google', label: 'Gemini 3.7 Flash',      in: 0.75, out: 3.75, cin: 0.075 },
+  'gemini-3.6-flash':      { p: 'google', label: 'Gemini 3.6 Flash',      in: 0.75, out: 3.75, cin: 0.075 },
+  'gemini-3.5-flash-lite': { p: 'google', label: 'Gemini 3.5 Flash-Lite', in: 0.30, out: 2.50, cin: 0.03 },
+  'gemini-3.5-flash':      { p: 'google', label: 'Gemini 3.5 Flash',      in: 1.50, out: 9.00, cin: 0.15 },
+  'gemini-3.1-flash-lite': { p: 'google', label: 'Gemini 3.1 Flash-Lite', in: 0.25, out: 1.50, cin: 0.025 },
+  'gemini-3.1-pro':        { p: 'google', label: 'Gemini 3.1 Pro',        in: 2.00, out: 12.00, cin: 0.20 },
+  'gemini-2.5-flash-lite': { p: 'google', label: 'Gemini 2.5 Flash-Lite', in: 0.10, out: 0.40, cin: 0.01 },
+  'gemini-2.5-flash':      { p: 'google', label: 'Gemini 2.5 Flash',      in: 0.30, out: 2.50, cin: 0.03 },
+  'gemini-2.5-pro':        { p: 'google', label: 'Gemini 2.5 Pro',        in: 1.25, out: 10.00, cin: 0.125 },
 };
 
 // Longest key first, so 'gpt-5.6-sol' matches before the 'gpt-5' substring.
@@ -62,6 +78,7 @@ export function priceOf(model = '', fallback = DEFAULT_MODEL) {
   const key = KEYS.find(k => m.includes(k));
   if (key) return { key, ...MODELS[key] };
   if (/^(gpt|o[134]\b|chatgpt)/.test(m)) return { key: 'gpt-5.5', ...MODELS['gpt-5.5'] };
+  if (/(gemini|bard|palm)/.test(m)) return { key: 'gemini-3.1-pro', ...MODELS['gemini-3.1-pro'] };
   if (m.includes('claude')) return { key: DEFAULT_MODEL, ...MODELS[DEFAULT_MODEL] };
   return { key: fallback, ...(MODELS[fallback] || MODELS[DEFAULT_MODEL]) };
 }
