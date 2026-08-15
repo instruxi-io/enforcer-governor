@@ -168,6 +168,16 @@
     <h1>Autonomous, not unaccountable.</h1>
     <p>Let them run. Watch every action as it happens, step in when it matters, and keep a record nobody can quietly edit. Every action passes one check first: <span class="verbs">inside its limit and on task? <span class="a">allow</span> · over it, or stuck in a loop? <span class="d">deny</span> · needs more to finish? <span class="e">escalate</span> to you</span>. A denied action never executes, so nothing is spent on it.</p>
   </div>
+  <div class="fleet-h"><span class="lbl">Your agents</span><span class="hint" id="fleetHint"></span></div>
+  <div class="fleet" id="fleet"></div>
+  <div class="tape-wrap">
+    <div class="tape-top"><span class="lbl">Every decision, receipted</span>
+      <span class="legend"><span><i style="background:var(--allow)"></i>allow</span><span><i style="background:var(--deny)"></i>deny</span><span><i style="background:var(--esc)"></i>escalate</span></span>
+      <button class="verify" id="verifyBtn">Check the records</button>
+    </div>
+    <div class="tape" id="tape" aria-live="polite"></div>
+  </div>
+</div>
   <div class="spend">
     <div class="spend-h">Spend limit &middot; per agent</div>
     <div class="spend-row">
@@ -204,16 +214,6 @@
     </div>
     <div class="ungov-banner">CHECKS ARE OFF · your agents can spend without limit, and nothing is being recorded.</div>
   </div>
-  <div class="fleet-h"><span class="lbl">Your agents</span><span class="hint" id="fleetHint"></span></div>
-  <div class="fleet" id="fleet"></div>
-  <div class="tape-wrap">
-    <div class="tape-top"><span class="lbl">Every decision, receipted</span>
-      <span class="legend"><span><i style="background:var(--allow)"></i>allow</span><span><i style="background:var(--deny)"></i>deny</span><span><i style="background:var(--esc)"></i>escalate</span></span>
-      <button class="verify" id="verifyBtn">Check the records</button>
-    </div>
-    <div class="tape" id="tape" aria-live="polite"></div>
-  </div>
-</div>
 <footer><div class="wrap" style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;width:100%"><span>INSTRUXI · ENFORCER GOVERNOR</span><span>deterministic checks decide · humans judge · every decision receipted</span></div></footer>
 <div class="esc-modal" id="escModal"><div class="esc-card">
   <div class="eh">Your agent needs a decision <span id="escTimer"></span></div>
@@ -576,7 +576,7 @@
       <div class="e-what"><b>What this is.</b> Claude Code spends real money as it works &mdash; every file it reads, every command it runs. Enforcer watches that spend as it happens and stops the agent at a limit you set, so a job that goes wrong costs you a coffee instead of a week's budget. Nothing about how you use Claude Code changes.</div>
       <div class="e-h">Nothing has happened yet. Three steps:</div>
       <ol class="e-steps">
-        <li><b>Set your spend limit above.</b><span>Type a dollar amount or tap a preset. It shows you what that buys and roughly how long an agent can work on it. $20 is a normal day.</span></li>
+        <li><b>Set your spend limit.</b><span>Scroll down to Spend limit: type a dollar amount or tap a preset. It shows what that buys and roughly how long an agent can work on it. $20 is a normal day.</span></li>
         <li><b>Open Claude Code in this folder.</b><span>If it is already open, quit it and open it again. It only picks up the governor when it starts.</span></li>
         <li><b>Ask it to do anything.</b><span>Every action appears here live. At 75% of your limit it stops and asks you. At 100% it stops.</span></li>
       </ol>
