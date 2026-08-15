@@ -87,10 +87,10 @@
   .a-meta{font-family:var(--mono);font-size:9.5px;color:var(--faint);margin-top:6px;letter-spacing:.04em;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   /* Burn trace: what this agent has been spending, moment to moment. */
-  .sparkwrap{position:relative;height:28px;margin:8px 11px 0;background:#080B10;
-    border:1px solid var(--lineS);border-radius:5px;overflow:hidden;}
-  .sparklbl{position:absolute;left:6px;top:4px;z-index:2;font-family:var(--mono);font-size:8px;
+  .sparklbl{display:block;margin:9px 11px 4px;font-family:var(--mono);font-size:8px;
     letter-spacing:.12em;text-transform:uppercase;color:var(--faint);}
+  .sparkwrap{position:relative;height:28px;margin:0 11px;background:#080B10;
+    border:1px solid var(--lineS);border-radius:5px;overflow:hidden;}
   .spark{position:absolute;inset:0;width:100%;height:100%;}
   .spark rect{fill:var(--teal);opacity:.8;}
   .warn .spark rect,.esc .spark rect{fill:var(--esc);}
@@ -402,7 +402,8 @@
         <div class="a-meta"><span class="aid">${id}</span><span class="amdl"></span></div>
       </div>
       <div class="gauge"><div class="softmark" style="bottom:${(soft||.75)*100}%"></div><div class="fill"></div><div class="loopbadge">REPEAT</div><div class="gpct">0%</div><div class="gtok">$0</div></div>
-      <div class="sparkwrap"><span class="sparklbl">cost per action</span><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" aria-hidden="true"><g></g></svg></div>
+      <div class="sparklbl">cost per action</div>
+      <div class="sparkwrap"><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" aria-hidden="true"><g></g></svg></div>
       <div class="a-foot"><div class="a-status"><span class="st-dot"></span><span class="stxt">working</span></div><span class="a-left"></span><button class="kill">kill</button></div>`;
     $('fleet').appendChild(el);
     const c={el,budget:budget||200000,soft:soft||.75};
