@@ -5,11 +5,36 @@ import { createHash } from 'node:crypto';
 
 export const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 
+// Dollars per million effective tokens, by model family.
+// These are Anthropic's published INPUT prices. The effective-token weighting
+// below (output 5x, cache-write 1.25x, cache-read 0.1x) is exactly Anthropic's
+// own price ratio on every current model -- output is 5x input across Opus,
+// Sonnet and Haiku alike; a cache read is 0.1x input; a 5m cache write 1.25x.
+// So one effective token IS one input-token of cost, and dollars <-> tokens is
+// a single multiply rather than a model of the whole session.
+export const RATES = {
+  opus:   { label: 'Opus',   perM: 5, note: '$5 / $25 per Mtok' },
+  sonnet: { label: 'Sonnet', perM: 3, note: '$3 / $15 per Mtok' },
+  haiku:  { label: 'Haiku',  perM: 1, note: '$1 / $5 per Mtok' },
+};
+
+export const tokensForDollars = (usd, perM) => Math.round((usd / perM) * 1e6);
+export const dollarsForTokens = (tok, perM) => (tok / 1e6) * perM;
+
+// Which rate to bill an agent at, from whatever model string it reported.
+export function rateFor(model = '', fallback = 'opus') {
+  const m = String(model).toLowerCase();
+  for (const k of ['opus', 'sonnet', 'haiku']) if (m.includes(k)) return k;
+  return fallback;
+}
+
 export const DEFAULTS = {
   // Budgets are COST-WEIGHTED effective tokens (input=1, output 5x,
   // cache-create 1.25x, cache-read 0.1x), so long cached sessions are
   // measured by what they cost, not by raw context re-reads.
-  budget: 5000000,    // hard effective-token cap per agent per session
+  dollars: 20,        // what the human actually sets: spend cap per agent, USD
+  rate: 'opus',       // which price list to convert it with
+  budget: 4000000,    // == $20 at Opus rates. Kept in sync with dollars/rate.
   soft: 0.75,         // escalate / warn at this fraction of budget
   loopLimit: 4,       // identical action repeats that trip a loop block
   loopWindow: 8,      // how many recent actions to remember

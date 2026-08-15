@@ -6,7 +6,7 @@ import { readFile, appendFile, mkdir } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { makeState, decide, resolve, kill, release, verifyChain, DEFAULTS } from './policy.mjs';
+import { makeState, decide, resolve, kill, release, verifyChain, DEFAULTS, RATES, tokensForDollars } from './policy.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dir, '..');
@@ -15,10 +15,21 @@ const DATA_DIR = join(HOME, '.enforcer-governor');
 const RECEIPTS = join(DATA_DIR, 'receipts.jsonl');
 
 // Config: defaults <- governor.config.json (cwd) <- env.
+// Dollars are the source of truth; budget (effective tokens) is derived, so
+// nobody has to think in tokens unless they want to.
+function syncBudget(cfg) {
+  const perM = (RATES[cfg.rate] || RATES.opus).perM;
+  cfg.budget = tokensForDollars(cfg.dollars, perM);
+  return cfg;
+}
 function loadConfig() {
   let cfg = { ...DEFAULTS, port: 4000 };
   const f = join(process.cwd(), 'governor.config.json');
   if (existsSync(f)) { try { cfg = { ...cfg, ...JSON.parse(readFileSync(f, 'utf8')) }; } catch {} }
+  if (process.env.GOVERNOR_DOLLARS) cfg.dollars = +process.env.GOVERNOR_DOLLARS;
+  if (process.env.GOVERNOR_RATE) cfg.rate = process.env.GOVERNOR_RATE;
+  syncBudget(cfg);
+  // Explicit token budget still wins, for anyone who really does think in tokens.
   if (process.env.GOVERNOR_BUDGET) cfg.budget = +process.env.GOVERNOR_BUDGET;
   if (process.env.GOVERNOR_PORT) cfg.port = +process.env.GOVERNOR_PORT;
   return cfg;
@@ -37,7 +48,11 @@ function snapshot() {
   return { agents: Object.values(state.agents).map(a => ({
     id: a.id, tokens: Math.round(a.tokens), budget: a.budget, soft: a.soft,
     status: a.status, cost: a.cost, model: a.model || '',
-  })), config: { budget: CONFIG.budget, soft: CONFIG.soft, loopLimit: CONFIG.loopLimit, softAction: CONFIG.softAction } };
+  })), config: {
+    budget: CONFIG.budget, soft: CONFIG.soft, loopLimit: CONFIG.loopLimit,
+    softAction: CONFIG.softAction, budgetOn: CONFIG.budgetOn, loopOn: CONFIG.loopOn,
+    dollars: CONFIG.dollars, rate: CONFIG.rate, rates: RATES,
+  } };
 }
 
 async function persist(r) {
@@ -131,8 +146,20 @@ const server = http.createServer(async (req, res) => {
   }
   if (req.method === 'POST' && path === '/config') {
     const patch = JSON.parse((await readBody(req)).toString() || '{}');
-    for (const k of ['budgetOn', 'loopOn', 'softAction', 'budget', 'soft']) if (k in patch) CONFIG[k] = patch[k];
+    for (const k of ['budgetOn', 'loopOn', 'softAction', 'budget', 'soft', 'dollars', 'rate']) {
+      if (k in patch) CONFIG[k] = patch[k];
+    }
+    // Raising the limit has to affect the agent already running, not just the
+    // next one. Without this, changing it mid-session looks like a dead control.
+    if ('dollars' in patch || 'rate' in patch) {
+      if (!('budget' in patch)) syncBudget(CONFIG);
+      for (const a of Object.values(state.agents)) {
+        a.budget = CONFIG.budget;
+        if (a.status === 'grounded' && a.tokens < a.budget) { a.status = 'active'; a.escalated = false; }
+      }
+    }
     broadcast('config', snapshot().config);
+    broadcast('agents', snapshot().agents);
     return json(res, 200, snapshot().config);
   }
   if (req.method === 'GET' && path === '/state') return json(res, 200, snapshot());
@@ -174,7 +201,9 @@ server.listen(CONFIG.port, () => {
   }).catch(() => {
     console.log(`\n  Point any agent at this address: OPENAI_BASE_URL=${url}/v1`);
   });
-  console.log(`\n  Budget: ${CONFIG.budget.toLocaleString()} effective tokens per agent, ask-a-human at ${Math.round(CONFIG.soft * 100)}%.`);
+  const r = RATES[CONFIG.rate] || RATES.opus;
+  console.log(`\n  Spend limit: $${CONFIG.dollars} per agent at ${r.label} rates (${CONFIG.budget.toLocaleString()} tokens), ask-a-human at ${Math.round(CONFIG.soft * 100)}%.`);
+  console.log(`  Change it in the dashboard, no restart needed.`);
   console.log(`  Receipts: ${RECEIPTS}`);
   console.log(`  Stop it any time with Ctrl+C. Your agents keep working if it is off.\n`);
   // Auto-open the dashboard so nobody has to know what localhost means.

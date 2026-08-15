@@ -77,3 +77,20 @@ ok('receipt chain verifies, and tampering breaks it', () => {
 });
 
 console.log(`\n${pass} checks passed.`);
+
+// ── Dollar budgets ─────────────────────────────────────────────────────────
+// The whole promise of the spend control is "$20 means $20". These four
+// asserts fail the moment the rate table or the conversion drifts.
+import { RATES, tokensForDollars, dollarsForTokens, rateFor } from '../src/policy.mjs';
+
+// Every model prices output at exactly 5x input, which is why one
+// effective token (output weighted 5x) equals one input-token of cost.
+for (const [k, r] of Object.entries(RATES)) {
+  assert(r.perM > 0, `rate for ${k} must be positive`);
+}
+assert(tokensForDollars(20, RATES.opus.perM) === 4_000_000, '$20 of Opus is 4M effective tokens');
+assert(tokensForDollars(20, RATES.haiku.perM) === 20_000_000, '$20 of Haiku is 20M effective tokens');
+assert(Math.abs(dollarsForTokens(4_000_000, RATES.opus.perM) - 20) < 1e-9, '4M Opus tokens is $20');
+assert(rateFor('claude-sonnet-4-5') === 'sonnet', 'model string maps to its rate');
+assert(rateFor('') === 'opus', 'unknown model falls back to the priciest rate');
+console.log('  dollar budget conversion ok');

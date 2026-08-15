@@ -17,7 +17,29 @@
   .metric .v{font-family:var(--mono);font-size:19px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1;} .metric .k{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-top:5px;}
   .v.teal{color:var(--teal);}.v.deny{color:var(--deny);}.v.esc{color:var(--esc);}.v.allow{color:var(--allow);} .chainok{color:var(--allow);}.chainbad{color:var(--deny);}
   .lead{padding:22px 0 4px;} .lead h1{font-family:var(--serif);font-weight:400;font-size:clamp(21px,3vw,30px);line-height:1.14;max-width:26ch;} .lead p{color:var(--dim);font-size:14.5px;max-width:76ch;margin-top:9px;} .lead b{color:var(--ink);} .verbs .a{color:var(--allow);}.verbs .d{color:var(--deny);}.verbs .e{color:var(--esc);}
-  .controls{margin:20px 0 6px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;}
+  /* Spend limit. The one number a newcomer has to understand, in the unit
+     they already think in. Tokens are the derived figure, not the input. */
+  .spend{margin:20px 0 0;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px 15px;}
+  .spend-h{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);margin-bottom:15px;}
+  .spend-row{display:flex;align-items:center;gap:18px;flex-wrap:wrap;}
+  .dollar{display:flex;align-items:baseline;gap:3px;border-bottom:1px solid var(--line);padding-bottom:5px;transition:border-color .2s cubic-bezier(.2,0,0,1);}
+  .dollar:focus-within{border-color:var(--teal);}
+  .dollar span{font-family:var(--serif);font-size:26px;color:var(--faint);line-height:1;}
+  .dollar input{font-family:var(--serif);font-size:38px;line-height:1;width:3.4ch;background:none;border:none;color:var(--ink);font-variant-numeric:tabular-nums;padding:0;outline:none;}
+  .dollar input::-webkit-outer-spin-button,.dollar input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
+  .dollar input{-moz-appearance:textfield;}
+  .chipbtn{font-family:var(--mono);font-size:11.5px;color:var(--dim);background:#0A0E13;border:1px solid var(--lineS);border-radius:6px;padding:7px 11px;cursor:pointer;transition:color .18s cubic-bezier(.2,0,0,1),border-color .18s cubic-bezier(.2,0,0,1);}
+  .chipbtn:hover{color:var(--ink);border-color:var(--line);}
+  .chipbtn.on{color:var(--teal);border-color:rgba(87,196,184,.5);}
+  .presets,.rates{display:flex;gap:6px;align-items:center;}
+  .rates{margin-left:auto;}
+  .rates .rl{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-right:3px;}
+  .translate{margin-top:15px;padding-top:14px;border-top:1px solid var(--lineS);display:flex;gap:clamp(20px,4vw,42px);flex-wrap:wrap;}
+  .tr .v{font-family:var(--mono);font-size:15px;color:var(--ink);font-variant-numeric:tabular-nums;line-height:1;}
+  .tr .v em{font-style:normal;color:var(--teal);}
+  .tr .k{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-top:6px;}
+  .spend-note{font-family:var(--mono);font-size:11px;color:var(--faint);margin-top:12px;line-height:1.65;max-width:88ch;}
+  .controls{margin:14px 0 6px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;}
   .ctrl-h{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);margin-bottom:12px;}
   .switches{display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
   .sw{display:inline-flex;align-items:center;gap:10px;font-family:var(--mono);font-size:12px;background:#0A0E13;border:1px solid var(--lineS);border-radius:8px;padding:9px 13px;cursor:pointer;color:var(--dim);}
@@ -94,7 +116,8 @@
   <span class="brand"><b>ENFORCER</b> GOVERNOR</span>
   <span class="tag" id="modeTag">DEMO</span>
   <div class="metrics">
-    <div class="metric"><div class="v teal" id="mBurn">0</div><div class="k">tokens / min</div></div>
+    <div class="metric"><div class="v teal" id="mSpent">$0</div><div class="k">spent &middot; all agents</div></div>
+    <div class="metric"><div class="v" id="mLeft">&mdash;</div><div class="k">runway left</div></div>
     <div class="metric"><div class="v allow" id="mAllow">0</div><div class="k">allowed</div></div>
     <div class="metric"><div class="v deny" id="mDeny">0</div><div class="k">blocked</div></div>
     <div class="metric"><div class="v esc" id="mEsc">0</div><div class="k">escalated</div></div>
@@ -106,6 +129,26 @@
   <div class="lead">
     <h1>Every agent runs on a fuel budget. Enforcer decides who keeps flying.</h1>
     <p>Each column is an agent burning tokens. Every action passes one check first: <span class="verbs">in budget and on task? <span class="a">allow</span> · over budget or looping? <span class="d">deny</span> · needs more fuel? <span class="e">escalate</span></span>. Every verdict leaves a hash-chained receipt. <b>Flip a switch and the fleet reacts live.</b></p>
+  </div>
+  <div class="spend">
+    <div class="spend-h">Spend limit &middot; per agent</div>
+    <div class="spend-row">
+      <label class="dollar"><span>$</span><input id="dollars" type="number" min="1" max="9999" step="1" value="20" inputmode="numeric" aria-label="Spend limit in dollars"></label>
+      <div class="presets" id="presets">
+        <button class="chipbtn" data-d="5">$5</button>
+        <button class="chipbtn on" data-d="20">$20</button>
+        <button class="chipbtn" data-d="50">$50</button>
+        <button class="chipbtn" data-d="100">$100</button>
+      </div>
+      <div class="rates" id="rates"><span class="rl">model</span></div>
+    </div>
+    <div class="translate">
+      <div class="tr"><div class="v" id="trTok">4.0M</div><div class="k">tokens that buys</div></div>
+      <div class="tr"><div class="v"><em id="trTime">&mdash;</em></div><div class="k">of agent work</div></div>
+      <div class="tr"><div class="v" id="trAsk">$15</div><div class="k">it asks you at</div></div>
+      <div class="tr"><div class="v" id="trStop">$20</div><div class="k">it stops at</div></div>
+    </div>
+    <div class="spend-note" id="spendNote"></div>
   </div>
   <div class="controls">
     <div class="ctrl-h">Policy controls</div>
@@ -142,11 +185,82 @@
 (() => {
   const $=id=>document.getElementById(id), LIVE=window.__GOVERNOR_LIVE__===true;
   const fmt=n=>n>=1e6?(n/1e6).toFixed(2)+'M':n>=1e3?(n/1e3).toFixed(1)+'k':String(Math.round(n));
-  const cards={}; let allow=0,deny=0,esc=0,burn=0;
+  const cards={}; let allow=0,deny=0,esc=0;
   const policy={enforcer:true,budget:true,loop:true,soft:'escalate'};
   $('modeTag').textContent = LIVE?'LIVE · governing your agents':'DEMO · simulated fleet';
   if (LIVE) $('modeTag').classList.add('live');
   $('fleetHint').textContent = LIVE?'agents appear as your tools run · kill any of them':'watch scraper-07 loop · approve research-swarm-03 when it asks';
+
+  // ── Money ────────────────────────────────────────────────────────────────
+  // Anthropic's published INPUT price per million tokens. The governor counts
+  // cost-weighted effective tokens (output 5x, cache-write 1.25x, cache-read
+  // 0.1x) and those weights are exactly Anthropic's own price ratios on every
+  // model, so one effective token is one input-token of cost and the whole
+  // conversion is a single multiply.
+  const RATES={opus:{label:'Opus',perM:5},sonnet:{label:'Sonnet',perM:3},haiku:{label:'Haiku',perM:1}};
+  let rateKey='opus', dollars=20;
+  const perM=()=>(RATES[rateKey]||RATES.opus).perM;
+  const tokensFor=usd=>Math.round(usd/perM()*1e6);
+  // A mixed fleet must not all be billed at the picker's rate. Each agent
+  // reports its model, so charge it at that model's price and only fall back
+  // to the picker when it reported nothing.
+  const rateForModel=m=>{ const s=String(m||'').toLowerCase(); return Object.keys(RATES).find(k=>s.includes(k))||rateKey; };
+  const usdForAgent=(tok,model)=>tok/1e6*(RATES[rateForModel(model)]||RATES.opus).perM;
+  const money=u=>'$'+(u<100?u.toFixed(2):String(Math.round(u))).replace(/\.00$/,'');
+  // Starting guess for an actively working coding agent, replaced by the real
+  // rate the moment we have ~30s of its own data.
+  // ponytail: one global assumption, not per-model. Good enough to size a
+  // first budget; observed burn takes over almost immediately.
+  const ASSUMED_BURN=30000;
+  // baseTokens matters: on a reload the snapshot arrives with a session's spend
+  // already on it. Counting that as "burned since the page opened" reports a
+  // rate in the millions/min and a runway of seconds. Only measure what burns
+  // while we are watching.
+  let firstSeen=0, baseTokens=0, fleetTokens=0;
+  function burnRate(){
+    if(!firstSeen)return 0;
+    const m=(Date.now()-firstSeen)/60000;
+    return m>0.5?Math.max(0,fleetTokens-baseTokens)/m:0;
+  }
+  function human(mins){
+    if(!isFinite(mins)||mins<=0)return '—';
+    if(mins<1)return 'under a minute';
+    if(mins<60)return Math.round(mins)+' min';
+    const h=Math.floor(mins/60), m=Math.round(mins%60);
+    return m?h+'h '+m+'m':h+'h';
+  }
+  function runway(tokens){ const r=burnRate(); return {mins:tokens/(r||ASSUMED_BURN),measured:r>0}; }
+
+  function renderSpend(){
+    const tok=tokensFor(dollars), {mins,measured}=runway(tok);
+    $('trTok').textContent=fmt(tok);
+    $('trTime').textContent=(measured?'':'about ')+human(mins);
+    $('trAsk').textContent=money(dollars*0.75);
+    $('trStop').textContent=money(dollars);
+    document.querySelectorAll('#presets .chipbtn').forEach(b=>b.classList.toggle('on',+b.dataset.d===dollars));
+    document.querySelectorAll('#rates .chipbtn').forEach(b=>b.classList.toggle('on',b.dataset.r===rateKey));
+    $('spendNote').textContent = (measured
+      ? 'Time is measured from what your agents are actually burning ('+fmt(Math.round(burnRate()))+' tokens/min). '
+      : 'Time is an estimate until an agent runs, then it switches to the real rate. ')
+      + 'Priced at Anthropic’s published API rates. On a Claude subscription you are not billed per token, so read this as the equivalent API cost.';
+  }
+
+  let pushT=null;
+  function setDollars(v){
+    dollars=Math.max(1,Math.min(9999,Math.round(v)||1));
+    renderSpend();
+    if(window.__demoBudget) window.__demoBudget(dollars);
+    if(!LIVE)return;
+    clearTimeout(pushT);
+    pushT=setTimeout(()=>{ fetch('/config',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({dollars,rate:rateKey})}).catch(()=>{}); },350);
+  }
+  $('dollars').oninput=()=>setDollars(+$('dollars').value);
+  document.querySelectorAll('#presets .chipbtn').forEach(b=>b.onclick=()=>{ $('dollars').value=b.dataset.d; setDollars(+b.dataset.d); });
+  for(const [k,v] of Object.entries(RATES)){
+    const b=document.createElement('button'); b.className='chipbtn'+(k===rateKey?' on':'');
+    b.dataset.r=k; b.textContent=v.label; b.onclick=()=>{ rateKey=k; setDollars(dollars); };
+    $('rates').appendChild(b);
+  }
 
   function card(id, model, budget, soft){
     if (cards[id]) return cards[id];
@@ -179,6 +293,7 @@
   }
   function paint(id, {tokens,budget,status,model,loopStreak}){
     const c=card(id,model,budget); if(budget)c.budget=budget;
+    c.lastTokens=tokens||0; if(model)c.model=model;
     const pct=Math.min(100,tokens/c.budget*100);
     c.el.classList.remove('warn','esc','grounded','free');
     let cls='', txt='flying';
@@ -207,7 +322,7 @@
     if(d.verdict==='gap'){ chip('gap',d.agent.id||d.agent,d.reason,null,null); paint(d.agent.id||d.agent,d.agent); return; }
     const a=d.agent; paint(a.id,{...a,model:d.model});
     chip(d.verdict,a.id,d.reason,d.receipt,d.entry&&d.entry.authority);
-    bump(d.verdict); if(a.lastUsed)burn+=a.lastUsed;
+    bump(d.verdict);
     if(d.verdict==='escalate') openEsc(a);
   }
 
@@ -243,21 +358,44 @@
     else demoVerify(b);
     setTimeout(()=>b.textContent='Verify chain',3500);
   };
-  setInterval(()=>{ $('mBurn').textContent=fmt(burn*30); burn=0; },2000);
+  // One ticker keeps the money honest: spend is what the fleet actually burned,
+  // runway is what the busiest agent has left before it gets grounded.
+  setInterval(()=>{
+    let total=0,max=0,spend=0;
+    for(const k in cards){ const c=cards[k], t=c.lastTokens||0; total+=t; spend+=usdForAgent(t,c.model); if(t>max)max=t; }
+    fleetTokens=total;
+    if(total>0 && !firstSeen){ firstSeen=Date.now(); baseTokens=total; }
+    $('mSpent').textContent=money(spend);
+    const left=Math.max(0,tokensFor(dollars)-max), {mins,measured}=runway(left);
+    $('mLeft').textContent = total===0 ? '—' : (left<=0 ? 'spent' : (measured?'':'~')+human(mins));
+    renderSpend();
+  },2000);
+  renderSpend();
 
   // ── LIVE driver ──
   if (LIVE){
+    const applyConfig=c=>{
+      if(typeof c.budgetOn==='boolean'){ policy.budget=c.budgetOn; $('swBudget').classList.toggle('on',c.budgetOn); }
+      if(typeof c.loopOn==='boolean'){ policy.loop=c.loopOn; $('swLoop').classList.toggle('on',c.loopOn); }
+      if(c.softAction){ policy.soft=c.softAction; $('segEsc').classList.toggle('on',c.softAction==='escalate'); $('segDeny').classList.toggle('on',c.softAction==='deny'); }
+      if(c.rate) rateKey=c.rate;
+      // Never yank the field out from under someone mid-keystroke.
+      if(typeof c.dollars==='number' && document.activeElement!==$('dollars')){ dollars=c.dollars; $('dollars').value=c.dollars; }
+      renderSpend();
+    };
     const es=new EventSource('/events');
-    es.addEventListener('snapshot',e=>{ const s=JSON.parse(e.data); s.agents.forEach(a=>paint(a.id,{...a})); });
+    es.addEventListener('snapshot',e=>{ const s=JSON.parse(e.data); if(s.config)applyConfig(s.config); s.agents.forEach(a=>paint(a.id,{...a})); });
+    es.addEventListener('agents',e=>{ JSON.parse(e.data).forEach(a=>paint(a.id,{...a})); });
     es.addEventListener('decision',e=>onDecision(JSON.parse(e.data)));
-    es.addEventListener('config',e=>{ const c=JSON.parse(e.data); policy.budget=c.budgetOn; policy.loop=c.loopOn; policy.soft=c.softAction; $('swBudget').classList.toggle('on',c.budgetOn); $('swLoop').classList.toggle('on',c.loopOn); $('segEsc').classList.toggle('on',c.softAction==='escalate'); $('segDeny').classList.toggle('on',c.softAction==='deny'); });
+    es.addEventListener('config',e=>applyConfig(JSON.parse(e.data)));
     es.onerror=()=>{}; // reconnects automatically
     if(!Object.keys(cards).length) $('fleet').innerHTML=`<div class="empty">
       <div class="e-live"><span class="e-dot"></span>Connected. The governor is running and watching.</div>
-      <div class="e-h">Nothing has happened yet. Two steps:</div>
+      <div class="e-h">Nothing has happened yet. Three steps:</div>
       <ol class="e-steps">
+        <li><b>Set your spend limit above.</b><span>Type a dollar amount or tap a preset. It tells you how many tokens that buys and roughly how long an agent can run on it.</span></li>
         <li><b>Open Claude Code in this folder.</b><span>If it is already open, quit it and open it again. It only picks up the governor when it starts.</span></li>
-        <li><b>Ask it to do anything.</b><span>Every action it takes will appear on this screen, live.</span></li>
+        <li><b>Ask it to do anything.</b><span>Every action appears here live. At 75% of your limit it stops and asks you. At 100% it stops.</span></li>
       </ol>
       <div class="e-alt">Not using Claude Code? Point any agent at the governor instead of the provider:
         <div class="e-cmd"><code>export OPENAI_BASE_URL=http://localhost:4000/v1</code><button class="e-copy" data-c="export OPENAI_BASE_URL=http://localhost:4000/v1">Copy</button></div>
@@ -292,6 +430,12 @@ window.__runDemo = (paint, onDecision, getPolicy, wire) => {
   const STEADY=['read src/api.ts','edit handler.go','run test suite','grep usage','read schema.sql','write report.md','call mcp:search'];
   const st={}; let prev='genesis'; const chain=[]; let escA=null;
   AG.forEach(a=>{ st[a.id]={...a,tokens:0,recent:[],escalated:false,status:'active'}; paint(a.id,{tokens:0,budget:a.budget,status:'active',model:a.model,loopStreak:0}); });
+  // The spend control has to move something even in the demo, or it reads as
+  // decoration. AG holds the $20 baseline; scale the simulated fleet off it.
+  window.__demoBudget = usd => AG.forEach(a=>{
+    const s=st[a.id]; s.budget=Math.round(a.budget*Math.max(1,usd)/20);
+    paint(a.id,{tokens:s.tokens,budget:s.budget,status:s.status,model:a.model,loopStreak:s.loopStreak||0});
+  });
   async function rcpt(a,verb,rule,authority){ const e={ts:Date.now(),agent:a.id,verb,rule,tokens:Math.round(a.tokens)}; if(authority)e.authority=authority; const j=JSON.stringify(e); const h=await sha(prev+j); chain.push({j,h}); prev=h; return {verdict:verb,reason:rule,receipt:'rcpt_'+h.slice(0,12),agent:{id:a.id,tokens:Math.round(a.tokens),budget:a.budget,status:a.status,loopStreak:a.loopStreak||0},model:a.model,entry:e}; }
   function actionFor(a){ if(a.plan==='loop'&&a.tokens>a.budget*.32)return 'GET /page?id=42'; if(a.plan==='loop')return pick(['GET /list','parse','GET /page?id='+Math.floor(rand(1,40))]); return pick(STEADY); }
   async function step(a){

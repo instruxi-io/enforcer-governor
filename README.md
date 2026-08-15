@@ -99,7 +99,8 @@ Drop a `governor.config.json` in the directory you run it from:
 
 ```json
 {
-  "budget": 5000000,
+  "dollars": 20,
+  "rate": "opus",
   "soft": 0.75,
   "loopLimit": 4,
   "softAction": "escalate",
@@ -107,7 +108,11 @@ Drop a `governor.config.json` in the directory you run it from:
 }
 ```
 
-**Budgets are cost-weighted effective tokens**, not raw counts. Cached sessions re-read their whole context every turn, so raw sums explode into the billions while costing very little. The governor weights by price instead: input 1x, output 5x, cache-create 1.25x, cache-read 0.1x. Think of the budget as a dollar meter expressed in input-token units. The 5M default is roughly a heavy day of agent work.
+**Set the limit in dollars.** `dollars` is the spend cap per agent per session and `rate` is the price list to convert it with (`opus`, `sonnet`, or `haiku`). The dashboard shows you what that buys before anything runs: how many tokens, and roughly how long an agent can work on it. Change it there at any time; agents already running pick up the new limit immediately, and one that was stopped for hitting the old limit is released.
+
+Under the hood the cap is **cost-weighted effective tokens**, not raw counts. Cached sessions re-read their whole context every turn, so raw sums explode into the billions while costing very little. The governor weights by price instead: input 1x, output 5x, cache-create 1.25x, cache-read 0.1x. Those weights are exactly Anthropic's own price ratios on every current model, so one effective token is one input-token of cost and `dollars` converts with a single multiply. `$20` at Opus rates is 4,000,000 effective tokens. Set `budget` directly instead if you would rather think in tokens.
+
+Prices are Anthropic's published API rates. **On a Claude subscription you are not billed per token**, so read the dollar figures as equivalent API cost rather than an invoice.
 
 `softAction` is `"escalate"` (ask a human) or `"deny"` (auto-block at the soft cap). Everything is also flippable live from the dashboard switches.
 
