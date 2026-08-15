@@ -13,6 +13,12 @@ if (cmd === 'start' || !cmd) {
 } else if (cmd === 'install-hook') {
   const { install } = await import('./install.mjs');
   install(process.argv.includes('--global'));
+  // One command should end with something you can look at, not a second command
+  // to run. Wire the hook, then bring the dashboard up. --no-start opts out.
+  if (!process.argv.includes('--no-start')) {
+    console.log('  Starting the governor and opening your dashboard...');
+    await import('./governor.mjs');
+  }
 } else {
   console.log(`Enforcer Governor
   start                    run the governor daemon + dashboard (http://localhost:4000)

@@ -28,6 +28,5 @@ export function install(global = false) {
   writeFileSync(file, JSON.stringify(settings, null, 2));
   console.log(`\n  Installed the Enforcer hook into ${file}`);
   console.log(`  Every tool call in ${global ? 'ALL projects' : 'this project'} now checks the governor first.`);
-  console.log(`  Start the governor in another terminal:  npx @instruxi/enforcer-governor start\n`);
   return file;
 }
