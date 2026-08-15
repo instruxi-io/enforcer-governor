@@ -398,7 +398,7 @@
         <li><b>Ask it to do anything.</b><span>Every action appears here live. At 75% of your limit it stops and asks you. At 100% it stops.</span></li>
       </ol>
       <div class="e-alt">Not using Claude Code? Point any agent at the governor instead of the provider:
-        <div class="e-cmd"><code>export OPENAI_BASE_URL=http://localhost:4000/v1</code><button class="e-copy" data-c="export OPENAI_BASE_URL=http://localhost:4000/v1">Copy</button></div>
+        <div class="e-cmd"><code>export OPENAI_BASE_URL=${location.origin}/v1</code><button class="e-copy" data-c="export OPENAI_BASE_URL=${location.origin}/v1">Copy</button></div>
       </div>
       <div class="e-foot">To stop governing at any time: <code>npx enforcer-governor uninstall-hook</code></div>
     </div>`;
