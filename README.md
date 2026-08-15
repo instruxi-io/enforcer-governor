@@ -60,7 +60,7 @@ It does **not** claim to detect hallucination &mdash; nobody can do that reliabl
 Open a terminal and run:
 
 ```bash
-npx --yes github:instruxi-io/enforcer-governor start
+npx --yes enforcer-governor start
 ```
 
 The first run downloads it (a few seconds), then **your dashboard opens in the browser by itself**. Leave this terminal running; it is the guard. The dashboard tells you what to do next. Stop it any time with Ctrl+C, and your agents keep working normally.
@@ -70,7 +70,7 @@ The first run downloads it (a few seconds), then **your dashboard opens in the b
 In a **second** terminal, go into the project you want watched and run:
 
 ```bash
-npx --yes github:instruxi-io/enforcer-governor install-hook
+npx --yes enforcer-governor install-hook
 ```
 
 Then start a **new** Claude Code session in that project. That is all. From now on, every action Claude Code takes is checked first: over budget and it is stopped, near the limit and it asks you. Add `--global` to the command to watch every project at once.

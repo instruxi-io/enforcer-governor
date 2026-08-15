@@ -213,7 +213,7 @@
     if(!Object.keys(cards).length) $('fleet').innerHTML=`<div class="empty">
       <div class="e-h">The governor is running. No agents yet, connect one:</div>
       <div class="e-step"><b>Claude Code</b><span>open a terminal in your project and run the command below, then start a NEW Claude Code session there</span>
-        <div class="e-cmd"><code>npx --yes github:instruxi-io/enforcer-governor install-hook</code><button class="e-copy" data-c="npx --yes github:instruxi-io/enforcer-governor install-hook">Copy</button></div></div>
+        <div class="e-cmd"><code>npx --yes enforcer-governor install-hook</code><button class="e-copy" data-c="npx --yes enforcer-governor install-hook">Copy</button></div></div>
       <div class="e-step"><b>Any other agent</b><span>point it at the governor instead of the provider</span>
         <div class="e-cmd"><code>export OPENAI_BASE_URL=http://localhost:4000/v1</code><button class="e-copy" data-c="export OPENAI_BASE_URL=http://localhost:4000/v1">Copy</button></div></div>
       <div class="e-foot">The moment an agent acts, it appears here as a fuel gauge. This page updates by itself.</div>

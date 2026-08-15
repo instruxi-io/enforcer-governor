@@ -1,5 +1,5 @@
 {
-  "name": "@instruxi/enforcer-governor",
+  "name": "enforcer-governor",
   "version": "0.1.0",
   "description": "Real-time token-spend control for AI agents. Allow, deny, or escalate every agent action, with hash-chained receipts. Free to run on your own agents, self-hosted.",
   "type": "module",
@@ -15,7 +15,8 @@
     "src",
     "public",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "TRADEMARKS.md"
   ],
   "keywords": [
     "ai-agents",

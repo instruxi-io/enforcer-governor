@@ -161,10 +161,14 @@ server.listen(CONFIG.port, () => {
   const url = `http://localhost:${CONFIG.port}`;
   console.log(`\n  Enforcer Governor is running.`);
   console.log(`\n  Your dashboard:  ${url}  (opening it now)`);
-  console.log(`\n  Next step, govern your agents:`);
-  console.log(`    Claude Code:  npx --yes github:instruxi-io/enforcer-governor install-hook`);
-  console.log(`                  (run it inside your project, then start a NEW Claude Code session)`);
-  console.log(`    Other agents: point them at this address, e.g. OPENAI_BASE_URL=${url}/v1`);
+  // One tailored next step beats a menu of five.
+  import('./detect.mjs').then(({ nextStep }) => {
+    const { lines } = nextStep(url);
+    console.log('');
+    for (const l of lines) console.log(l);
+  }).catch(() => {
+    console.log(`\n  Point any agent at this address: OPENAI_BASE_URL=${url}/v1`);
+  });
   console.log(`\n  Budget: ${CONFIG.budget.toLocaleString()} effective tokens per agent, ask-a-human at ${Math.round(CONFIG.soft * 100)}%.`);
   console.log(`  Receipts: ${RECEIPTS}`);
   console.log(`  Stop it any time with Ctrl+C. Your agents keep working if it is off.\n`);
