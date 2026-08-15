@@ -121,14 +121,14 @@ export function decide(state, ev, config = {}) {
   // there is no way back and the user is stuck.
   if (cfg.budgetOn === false && cfg.loopOn === false) {
     a.status = 'active'; a.escalated = false;
-    return record(state, a, 'allow', 'governor off', a.tokens, 'human');
+    return record(state, a, 'allow', 'checks are switched off', a.tokens, 'human');
   }
 
   // A grounded agent stays grounded until released. Say how to get out of it,
   // because a dead end with no instructions is how people abandon the tool.
   if (a.status === 'grounded') {
     return record(state, a, 'deny',
-      'agent grounded. Resume it in the dashboard, or run: npx enforcer-governor uninstall-hook',
+      'this agent is stopped. Resume it in the dashboard, or turn the checks off there',
       a.tokens);
   }
 
@@ -150,22 +150,22 @@ export function decide(state, ev, config = {}) {
   if (cfg.loopOn && repeats >= cfg.loopLimit) {
     a.status = 'grounded';
     return record(state, a, 'deny',
-      `waste: same action ${repeats}x in the last ${a.recent.length}`, a.tokens);
+      `it repeated the same action ${repeats} times in its last ${a.recent.length} - that is a loop`, a.tokens);
   }
   if (cfg.budgetOn && a.tokens >= a.budget) {
     a.status = 'grounded';
-    return record(state, a, 'deny', 'hard budget reached', a.tokens);
+    return record(state, a, 'deny', 'it reached your spend limit', a.tokens);
   }
   if (cfg.budgetOn && !a.escalated && a.tokens >= a.budget * a.soft) {
     a.escalated = true;
     if (cfg.softAction === 'escalate') {
       a.status = 'paused';
-      return record(state, a, 'escalate', `soft cap ${Math.round(a.soft * 100)}% reached`, a.tokens);
+      return record(state, a, 'escalate', `it has used ${Math.round(a.soft * 100)}% of your spend limit`, a.tokens);
     }
     a.status = 'grounded';
-    return record(state, a, 'deny', 'soft cap reached (auto-deny)', a.tokens);
+    return record(state, a, 'deny', 'it passed the warn-me mark, and you set that to stop it', a.tokens);
   }
-  return record(state, a, 'allow', 'within budget, on task', a.tokens);
+  return record(state, a, 'allow', 'inside the limit, doing new work', a.tokens);
 }
 
 // Human resolves an escalation.
@@ -178,10 +178,10 @@ export function resolve(state, agentId, approve, config = {}) {
     a.budgetRaised = true; // a human overrode the cap; stop recomputing it
     a.status = 'active';
     a.escalated = false;
-    return record(state, a, 'allow', 'budget raised +50%', a.tokens, 'human');
+    return record(state, a, 'allow', 'you approved it, limit raised by half', a.tokens, 'human');
   }
   a.status = 'grounded';
-  return record(state, a, 'deny', 'escalation denied', a.tokens, 'human');
+  return record(state, a, 'deny', 'you said no', a.tokens, 'human');
 }
 
 // Release a grounded agent and give it room to finish. This is the way out.
@@ -193,14 +193,14 @@ export function release(state, agentId, extra = 1.5) {
   a.status = 'active';
   a.escalated = false;
   a.loopStreak = 0;
-  return record(state, a, 'allow', 'released by a human, budget raised', a.tokens, 'human');
+  return record(state, a, 'allow', 'you resumed it and raised its limit', a.tokens, 'human');
 }
 
 export function kill(state, agentId) {
   const a = state.agents[agentId];
   if (!a) return null;
   a.status = 'grounded';
-  return record(state, a, 'deny', 'manual kill switch', a.tokens, 'human');
+  return record(state, a, 'deny', 'you stopped it', a.tokens, 'human');
 }
 
 // Append a hash-chained receipt. Each hash folds in the previous one, so any

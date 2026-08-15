@@ -224,9 +224,9 @@ server.listen(CONFIG.port, () => {
     console.log(`\n  Point any agent at this address: OPENAI_BASE_URL=${url}/v1`);
   });
   const r = priceOf(CONFIG.model);
-  console.log(`\n  Spend limit: $${CONFIG.dollars} per agent at ${r.label} rates (${CONFIG.budget.toLocaleString()} tokens), ask-a-human at ${Math.round(CONFIG.soft * 100)}%.`);
+  console.log(`\n  Spend limit: $${CONFIG.dollars} per agent at ${r.label} rates (${CONFIG.budget.toLocaleString()} tokens), it checks with you at ${Math.round(CONFIG.soft * 100)}%.`);
   console.log(`  Change it in the dashboard, no restart needed.`);
-  console.log(`  Receipts: ${RECEIPTS}`);
+  console.log(`  A record of every decision is kept at ${RECEIPTS}`);
   console.log(`  Stop it any time with Ctrl+C. Your agents keep working if it is off.\n`);
   // Auto-open the dashboard so nobody has to know what localhost means.
   // ponytail: darwin/win/linux openers only; anything exotic just reads the URL above.

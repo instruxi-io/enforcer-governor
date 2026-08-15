@@ -155,11 +155,11 @@
   <span class="tag" id="modeTag">DEMO</span>
   <div class="metrics">
     <div class="metric"><div class="v teal" id="mSpent">$0</div><div class="k">spent &middot; all agents</div></div>
-    <div class="metric"><div class="v" id="mLeft">&mdash;</div><div class="k">runway left</div></div>
+    <div class="metric"><div class="v" id="mLeft">&mdash;</div><div class="k">time left</div></div>
     <div class="metric"><div class="v allow" id="mAllow">0</div><div class="k">allowed</div></div>
     <div class="metric"><div class="v deny" id="mDeny">0</div><div class="k">blocked</div></div>
     <div class="metric"><div class="v esc" id="mEsc">0</div><div class="k">escalated</div></div>
-    <div class="metric"><div class="v" id="mChain"><span class="chainok">intact</span></div><div class="k">receipt chain</div></div>
+    <div class="metric"><div class="v" id="mChain"><span class="chainok">intact</span></div><div class="k">records</div></div>
   </div>
 </div></div>
 
@@ -192,22 +192,22 @@
     <div class="spend-note" id="spendNote"></div>
   </div>
   <div class="controls">
-    <div class="ctrl-h">Policy controls</div>
+    <div class="ctrl-h">Rules</div>
     <div class="switches">
       <button class="sw master on" id="swEnforcer"><span class="knob"></span><span>Enforcer</span></button>
-      <button class="sw on" id="swBudget"><span class="knob"></span><span>Budget caps</span></button>
-      <button class="sw on" id="swLoop"><span class="knob"></span><span>Loop / waste block</span></button>
-      <div class="seg"><span class="seg-lbl">on soft cap:</span>
-        <button class="seg-b on" id="segEsc">Escalate to human</button>
-        <button class="seg-b dm" id="segDeny">Auto-deny</button>
+      <button class="sw on" id="swBudget"><span class="knob"></span><span>Stop at the limit</span></button>
+      <button class="sw on" id="swLoop"><span class="knob"></span><span>Stop repeat loops</span></button>
+      <div class="seg"><span class="seg-lbl">when it nears the limit:</span>
+        <button class="seg-b on" id="segEsc">Ask me</button>
+        <button class="seg-b dm" id="segDeny">Just stop it</button>
       </div>
     </div>
-    <div class="ungov-banner">ENFORCER OFF · agents executing with no budget check and no receipts. This is how most agent fleets run today.</div>
+    <div class="ungov-banner">CHECKS ARE OFF · your agents can spend without limit, and nothing is being recorded.</div>
   </div>
-  <div class="fleet-h"><span class="lbl">Agent fleet</span><span class="hint" id="fleetHint"></span></div>
+  <div class="fleet-h"><span class="lbl">Your agents</span><span class="hint" id="fleetHint"></span></div>
   <div class="fleet" id="fleet"></div>
   <div class="tape-wrap">
-    <div class="tape-top"><span class="lbl">Decision tape · signed receipts</span>
+    <div class="tape-top"><span class="lbl">Every decision, receipted</span>
       <span class="legend"><span><i style="background:var(--allow)"></i>allow</span><span><i style="background:var(--deny)"></i>deny</span><span><i style="background:var(--esc)"></i>escalate</span></span>
       <button class="verify" id="verifyBtn">Verify chain</button>
     </div>
@@ -216,9 +216,9 @@
 </div>
 <footer><div class="wrap" style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;width:100%"><span>INSTRUXI · ENFORCER GOVERNOR</span><span>deterministic checks decide · humans judge · every decision receipted</span></div></footer>
 <div class="esc-modal" id="escModal"><div class="esc-card">
-  <div class="eh">Escalation · human decision required <span id="escTimer"></span></div>
+  <div class="eh">Your agent needs a decision <span id="escTimer"></span></div>
   <h3 id="escTitle"></h3><div class="ectx" id="escCtx"></div>
-  <div class="ebtns"><button class="esc-btn esc-approve" id="escApprove">Approve more fuel</button><button class="esc-btn esc-deny" id="escDeny">Deny and hold</button></div>
+  <div class="ebtns"><button class="esc-btn esc-approve" id="escApprove">Let it keep going</button><button class="esc-btn esc-deny" id="escDeny">Stop it here</button></div>
 </div></div>
 
 <script>
@@ -391,9 +391,9 @@
         <div class="a-head"><span class="pulse"></span><span class="a-task idle">waiting for a task</span></div>
         <div class="a-meta"><span class="aid">${id}</span><span class="amdl"></span></div>
       </div>
-      <div class="gauge"><div class="softmark" style="bottom:${(soft||.75)*100}%"></div><div class="fill"></div><div class="loopbadge">LOOP</div><div class="gpct">0%</div><div class="gtok">$0</div></div>
-      <div class="sparkwrap"><span class="sparklbl">burn</span><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" aria-hidden="true"><g></g></svg></div>
-      <div class="a-foot"><div class="a-status"><span class="st-dot"></span><span class="stxt">flying</span></div><span class="a-left"></span><button class="kill">kill</button></div>`;
+      <div class="gauge"><div class="softmark" style="bottom:${(soft||.75)*100}%"></div><div class="fill"></div><div class="loopbadge">REPEAT</div><div class="gpct">0%</div><div class="gtok">$0</div></div>
+      <div class="sparkwrap"><span class="sparklbl">cost per action</span><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" aria-hidden="true"><g></g></svg></div>
+      <div class="a-foot"><div class="a-status"><span class="st-dot"></span><span class="stxt">working</span></div><span class="a-left"></span><button class="kill">kill</button></div>`;
     $('fleet').appendChild(el);
     const c={el,budget:budget||200000,soft:soft||.75};
     el.querySelector('.kill').onclick=()=>killAgent(id);
@@ -408,7 +408,7 @@
   }
   function paint(id, {tokens,budget,status,model,task,loopStreak}){
     const c=card(id,model,budget); if(budget)c.budget=budget;
-    if(model){ c.model=model; noticeModel(model); }
+    if(model)c.model=model;
     if(task && task!==c.task){ c.task=task; const t=c.el.querySelector('.a-task'); t.textContent=task; t.classList.remove('idle'); }
     // Burn trace: one bar per action, height relative to the priciest action in
     // the window. Steady work reads as an even skyline; one expensive action
@@ -428,10 +428,10 @@
     c.el.querySelector('.amdl').textContent=c.model?' · '+c.model:'';
     const pct=Math.min(100,tokens/c.budget*100);
     c.el.classList.remove('warn','esc','grounded','free');
-    let cls='', txt='flying';
-    if(status==='grounded'){cls='grounded';txt='grounded';} else if(status==='paused'){cls='esc';txt='paused · awaiting you';}
-    else if(!policy.enforcer){cls='free';txt='ungoverned';}
-    else if(tokens>=c.budget*(c.soft-0.12)){cls='warn';txt='flying · near cap';}
+    let cls='', txt='working';
+    if(status==='grounded'){cls='grounded';txt='stopped';} else if(status==='paused'){cls='esc';txt='waiting for you';}
+    else if(!policy.enforcer){cls='free';txt='unchecked';}
+    else if(tokens>=c.budget*(c.soft-0.12)){cls='warn';txt='working · close to the limit';}
     if(cls)c.el.classList.add(cls);
     c.el.querySelector('.stxt').textContent=txt;
     c.el.querySelector('.fill').style.height=pct+'%';
@@ -440,7 +440,7 @@
     c.el.querySelector('.gtok').textContent=money(usdForAgent(tokens,c.model))+' of '+money(usdForAgent(c.budget,c.model));
     const lt=c.el.querySelector('.a-left'), rem=Math.max(0,c.budget-tokens), rw=runway(rem);
     lt.textContent = status==='grounded' ? '' : (rw.measured?'':'~')+human(rw.mins)+' left';
-    const lb=c.el.querySelector('.loopbadge'); if(loopStreak>=3){lb.textContent='LOOP x'+loopStreak;lb.classList.add('show');}else lb.classList.remove('show');
+    const lb=c.el.querySelector('.loopbadge'); if(loopStreak>=3){lb.textContent='REPEAT x'+loopStreak;lb.classList.add('show');}else lb.classList.remove('show');
     // Grounded used to disable the button, leaving no way back. In live mode it
     // becomes Resume; in the demo it stays disabled so the simulation reads clean.
     if (status==='grounded' && LIVE && c.el._toGrounded) { c.el._toGrounded(); }
@@ -463,9 +463,9 @@
   // ── Escalation modal (LIVE: posts to server; DEMO: local) ──
   let escId=null,escTimer=null;
   function openEsc(a){
-    escId=a.id;
-    $('escTitle').textContent=a.id+' is asking for more fuel';
-    $('escCtx').innerHTML=`agent &nbsp; <b>${a.id}</b><br>spent &nbsp; <b>${fmt(a.tokens)}</b> of ${fmt(a.budget)} tokens<br>reason &nbsp; hit its soft cap mid-task<br>ask &nbsp;&nbsp;&nbsp; +50% budget to finish, or hold`;
+    escId=a.id; const c0=cards[a.id];
+    $('escTitle').textContent=(c0&&c0.task?c0.task:a.id)+' \u2014 needs more than its limit';
+    $('escCtx').innerHTML=`agent &nbsp; <b>${a.id}</b><br>spent &nbsp; <b>${money(usdForAgent(a.tokens,c0&&c0.model))}</b> of ${money(usdForAgent(a.budget,c0&&c0.model))}<br>reason &nbsp; it passed the point where you asked to be told<br>ask &nbsp;&nbsp;&nbsp; half as much again to finish, or stop here`;
     $('escModal').classList.add('show'); let left=12; $('escTimer').textContent=' · '+left+'s';
     escTimer=setInterval(()=>{left--;$('escTimer').textContent=' · '+left+'s';if(left<=0)resolveEsc(false,true);},1000);
   }
@@ -495,10 +495,14 @@
   // One ticker keeps the money honest: spend is what the fleet actually burned,
   // runway is what the busiest agent has left before it gets grounded.
   setInterval(()=>{
-    let total=0,max=0,spend=0;
+    let total=0,max=0,spend=0,leadModel='';
     for(const k in cards){
       const c=cards[k], t=c.lastTokens||0;
-      total+=t; spend+=usdForAgent(t,c.model); if(t>max)max=t;
+      total+=t; spend+=usdForAgent(t,c.model);
+      // Follow the biggest spender, not whoever reported last. With a mixed
+      // Claude/GPT fleet, last-wins makes the picker flip back and forth on
+      // screen, which reads as broken.
+      if(t>max){ max=t; leadModel=c.model||''; }
       // Refresh each card's time-left from the SAME clock as the header. Left
       // to its last paint, a card keeps showing a runway computed at an older
       // burn rate, and the two disagree on screen.
@@ -510,6 +514,7 @@
     }
     fleetTokens=total;
     if(total>0 && !firstSeen){ firstSeen=Date.now(); baseTokens=total; }
+    if(leadModel) noticeModel(leadModel);
     $('mSpent').textContent=money(spend);
     const left=Math.max(0,tokensFor(dollars)-max), {mins,measured}=runway(left);
     $('mLeft').textContent = total===0 ? '—' : (left<=0 ? 'spent' : (measured?'':'~')+human(mins));

@@ -16,7 +16,7 @@ ok('denies at hard budget', () => {
   const s = makeState();
   const r = decide(s, { agent: 'a', tokens: 100000, action: 'read x' }, { budget: 100000, soft: 0.75 });
   assert.equal(r.verdict, 'deny');
-  assert.match(r.reason, /budget/);
+  assert.match(r.reason, /spend limit/);
 });
 
 ok('escalates at soft cap', () => {
@@ -35,13 +35,13 @@ ok('detects a loop and grounds the agent', () => {
   const s = makeState();
   const verdicts = [];
   for (let i = 0; i < 5; i++) verdicts.push(decide(s, { agent: 'loopy', tokens: 1000 + i, action: 'GET /same' }, { loopLimit: 4, budget: 1e9 }));
-  const loopDeny = verdicts.find(v => /waste/.test(v.reason));
+  const loopDeny = verdicts.find(v => /loop/.test(v.reason));
   assert.ok(loopDeny, 'a loop-block receipt should exist');
   assert.equal(loopDeny.verdict, 'deny');
   // once grounded, every later call is denied
   const next = decide(s, { agent: 'loopy', tokens: 9999, action: 'GET /other' }, { budget: 1e9 });
   assert.equal(next.verdict, 'deny');
-  assert.match(next.reason, /grounded/);
+  assert.match(next.reason, /stopped/);
 });
 
 ok('varied actions do NOT trip the loop guard', () => {

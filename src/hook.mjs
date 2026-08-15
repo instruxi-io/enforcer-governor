@@ -5,6 +5,7 @@
 // Contract that actually works (learned the hard way): exit 0 and print JSON.
 // Never exit 2 with JSON  -  that combination is ignored by Claude Code.
 import { readFileSync } from 'node:fs';
+import { priceOf } from './policy.mjs';
 
 const PORT = process.env.GOVERNOR_PORT || 4000;
 
@@ -87,12 +88,28 @@ async function main() {
     r = await resp.json();
   } catch {
     // Fail OPEN: if the governor is down, never block the user's real work.
-    return emit('allow', 'governor offline, allowed');
+    return emit('allow', 'Enforcer is not running, so this was not checked. Nothing is blocked.');
   }
 
-  if (r.verdict === 'deny') return emit('deny', `Enforcer blocked this: ${r.reason} (${r.agent.tokens.toLocaleString()} tokens, receipt ${r.receipt})`);
-  if (r.verdict === 'escalate') return emit('ask', `Enforcer: ${r.reason}. Approve to let this agent keep spending? (${r.agent.tokens.toLocaleString()} tokens so far)`);
-  return emit('allow', `within budget (${r.agent.tokens.toLocaleString()} tokens)`);
+  // This is the one message a person actually reads, in the middle of their
+  // work, at the moment they get stopped. It has to be in money and it has to
+  // say what to do next -- a raw token count answers neither question.
+  const perM = priceOf(model).in;
+  const usd = t => '$' + ((t / 1e6) * perM).toFixed(2);
+  const spent = usd(r.agent.tokens);
+  const limit = r.agent.budget ? usd(r.agent.budget) : null;
+  const of = limit ? `${spent} of its ${limit} limit` : `${spent} so far`;
+  const dash = `http://localhost:${PORT}`;
+
+  if (r.verdict === 'deny') {
+    return emit('deny', `Enforcer stopped this agent: ${r.reason}. It has spent ${of}. `
+      + `Raise the limit or resume it at ${dash}`);
+  }
+  if (r.verdict === 'escalate') {
+    return emit('ask', `Enforcer is checking with you: ${r.reason}. It has spent ${of}. `
+      + `Allow it to keep going?`);
+  }
+  return emit('allow', `Enforcer: ${of}`);
 }
 
 main();

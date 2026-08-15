@@ -27,7 +27,7 @@ export function install(global = false) {
   settings.hooks.PreToolUse.push({ matcher: '*', hooks: [{ type: 'command', command }] });
   writeFileSync(file, JSON.stringify(settings, null, 2));
   console.log(`\n  Installed the Enforcer hook into ${file}`);
-  console.log(`  Every tool call in ${global ? 'ALL projects' : 'this project'} now checks the governor first.`);
+  console.log(`  Every action Claude Code takes in ${global ? 'ALL projects' : 'this project'} is now checked first.`);
   return file;
 }
 
@@ -52,6 +52,6 @@ export function uninstall(global = false) {
   }
   writeFileSync(file, JSON.stringify(settings, null, 2));
   console.log(`\n  Removed the Enforcer hook from ${file}`);
-  console.log(`  Your agents are no longer governed. Start a new session to be sure.\n`);
+  console.log(`  Nothing is being checked any more. Start a new Claude Code session to be sure.\n`);
   return file;
 }
