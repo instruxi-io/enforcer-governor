@@ -52,7 +52,7 @@
   .seg-b{font-family:var(--mono);font-size:12px;background:#0A0E13;border:none;color:var(--faint);padding:9px 13px;cursor:pointer;} .seg-b.on{color:var(--ink);background:rgba(212,167,44,.12);box-shadow:inset 0 0 0 1px rgba(212,167,44,.4);} .seg-b.on.dm{background:rgba(229,83,75,.12);box-shadow:inset 0 0 0 1px rgba(229,83,75,.4);}
   .ungov-banner{display:none;margin:13px 0 0;padding:11px 15px;font-family:var(--mono);font-size:12.5px;color:var(--deny);background:rgba(229,83,75,.08);border:1px solid rgba(229,83,75,.4);border-radius:8px;} body.ungoverned .ungov-banner{display:block;}
   .fleet-h{display:flex;align-items:baseline;gap:12px;margin:22px 0 12px;} .fleet-h .lbl{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);} .fleet-h .hint{font-family:var(--mono);font-size:11px;color:var(--faint);margin-left:auto;}
-  .fleet{display:grid;grid-template-columns:repeat(auto-fill,minmax(178px,1fr));gap:12px;}
+  .fleet{display:grid;grid-template-columns:repeat(auto-fill,minmax(258px,1fr));gap:12px;}
   .empty{grid-column:1/-1;background:var(--panel);border:1px dashed var(--line);border-radius:10px;padding:22px 24px;}
   .e-h{font-size:15px;color:var(--ink);font-weight:600;margin-bottom:14px;}
   .e-step{margin-bottom:14px;} .e-step b{display:block;font-size:13px;color:var(--teal);margin-bottom:2px;} .e-step span{font-size:12.5px;color:var(--dim);display:block;margin-bottom:7px;}
@@ -66,6 +66,29 @@
   .a-name .pulse{width:7px;height:7px;border-radius:50%;background:var(--allow);box-shadow:0 0 8px var(--allow);flex:none;} .warn .pulse{background:var(--esc);box-shadow:0 0 8px var(--esc);} .esc .pulse{background:var(--esc);animation:blink .8s infinite;} .grounded .pulse{background:var(--deny);box-shadow:none;} .free .pulse{background:var(--deny);animation:blink .5s infinite;}
   @keyframes blink{50%{opacity:.25;}}
   .a-model{font-family:var(--mono);font-size:10px;color:var(--faint);margin-top:3px;}
+  /* An agent's identity is the job it was given, not its session id. Lead with
+     the task the human typed and demote the machine identifiers. */
+  .a-head{display:flex;align-items:flex-start;gap:8px;}
+  .a-head .pulse{margin-top:5px;}
+  .a-task{font-family:var(--serif);font-size:13.5px;line-height:1.34;color:var(--ink);
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:2.68em;}
+  .a-task.idle{color:var(--faint);font-style:italic;}
+  .a-meta{font-family:var(--mono);font-size:9.5px;color:var(--faint);margin-top:6px;letter-spacing:.04em;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  /* Burn trace: what this agent has been spending, moment to moment. */
+  .sparkwrap{position:relative;height:28px;margin:8px 11px 0;background:#080B10;
+    border:1px solid var(--lineS);border-radius:5px;overflow:hidden;}
+  .sparklbl{position:absolute;left:6px;top:4px;z-index:2;font-family:var(--mono);font-size:8px;
+    letter-spacing:.12em;text-transform:uppercase;color:var(--faint);}
+  .spark{position:absolute;inset:0;width:100%;height:100%;}
+  .spark rect{fill:var(--teal);opacity:.8;}
+  .warn .spark rect,.esc .spark rect{fill:var(--esc);}
+  .grounded .spark rect,.free .spark rect{fill:var(--deny);}
+  /* Alive while burning, still when idle. The difference is the signal. */
+  .fill::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,255,255,.16),transparent 42%);}
+  .agent.burning .fill{animation:breathe 2.4s cubic-bezier(.2,0,0,1) infinite;}
+  @keyframes breathe{50%{filter:brightness(1.2);}}
+  .a-left{font-family:var(--mono);font-size:10px;color:var(--faint);}
   .gauge{position:relative;height:132px;margin:4px 11px 0;border:1px solid var(--lineS);border-radius:6px;background:#080B10;overflow:hidden;}
   .fill{position:absolute;left:0;right:0;bottom:0;height:0;background:linear-gradient(180deg,rgba(87,196,184,.85),rgba(87,196,184,.35));transition:height .6s cubic-bezier(.3,.7,.3,1);}
   .warn .fill{background:linear-gradient(180deg,rgba(212,167,44,.9),rgba(212,167,44,.4));} .esc .fill{background:linear-gradient(180deg,rgba(212,167,44,.95),rgba(212,167,44,.5));} .grounded .fill,.free .fill{background:linear-gradient(180deg,rgba(229,83,75,.85),rgba(229,83,75,.4));}
@@ -102,6 +125,10 @@
   .e-steps li b{display:block;font-weight:500;margin-bottom:3px}
   .e-steps li span{color:#8E96A3;font-size:13.5px;line-height:1.6}
   .e-alt{margin-top:14px;padding-top:16px;border-top:1px solid rgba(255,255,255,.07);color:#8E96A3;font-size:13px}
+  /* A newcomer needs to know what this IS before being told what to do. */
+  .e-what{font-size:13.5px;line-height:1.7;color:#8E96A3;max-width:72ch;margin-bottom:20px;
+    padding-bottom:18px;border-bottom:1px solid rgba(255,255,255,.07)}
+  .e-what b{color:var(--ink);font-weight:600}
   /* the arrival moment */
   @keyframes arrive{0%{opacity:0;transform:translateY(10px) scale(.99)}100%{opacity:1;transform:none}}
   .agent.arriving{animation:arrive .26s cubic-bezier(.34,1.5,.5,1)}
@@ -206,6 +233,11 @@
   // to the picker when it reported nothing.
   const rateForModel=m=>{ const s=String(m||'').toLowerCase(); return Object.keys(RATES).find(k=>s.includes(k))||rateKey; };
   const usdForAgent=(tok,model)=>tok/1e6*(RATES[rateForModel(model)]||RATES.opus).perM;
+  // The token cap that the current dollar limit buys for a given model. The
+  // demo fleet uses this too, so simulated cards read in the same money as real
+  // ones instead of showing hardcoded token budgets nobody can interpret.
+  const capFor=model=>Math.round(dollars/((RATES[rateForModel(model)]||RATES.opus).perM)*1e6);
+  window.__capFor=capFor;
   const money=u=>'$'+(u<100?u.toFixed(2):String(Math.round(u))).replace(/\.00$/,'');
   // Starting guess for an actively working coding agent, replaced by the real
   // rate the moment we have ~30s of its own data.
@@ -249,7 +281,7 @@
   function setDollars(v){
     dollars=Math.max(1,Math.min(9999,Math.round(v)||1));
     renderSpend();
-    if(window.__demoBudget) window.__demoBudget(dollars);
+    if(window.__demoBudget) window.__demoBudget();
     if(!LIVE)return;
     clearTimeout(pushT);
     pushT=setTimeout(()=>{ fetch('/config',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({dollars,rate:rateKey})}).catch(()=>{}); },350);
@@ -276,9 +308,13 @@
       }
     }
     const el=document.createElement('div'); el.className='agent'+(wasEmpty?' arriving':'');
-    el.innerHTML=`<div class="a-top"><div class="a-name"><span class="pulse"></span>${id}</div><div class="a-model">${model||''}</div></div>
-      <div class="gauge"><div class="softmark" style="bottom:${(soft||.75)*100}%"></div><div class="fill"></div><div class="loopbadge">LOOP</div><div class="gpct">0%</div><div class="gtok">0 / ${fmt(budget||200000)}</div></div>
-      <div class="a-foot"><div class="a-status"><span class="st-dot"></span><span class="stxt">flying</span></div><button class="kill">kill</button></div>`;
+    el.innerHTML=`<div class="a-top">
+        <div class="a-head"><span class="pulse"></span><span class="a-task idle">waiting for a task</span></div>
+        <div class="a-meta"><span class="aid">${id}</span><span class="amdl"></span></div>
+      </div>
+      <div class="gauge"><div class="softmark" style="bottom:${(soft||.75)*100}%"></div><div class="fill"></div><div class="loopbadge">LOOP</div><div class="gpct">0%</div><div class="gtok">$0</div></div>
+      <div class="sparkwrap"><span class="sparklbl">burn</span><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" aria-hidden="true"><g></g></svg></div>
+      <div class="a-foot"><div class="a-status"><span class="st-dot"></span><span class="stxt">flying</span></div><span class="a-left"></span><button class="kill">kill</button></div>`;
     $('fleet').appendChild(el);
     const c={el,budget:budget||200000,soft:soft||.75};
     el.querySelector('.kill').onclick=()=>killAgent(id);
@@ -291,9 +327,26 @@
     };
     cards[id]=c; return c;
   }
-  function paint(id, {tokens,budget,status,model,loopStreak}){
+  function paint(id, {tokens,budget,status,model,task,loopStreak}){
     const c=card(id,model,budget); if(budget)c.budget=budget;
-    c.lastTokens=tokens||0; if(model)c.model=model;
+    if(model)c.model=model;
+    if(task && task!==c.task){ c.task=task; const t=c.el.querySelector('.a-task'); t.textContent=task; t.classList.remove('idle'); }
+    // Burn trace: one bar per action, height relative to the priciest action in
+    // the window. Steady work reads as an even skyline; one expensive action
+    // stands out immediately, which is the thing worth spotting. The very first
+    // paint has no previous total to diff against, so it contributes no bar.
+    const prev=c.lastTokens; c.lastTokens=tokens||0;
+    if(prev!==undefined){
+      const delta=Math.max(0,(tokens||0)-prev);
+      (c.hist||=[]).push(delta); if(c.hist.length>30)c.hist.shift();
+      if(delta>0){ c.el.classList.add('burning'); clearTimeout(c.idleT); c.idleT=setTimeout(()=>c.el.classList.remove('burning'),5000); }
+      const mx=Math.max(1,...c.hist), slot=100/30;
+      c.el.querySelector('.spark g').innerHTML=c.hist.map((v,i)=>{
+        const h=Math.max(1,(v/mx)*21);
+        return `<rect x="${(i*slot).toFixed(2)}" y="${(25-h).toFixed(2)}" width="${(slot*0.66).toFixed(2)}" height="${h.toFixed(2)}"/>`;
+      }).join('');
+    }
+    c.el.querySelector('.amdl').textContent=c.model?' · '+c.model:'';
     const pct=Math.min(100,tokens/c.budget*100);
     c.el.classList.remove('warn','esc','grounded','free');
     let cls='', txt='flying';
@@ -304,8 +357,10 @@
     c.el.querySelector('.stxt').textContent=txt;
     c.el.querySelector('.fill').style.height=pct+'%';
     c.el.querySelector('.gpct').textContent=Math.round(tokens/c.budget*100)+'%';
-    c.el.querySelector('.gtok').textContent=fmt(tokens)+' / '+fmt(c.budget);
-    if(model)c.el.querySelector('.a-model').textContent=model;
+    // Money on the card, not raw tokens. The token count is the machinery.
+    c.el.querySelector('.gtok').textContent=money(usdForAgent(tokens,c.model))+' of '+money(usdForAgent(c.budget,c.model));
+    const lt=c.el.querySelector('.a-left'), rem=Math.max(0,c.budget-tokens), rw=runway(rem);
+    lt.textContent = status==='grounded' ? '' : (rw.measured?'':'~')+human(rw.mins)+' left';
     const lb=c.el.querySelector('.loopbadge'); if(loopStreak>=3){lb.textContent='LOOP x'+loopStreak;lb.classList.add('show');}else lb.classList.remove('show');
     // Grounded used to disable the button, leaving no way back. In live mode it
     // becomes Resume; in the demo it stays disabled so the simulation reads clean.
@@ -320,7 +375,7 @@
   function bump(v){ if(v==='allow')allow++;else if(v==='deny')deny++;else if(v==='escalate')esc++; $('mAllow').textContent=allow;$('mDeny').textContent=deny;$('mEsc').textContent=esc; }
   function onDecision(d){
     if(d.verdict==='gap'){ chip('gap',d.agent.id||d.agent,d.reason,null,null); paint(d.agent.id||d.agent,d.agent); return; }
-    const a=d.agent; paint(a.id,{...a,model:d.model});
+    const a=d.agent; paint(a.id,{...a,model:d.model,task:d.task});
     chip(d.verdict,a.id,d.reason,d.receipt,d.entry&&d.entry.authority);
     bump(d.verdict);
     if(d.verdict==='escalate') openEsc(a);
@@ -391,9 +446,10 @@
     es.onerror=()=>{}; // reconnects automatically
     if(!Object.keys(cards).length) $('fleet').innerHTML=`<div class="empty">
       <div class="e-live"><span class="e-dot"></span>Connected. The governor is running and watching.</div>
+      <div class="e-what"><b>What this is.</b> Claude Code spends real money as it works &mdash; every file it reads, every command it runs. Enforcer watches that spend as it happens and stops the agent at a limit you set, so a job that goes wrong costs you a coffee instead of a week's budget. Nothing about how you use Claude Code changes.</div>
       <div class="e-h">Nothing has happened yet. Three steps:</div>
       <ol class="e-steps">
-        <li><b>Set your spend limit above.</b><span>Type a dollar amount or tap a preset. It tells you how many tokens that buys and roughly how long an agent can run on it.</span></li>
+        <li><b>Set your spend limit above.</b><span>Type a dollar amount or tap a preset. It shows you what that buys and roughly how long an agent can work on it. $20 is a normal day.</span></li>
         <li><b>Open Claude Code in this folder.</b><span>If it is already open, quit it and open it again. It only picks up the governor when it starts.</span></li>
         <li><b>Ask it to do anything.</b><span>Every action appears here live. At 75% of your limit it stops and asks you. At 100% it stops.</span></li>
       </ol>
@@ -420,27 +476,30 @@ window.__runDemo = (paint, onDecision, getPolicy, wire) => {
   const rand=(a,b)=>a+Math.random()*(b-a), pick=a=>a[Math.floor(Math.random()*a.length)];
   const enc=new TextEncoder(); const sha=async s=>{const h=await crypto.subtle.digest('SHA-256',enc.encode(s));return[...new Uint8Array(h)].map(b=>b.toString(16).padStart(2,'0')).join('');};
   const AG=[
-    {id:'data-pipeline-01',model:'claude-sonnet',budget:180000,soft:.75,burn:[900,1800],plan:'steady'},
-    {id:'research-swarm-03',model:'claude-opus',budget:220000,soft:.60,burn:[2600,4200],plan:'escalate'},
-    {id:'scraper-07',model:'claude-haiku',budget:150000,soft:.80,burn:[700,1400],plan:'loop'},
-    {id:'report-gen-02',model:'claude-sonnet',budget:160000,soft:.75,burn:[800,1500],plan:'steady'},
-    {id:'test-runner-05',model:'claude-haiku',budget:120000,soft:.80,burn:[500,1100],plan:'steady'},
-    {id:'summarizer-09',model:'claude-sonnet',budget:150000,soft:.75,burn:[700,1300],plan:'steady'},
+    {id:'data-pipeline-01',task:"normalise yesterday's events and load them into the warehouse",model:'claude-sonnet',budget:180000,soft:.75,burn:[900,1800],plan:'steady'},
+    {id:'research-swarm-03',task:"compare our pricing against the top five competitors",model:'claude-opus',budget:220000,soft:.60,burn:[2600,4200],plan:'escalate'},
+    {id:'scraper-07',task:"pull every product listing from the supplier catalogue",model:'claude-haiku',budget:150000,soft:.80,burn:[700,1400],plan:'loop'},
+    {id:'report-gen-02',task:"build the weekly ops report and email it to the team",model:'claude-sonnet',budget:160000,soft:.75,burn:[800,1500],plan:'steady'},
+    {id:'test-runner-05',task:"run the full suite and fix whatever fails",model:'claude-haiku',budget:120000,soft:.80,burn:[500,1100],plan:'steady'},
+    {id:'summarizer-09',task:"summarise the last 200 support tickets by theme",model:'claude-sonnet',budget:150000,soft:.75,burn:[700,1300],plan:'steady'},
   ];
   const STEADY=['read src/api.ts','edit handler.go','run test suite','grep usage','read schema.sql','write report.md','call mcp:search'];
   const st={}; let prev='genesis'; const chain=[]; let escA=null;
-  AG.forEach(a=>{ st[a.id]={...a,tokens:0,recent:[],escalated:false,status:'active'}; paint(a.id,{tokens:0,budget:a.budget,status:'active',model:a.model,loopStreak:0}); });
+  AG.forEach(a=>{ st[a.id]={...a,tokens:0,recent:[],escalated:false,status:'active'}; paint(a.id,{tokens:0,budget:a.budget,status:'active',model:a.model,task:a.task,loopStreak:0}); });
   // The spend control has to move something even in the demo, or it reads as
   // decoration. AG holds the $20 baseline; scale the simulated fleet off it.
-  window.__demoBudget = usd => AG.forEach(a=>{
-    const s=st[a.id]; s.budget=Math.round(a.budget*Math.max(1,usd)/20);
-    paint(a.id,{tokens:s.tokens,budget:s.budget,status:s.status,model:a.model,loopStreak:s.loopStreak||0});
+  window.__demoBudget = () => AG.forEach(a=>{
+    const s=st[a.id], cap=window.__capFor?window.__capFor(a.model):a.budget;
+    s.burnScale=cap/a.budget;   // keep the simulation's pacing at any limit
+    s.budget=cap;
+    paint(a.id,{tokens:s.tokens,budget:s.budget,status:s.status,model:a.model,task:a.task,loopStreak:s.loopStreak||0});
   });
-  async function rcpt(a,verb,rule,authority){ const e={ts:Date.now(),agent:a.id,verb,rule,tokens:Math.round(a.tokens)}; if(authority)e.authority=authority; const j=JSON.stringify(e); const h=await sha(prev+j); chain.push({j,h}); prev=h; return {verdict:verb,reason:rule,receipt:'rcpt_'+h.slice(0,12),agent:{id:a.id,tokens:Math.round(a.tokens),budget:a.budget,status:a.status,loopStreak:a.loopStreak||0},model:a.model,entry:e}; }
+  window.__demoBudget();
+  async function rcpt(a,verb,rule,authority){ const e={ts:Date.now(),agent:a.id,verb,rule,tokens:Math.round(a.tokens)}; if(authority)e.authority=authority; const j=JSON.stringify(e); const h=await sha(prev+j); chain.push({j,h}); prev=h; return {verdict:verb,reason:rule,receipt:'rcpt_'+h.slice(0,12),agent:{id:a.id,tokens:Math.round(a.tokens),budget:a.budget,status:a.status,loopStreak:a.loopStreak||0},model:a.model,task:a.task,entry:e}; }
   function actionFor(a){ if(a.plan==='loop'&&a.tokens>a.budget*.32)return 'GET /page?id=42'; if(a.plan==='loop')return pick(['GET /list','parse','GET /page?id='+Math.floor(rand(1,40))]); return pick(STEADY); }
   async function step(a){
     const P=getPolicy(); if(a.status==='grounded'||a.status==='paused')return;
-    const act=actionFor(a), cost=rand(a.burn[0],a.burn[1]); a.tokens+=cost;
+    const act=actionFor(a), cost=rand(a.burn[0],a.burn[1])*(a.burnScale||1); a.tokens+=cost;
     if(!P.enforcer){ a.status='free'; onDecision({verdict:'gap',reason:'executed with no policy check',agent:{id:a.id,tokens:a.tokens,budget:a.budget,status:'free'}}); return; }
     if(a.status==='free')a.status='active';
     a.recent.push(act); if(a.recent.length>6)a.recent.shift(); let streak=1; for(let i=a.recent.length-2;i>=0;i--){if(a.recent[i]===act)streak++;else break;} a.loopStreak=streak;

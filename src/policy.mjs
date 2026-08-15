@@ -84,19 +84,20 @@ export function decide(state, ev, config = {}) {
   else if (typeof ev.deltaTokens === 'number') a.tokens += ev.deltaTokens;
   if (typeof ev.cost === 'number') a.cost = ev.cost;
 
-  // Loop / waste: identical action signature repeated back to back.
+  // Loop / waste: the same action signature showing up too often in the recent
+  // window. Counting OCCURRENCES rather than a back-to-back streak matters:
+  // a stuck agent usually alternates (read A, edit A, read A, edit A...), and a
+  // consecutive-only check never fires on that at all.
   const sig = ev.action || `${ev.tool || 'tool'}:${JSON.stringify(ev.args ?? '')}`;
   a.recent.push(sig);
   if (a.recent.length > cfg.loopWindow) a.recent.shift();
-  let streak = 1;
-  for (let i = a.recent.length - 2; i >= 0; i--) {
-    if (a.recent[i] === sig) streak++; else break;
-  }
-  a.loopStreak = streak;
+  const repeats = a.recent.reduce((n, s) => n + (s === sig ? 1 : 0), 0);
+  a.loopStreak = repeats;
 
-  if (cfg.loopOn && streak >= cfg.loopLimit) {
+  if (cfg.loopOn && repeats >= cfg.loopLimit) {
     a.status = 'grounded';
-    return record(state, a, 'deny', `waste: identical action x${streak}`, a.tokens);
+    return record(state, a, 'deny',
+      `waste: same action ${repeats}x in the last ${a.recent.length}`, a.tokens);
   }
   if (cfg.budgetOn && a.tokens >= a.budget) {
     a.status = 'grounded';
@@ -121,6 +122,7 @@ export function resolve(state, agentId, approve, config = {}) {
   if (!a) return null;
   if (approve) {
     a.budget = Math.round(a.budget * 1.5); // grant +50% and let it finish
+    a.budgetRaised = true; // a human overrode the cap; stop recomputing it
     a.status = 'active';
     a.escalated = false;
     return record(state, a, 'allow', 'budget raised +50%', a.tokens, 'human');
@@ -134,6 +136,7 @@ export function release(state, agentId, extra = 1.5) {
   const a = state.agents[agentId];
   if (!a) return null;
   a.budget = Math.round(Math.max(a.budget, a.tokens) * extra);
+  a.budgetRaised = true; // a human overrode the cap; stop recomputing it
   a.status = 'active';
   a.escalated = false;
   a.loopStreak = 0;

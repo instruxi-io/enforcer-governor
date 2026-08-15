@@ -35,7 +35,7 @@ ok('detects a loop and grounds the agent', () => {
   const s = makeState();
   const verdicts = [];
   for (let i = 0; i < 5; i++) verdicts.push(decide(s, { agent: 'loopy', tokens: 1000 + i, action: 'GET /same' }, { loopLimit: 4, budget: 1e9 }));
-  const loopDeny = verdicts.find(v => /identical/.test(v.reason));
+  const loopDeny = verdicts.find(v => /waste/.test(v.reason));
   assert.ok(loopDeny, 'a loop-block receipt should exist');
   assert.equal(loopDeny.verdict, 'deny');
   // once grounded, every later call is denied
@@ -94,3 +94,24 @@ assert(Math.abs(dollarsForTokens(4_000_000, RATES.opus.perM) - 20) < 1e-9, '4M O
 assert(rateFor('claude-sonnet-4-5') === 'sonnet', 'model string maps to its rate');
 assert(rateFor('') === 'opus', 'unknown model falls back to the priciest rate');
 console.log('  dollar budget conversion ok');
+
+// ── Loop detection catches alternating loops, not just back-to-back ────────
+// A stuck agent usually ping-pongs between two actions. A consecutive-streak
+// check never fires on that, which let a loop burn the whole budget.
+{
+  let s = makeState(), v;
+  for (let i = 0; i < 12; i++) {
+    v = decide(s, { agent: 'ab', deltaTokens: 100, action: i % 2 ? 'Read:x' : 'Edit:x' });
+    if (v.verdict === 'deny') break;
+  }
+  assert(v.verdict === 'deny', 'alternating A-B-A-B loop is caught');
+}
+{
+  // Genuine varied work must still pass -- the guard is worthless if it
+  // grounds an agent doing its job.
+  let s = makeState(), v;
+  const work = ['Read:a', 'Edit:b', 'Bash:test', 'Read:c', 'Edit:d', 'Grep:e', 'Read:f', 'Write:g'];
+  for (const act of work) v = decide(s, { agent: 'ok', deltaTokens: 100, action: act });
+  assert(v.verdict === 'allow', 'varied real work is not mistaken for a loop');
+}
+console.log('  alternating-loop detection ok');

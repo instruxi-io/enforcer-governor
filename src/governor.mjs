@@ -6,7 +6,7 @@ import { readFile, appendFile, mkdir } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { makeState, decide, resolve, kill, release, verifyChain, DEFAULTS, RATES, tokensForDollars } from './policy.mjs';
+import { makeState, decide, resolve, kill, release, verifyChain, getAgent, rateFor, DEFAULTS, RATES, tokensForDollars } from './policy.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dir, '..');
@@ -35,6 +35,14 @@ function loadConfig() {
   return cfg;
 }
 
+// "$20 per agent" has to mean $20 for every agent, so convert the dollar cap
+// at each agent's OWN model price. A flat token cap would silently give a
+// Haiku agent a quarter of the money an Opus agent gets.
+function budgetFor(a) {
+  const perM = (RATES[rateFor(a.model, CONFIG.rate)] || RATES.opus).perM;
+  return tokensForDollars(CONFIG.dollars, perM);
+}
+
 const CONFIG = loadConfig();
 const state = makeState();
 const clients = new Set(); // SSE connections
@@ -47,7 +55,7 @@ function broadcast(eventName, payload) {
 function snapshot() {
   return { agents: Object.values(state.agents).map(a => ({
     id: a.id, tokens: Math.round(a.tokens), budget: a.budget, soft: a.soft,
-    status: a.status, cost: a.cost, model: a.model || '',
+    status: a.status, cost: a.cost, model: a.model || '', task: a.task || '',
   })), config: {
     budget: CONFIG.budget, soft: CONFIG.soft, loopLimit: CONFIG.loopLimit,
     softAction: CONFIG.softAction, budgetOn: CONFIG.budgetOn, loopOn: CONFIG.loopOn,
@@ -117,10 +125,14 @@ const server = http.createServer(async (req, res) => {
   // Decision API  -  the hook posts here
   if (req.method === 'POST' && path === '/decide') {
     const ev = JSON.parse((await readBody(req)).toString() || '{}');
-    if (ev.model) getAgentModel(ev.agent, ev.model);
+    // Price the agent at its own model BEFORE judging it, not after, or the
+    // first action of every session is measured against the wrong cap.
+    const a = getAgent(state, ev.agent || 'default', CONFIG);
+    if (ev.model) a.model = ev.model;
+    if (ev.task) a.task = ev.task;
+    if (!a.budgetRaised) a.budget = budgetFor(a);
     const r = decide(state, ev, CONFIG);
-    if (ev.model && state.agents[ev.agent]) state.agents[ev.agent].model = ev.model;
-    broadcast('decision', { ...r, model: ev.model || '' });
+    broadcast('decision', { ...r, model: ev.model || '', task: ev.task || '' });
     await persist(r);
     return json(res, 200, r);
   }
@@ -154,7 +166,7 @@ const server = http.createServer(async (req, res) => {
     if ('dollars' in patch || 'rate' in patch) {
       if (!('budget' in patch)) syncBudget(CONFIG);
       for (const a of Object.values(state.agents)) {
-        a.budget = CONFIG.budget;
+        a.budgetRaised = false; a.budget = budgetFor(a);
         if (a.status === 'grounded' && a.tokens < a.budget) { a.status = 'active'; a.escalated = false; }
       }
     }
@@ -186,8 +198,6 @@ const server = http.createServer(async (req, res) => {
 
   json(res, 404, { error: 'not found' });
 });
-
-function getAgentModel(id, model) { /* reserved: model registry */ }
 
 server.listen(CONFIG.port, () => {
   const url = `http://localhost:${CONFIG.port}`;
