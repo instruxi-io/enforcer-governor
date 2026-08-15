@@ -150,4 +150,4 @@ So this repo is also a working argument: if three verbs and a receipt chain can 
 
 ## License
 
-MIT. Built by [Instruxi](https://instruxi.io).
+Business Source License 1.1. Free to run on your own agents, in production, including commercially. You may not resell it as a hosted or managed service of your own. Converts to Apache 2.0 on 2030-08-15. See [LICENSE](LICENSE). Built by [Instruxi](https://instruxi.io).
