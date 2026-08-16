@@ -2,17 +2,20 @@
 // Serves the dashboard, exposes the /decide API the hook calls, streams
 // decisions over SSE, and proxies agent traffic for non-Claude agents.
 import http from 'node:http';
-import { readFile, appendFile, mkdir } from 'node:fs/promises';
+import { readFile, appendFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { makeState, decide, resolve, kill, release, verifyChain, getAgent, priceOf, weightsFor, MODELS, DEFAULTS, tokensForDollars } from './policy.mjs';
+import { makeState, decide, resolve, kill, release, verifyChain, getAgent, priceOf, weightsFor, MODELS, DEFAULTS, DEFAULT_RULES, tokensForDollars } from './policy.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dir, '..');
 const HOME = process.env.HOME || process.env.USERPROFILE || '.';
 const DATA_DIR = join(HOME, '.enforcer-governor');
 const RECEIPTS = join(DATA_DIR, 'receipts.jsonl');
+// Running day/week/month totals live on disk, or restarting the governor would
+// hand a runaway fleet a fresh budget.
+const PERIODS_FILE = join(DATA_DIR, 'periods.json');
 
 // Config: defaults <- governor.config.json (cwd) <- env.
 // Dollars are the source of truth; budget (effective tokens) is derived, so
@@ -27,6 +30,7 @@ function loadConfig() {
   if (existsSync(f)) { try { cfg = { ...cfg, ...JSON.parse(readFileSync(f, 'utf8')) }; } catch {} }
   if (process.env.GOVERNOR_DOLLARS) cfg.dollars = +process.env.GOVERNOR_DOLLARS;
   if (process.env.GOVERNOR_MODEL) cfg.model = process.env.GOVERNOR_MODEL;
+  if (process.env.GOVERNOR_OPERATOR) cfg.operator = process.env.GOVERNOR_OPERATOR;
   syncBudget(cfg);
   // Explicit token budget still wins, for anyone who really does think in tokens.
   if (process.env.GOVERNOR_BUDGET) cfg.budget = +process.env.GOVERNOR_BUDGET;
@@ -43,6 +47,10 @@ function budgetFor(a) {
 
 const CONFIG = loadConfig();
 const state = makeState();
+try {
+  if (existsSync(PERIODS_FILE)) Object.assign(state.periods, JSON.parse(readFileSync(PERIODS_FILE, 'utf8')));
+} catch {}
+let periodsDirty = false;
 const clients = new Set(); // SSE connections
 
 function broadcast(eventName, payload) {
@@ -57,13 +65,27 @@ function snapshot() {
   })), config: {
     budget: CONFIG.budget, soft: CONFIG.soft, loopLimit: CONFIG.loopLimit,
     softAction: CONFIG.softAction, budgetOn: CONFIG.budgetOn, loopOn: CONFIG.loopOn,
+    rulesOn: CONFIG.rulesOn, operator: CONFIG.operator, rules: CONFIG.rules || DEFAULT_RULES,
     dollars: CONFIG.dollars, model: CONFIG.model, models: MODELS,
+    dailyLimit: CONFIG.dailyLimit, weeklyLimit: CONFIG.weeklyLimit, monthlyLimit: CONFIG.monthlyLimit,
+    spent: { day: state.periods.day.usd, week: state.periods.week.usd, month: state.periods.month.usd },
   } };
 }
 
 async function persist(r) {
-  try { await mkdir(DATA_DIR, { recursive: true }); await appendFile(RECEIPTS, JSON.stringify(r.entry) + '\n'); } catch {}
+  try {
+    await mkdir(DATA_DIR, { recursive: true });
+    await appendFile(RECEIPTS, JSON.stringify(r.entry) + '\n');
+    periodsDirty = true;
+  } catch {}
 }
+// Flushed on a timer rather than per decision: the totals are small and losing
+// at most a second of spend on a hard kill is not worth a write per tool call.
+setInterval(async () => {
+  if (!periodsDirty) return;
+  periodsDirty = false;
+  try { await mkdir(DATA_DIR, { recursive: true }); await writeFile(PERIODS_FILE, JSON.stringify(state.periods)); } catch {}
+}, 1000).unref();
 
 async function readBody(req) {
   const chunks = [];
@@ -173,7 +195,7 @@ const server = http.createServer(async (req, res) => {
   }
   if (req.method === 'POST' && path === '/config') {
     const patch = JSON.parse((await readBody(req)).toString() || '{}');
-    for (const k of ['budgetOn', 'loopOn', 'softAction', 'budget', 'soft', 'dollars', 'model']) {
+    for (const k of ['budgetOn', 'loopOn', 'rulesOn', 'softAction', 'budget', 'soft', 'dollars', 'model', 'dailyLimit', 'weeklyLimit', 'monthlyLimit', 'operator']) {
       if (k in patch) CONFIG[k] = patch[k];
     }
     // Raising the limit has to affect the agent already running, not just the
@@ -235,6 +257,11 @@ server.listen(CONFIG.port, () => {
   const r = priceOf(CONFIG.model);
   console.log(`\n  Spend limit: $${CONFIG.dollars} per agent at ${r.label} rates (${CONFIG.budget.toLocaleString()} tokens), it checks with you at ${Math.round(CONFIG.soft * 100)}%.`);
   console.log(`  Change it in the dashboard, no restart needed.`);
+  const caps = [['a day', CONFIG.dailyLimit], ['a week', CONFIG.weeklyLimit], ['a month', CONFIG.monthlyLimit]]
+    .filter(([, v]) => v > 0).map(([w, v]) => `$${v} ${w}`);
+  console.log(caps.length
+    ? `  Across ALL agents together: ${caps.join(', ')}.`
+    : `  No total cap across all agents yet. Set one in the dashboard: a per-agent limit does not bound a team.`);
   console.log(`  A record of every decision is kept at ${RECEIPTS}`);
   console.log(`  Stop it any time with Ctrl+C. Your agents keep working if it is off.\n`);
   // Auto-open the dashboard so nobody has to know what localhost means.

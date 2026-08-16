@@ -98,6 +98,41 @@ export function weightsFor(model) {
 export const tokensForDollars = (usd, perM) => Math.round((usd / perM) * 1e6);
 export const dollarsForTokens = (tok, perM) => (tok / 1e6) * perM;
 
+// WHAT AN AGENT MAY DO, not just what it may spend.
+//
+// This is Enforcer's model applied to agents: authority is a capability set a
+// human granted, every action is checked against it, and the decision is
+// receipted. A destructive command is destructive whether or not there is
+// budget left, so this is checked BEFORE any spend rule.
+//
+// action: 'deny' refuses outright; 'ask' hands the decision to the human via
+// Claude Code's own permission prompt -- no bespoke approval UI needed.
+export const DEFAULT_RULES = [
+  { name: 'pipe the internet into a shell', tool: 'Bash',
+    match: '(curl|wget)[^|]*\\|\\s*(ba|z|fi)?sh', action: 'deny' },
+  { name: 'delete a whole tree', tool: 'Bash',
+    match: 'rm\\s+(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r)', action: 'ask' },
+  { name: 'rewrite git history', tool: 'Bash',
+    match: 'push\\s+(--force|-f)\\b|reset\\s+--hard|filter-branch', action: 'ask' },
+  { name: 'read or write credentials', tool: '',
+    match: '\\.env\\b|id_rsa|\\.pem\\b|credentials\\.json|\\.aws/|\\.ssh/', action: 'ask' },
+  { name: 'publish or deploy', tool: 'Bash',
+    match: 'npm\\s+publish|vercel\\s+.*--prod|kubectl\\s+(apply|delete)|terraform\\s+apply', action: 'ask' },
+];
+
+// First rule whose tool and pattern both match. An empty tool means any tool.
+export function matchRule(rules, ev) {
+  const tool = String(ev.tool || '').toLowerCase();
+  const text = String(ev.action || '');
+  for (const r of rules || []) {
+    if (r.tool && r.tool.toLowerCase() !== tool) continue;
+    let re;
+    try { re = new RegExp(r.match, 'i'); } catch { continue; }   // a bad pattern must not break the check
+    if (re.test(text)) return r;
+  }
+  return null;
+}
+
 export const DEFAULTS = {
   // Budgets are COST-WEIGHTED effective tokens (input=1, output 5x,
   // cache-create 1.25x, cache-read 0.1x), so long cached sessions are
@@ -108,13 +143,50 @@ export const DEFAULTS = {
   soft: 0.75,         // escalate / warn at this fraction of budget
   loopLimit: 4,       // identical action repeats that trip a loop block
   loopWindow: 8,      // how many recent actions to remember
+  // Total spend caps across ALL agents, in dollars. 0 means off. These are what
+  // bound a team; the per-agent limit only bounds one session.
+  dailyLimit: 0,
+  weeklyLimit: 0,
+  monthlyLimit: 0,
   budgetOn: true,
   loopOn: true,
+  rulesOn: true,      // capability rules: what it may DO
+  rules: null,        // null = DEFAULT_RULES; set your own to override
+  operator: '',       // the human this agent acts for; stamped on every receipt
   softAction: 'escalate', // 'escalate' -> ask a human; 'deny' -> auto-block
 };
 
+// Period keys double as the reset mechanism: when the key changes, the total
+// starts again. No scheduler, no cron, correct across restarts and time zones.
+const dayKey   = t => new Date(t).toISOString().slice(0, 10);
+const monthKey = t => new Date(t).toISOString().slice(0, 7);
+const weekKey  = t => {           // ISO-ish: week identified by its Monday
+  const d = new Date(t);
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  return d.toISOString().slice(0, 10);
+};
+export const PERIODS = [['day', dayKey], ['week', weekKey], ['month', monthKey]];
+
 export function makeState() {
-  return { agents: {}, chain: [], prevHash: 'genesis' };
+  return {
+    agents: {}, chain: [], prevHash: 'genesis',
+    // Total spend across EVERY agent. A per-agent cap cannot bound a team:
+    // Claude Code agent teams run each teammate as its own session, so seven
+    // teammates on a $20 per-agent cap can spend $140. These totals are the
+    // ceiling that actually holds.
+    periods: { day: { k: '', usd: 0 }, week: { k: '', usd: 0 }, month: { k: '', usd: 0 } },
+  };
+}
+
+// Roll the running totals forward, resetting any period whose key has changed.
+export function addSpend(state, a, deltaTokens, now = Date.now()) {
+  if (!state.periods || !(deltaTokens > 0)) return;
+  const usd = dollarsForTokens(deltaTokens, priceOf(a.model).in);
+  for (const [name, keyFn] of PERIODS) {
+    const p = state.periods[name], k = keyFn(now);
+    if (p.k !== k) { p.k = k; p.usd = 0; }
+    p.usd += usd;
+  }
 }
 
 export function getAgent(state, id, cfg) {
@@ -132,6 +204,7 @@ export function getAgent(state, id, cfg) {
 export function decide(state, ev, config = {}) {
   const cfg = { ...DEFAULTS, ...config };
   const a = getAgent(state, ev.agent || 'default', cfg);
+  if (cfg.operator) a.operator = cfg.operator;
 
   // Master switch wins over everything, including a grounded agent. Turning the
   // governor off in the dashboard has to actually let work through, otherwise
@@ -149,10 +222,45 @@ export function decide(state, ev, config = {}) {
       a.tokens);
   }
 
+  // Capability first. "You may not do this" outranks "you have budget left",
+  // and a cheap command can still be the destructive one.
+  if (cfg.rulesOn !== false) {
+    const hit = matchRule(cfg.rules || DEFAULT_RULES, ev);
+    if (hit && hit.action === 'deny') {
+      // Refuse the ACTION, do not ground the agent. A capability check says
+      // "not that", not "you are finished" -- grounding here meant one blocked
+      // command silently turned every later verdict into "agent is stopped".
+      return record(state, a, 'deny', `not allowed to ${hit.name}`, a.tokens);
+    }
+    if (hit && hit.action === 'ask') {
+      // Deliberately does NOT latch a.escalated: every separate dangerous
+      // action deserves its own answer, not one blanket approval.
+      return record(state, a, 'escalate', `wants to ${hit.name}`, a.tokens);
+    }
+  }
+
   // The hook/proxy reports the session's cumulative token total; trust it if given.
+  const wasTokens = a.tokens;
   if (typeof ev.tokens === 'number') a.tokens = ev.tokens;
   else if (typeof ev.deltaTokens === 'number') a.tokens += ev.deltaTokens;
   if (typeof ev.cost === 'number') a.cost = ev.cost;
+  addSpend(state, a, a.tokens - wasTokens, ev.ts);
+
+  // Totals first: a team of agents can each sit inside its own limit while
+  // together spending many times what the human intended.
+  if (cfg.budgetOn && state.periods) {
+    const caps = { day: cfg.dailyLimit, week: cfg.weeklyLimit, month: cfg.monthlyLimit };
+    const word = { day: 'today', week: 'this week', month: 'this month' };
+    for (const [name] of PERIODS) {
+      const cap = caps[name], spent = state.periods[name].usd;
+      if (cap > 0 && spent >= cap) {
+        a.status = 'grounded';
+        return record(state, a, 'deny',
+          `your agents have spent $${spent.toFixed(2)} ${word[name]}, which is your $${cap} limit`,
+          a.tokens);
+      }
+    }
+  }
 
   // Loop / waste: the same action signature showing up too often in the recent
   // window. Counting OCCURRENCES rather than a back-to-back streak matters:
@@ -222,8 +330,11 @@ export function kill(state, agentId) {
 
 // Append a hash-chained receipt. Each hash folds in the previous one, so any
 // later edit or deletion breaks the chain and verifyChain() catches it.
-export function record(state, a, verdict, reason, tokens, authority) {
+export function record(state, a, verdict, reason, tokens, authority, operator) {
   const entry = { ts: Date.now(), agent: a.id, verdict, reason, tokens: Math.round(tokens) };
+  // An agent acts FOR someone. A receipt that cannot say who is evidence of
+  // nothing, which is the whole point of keeping receipts.
+  if (operator || a.operator) entry.operator = operator || a.operator;
   if (authority) entry.authority = authority;
   const json = JSON.stringify(entry);
   const hash = sha256(state.prevHash + json);

@@ -18,12 +18,23 @@ Every decision leaves a **tamper-proof receipt**, so you can always prove what y
 
 ---
 
-## Why nothing else does this
+## Where this sits
 
-We checked the whole landscape before building. Here is where it stands:
+Spend caps are no longer unique, and it would be dishonest to imply otherwise. Anthropic ships usage-credit limits at organization, group and member level, workspace spend limits on the Console, and a self-hosted gateway with per-user caps that block requests. Third-party tools cap Claude Code spend per session, day, week and month.
 
-| | Sees the spend | Stops the spend | Asks a human | Proves it afterwards |
-|---|---|---|---|---|
+What none of them do is decide **whether an action is allowed at all**:
+
+| | Sees spend | Stops spend | Gates the ACTION | Names who it acted for | Tamper-evident |
+|---|---|---|---|---|---|
+| Provider dashboards | after the fact | no | no | no | no |
+| Observability tools | yes | no | no | no | logs, editable |
+| LLM gateways | yes | hard cutoff | no | per key | logs, editable |
+| Native + third-party spend caps | yes | yes | **no** | no | no |
+| **Enforcer Governor** | **live** | **per agent and per fleet** | **yes, before it runs** | **yes** | **hash-chained** |
+
+A spend cap answers "can it afford this?". It has no opinion on `curl | sh`, on `rm -rf`, or on reading your `.env` &mdash; all of which are cheap. This asks the question Enforcer asks everywhere else: is this actor permitted to do this, right now, and who authorised it.
+
+---|---|---|---|---|
 | Provider dashboards (Anthropic, OpenAI) | after the fact | no | no | no |
 | Observability tools (Helicone, Langfuse, ccusage) | yes | no | no | logs, editable |
 | LLM gateways (LiteLLM, Portkey) | yes | hard cutoff, bare error | no | logs, editable |
@@ -45,11 +56,13 @@ One thing: **Node.js**, a free tool most developers already have. Check by typin
 
 ---
 
-## What it catches
+## Three things, not one
 
-- **Budget blowouts** &mdash; a hard token cap per agent, per session. Deny once it is hit.
-- **Loops and waste** &mdash; the same tool call with the same arguments, over and over. Flagged at 3, blocked at 4.
-- **Runaway spend** &mdash; a soft cap (default 75%) that pauses the agent and asks you before it keeps going.
+**Control.** What the agent may DO, checked before it does it. Piping the internet into a shell is refused outright. Deleting a tree, rewriting git history, reading credentials, publishing or deploying: those stop and ask you. Ordinary work passes untouched. These are capability decisions, not spend ones, so they fire with a full budget.
+
+**Receipts.** Every decision is hash-chained, and each one names the human the agent was acting for. Edit or delete a single record and the chain visibly breaks.
+
+**Spend.** A dollar limit per agent, a soft cap that asks you before it keeps going, and total caps across every agent per day, week and month. Loops and repeated work are caught on behaviour, not just cost.
 
 It does **not** claim to detect hallucination &mdash; nobody can do that reliably. It catches the mechanical waste that is actually detectable, and escalates the judgment calls to you.
 
