@@ -16,6 +16,12 @@ const RECEIPTS = join(DATA_DIR, 'receipts.jsonl');
 // Running day/week/month totals live on disk, or restarting the governor would
 // hand a runaway fleet a fresh budget.
 const PERIODS_FILE = join(DATA_DIR, 'periods.json');
+// What the human set in the dashboard. Without this, a restart silently drops
+// every limit back to the default while the spend total carries on climbing --
+// you would believe you were capped when you were not.
+const SAVED_FILE = join(DATA_DIR, 'config.json');
+const SAVED_KEYS = ['dollars', 'model', 'soft', 'softAction', 'budgetOn', 'loopOn', 'rulesOn',
+                    'dailyLimit', 'weeklyLimit', 'monthlyLimit', 'operator'];
 
 // Config: defaults <- governor.config.json (cwd) <- env.
 // Dollars are the source of truth; budget (effective tokens) is derived, so
@@ -28,6 +34,13 @@ function loadConfig() {
   let cfg = { ...DEFAULTS, port: 4000 };
   const f = join(process.cwd(), 'governor.config.json');
   if (existsSync(f)) { try { cfg = { ...cfg, ...JSON.parse(readFileSync(f, 'utf8')) }; } catch {} }
+  // Dashboard choices outlive a restart, but an explicit env var still wins.
+  if (existsSync(SAVED_FILE)) {
+    try {
+      const saved = JSON.parse(readFileSync(SAVED_FILE, 'utf8'));
+      for (const k of SAVED_KEYS) if (k in saved) cfg[k] = saved[k];
+    } catch {}
+  }
   if (process.env.GOVERNOR_DOLLARS) cfg.dollars = +process.env.GOVERNOR_DOLLARS;
   if (process.env.GOVERNOR_MODEL) cfg.model = process.env.GOVERNOR_MODEL;
   if (process.env.GOVERNOR_OPERATOR) cfg.operator = process.env.GOVERNOR_OPERATOR;
@@ -213,6 +226,11 @@ const server = http.createServer(async (req, res) => {
         if (a.status === 'grounded' && a.tokens < a.budget) { a.status = 'active'; a.escalated = false; }
       }
     }
+    // Persist what the human chose, so a restart cannot quietly un-cap them.
+    try {
+      await mkdir(DATA_DIR, { recursive: true });
+      await writeFile(SAVED_FILE, JSON.stringify(Object.fromEntries(SAVED_KEYS.map(k => [k, CONFIG[k]])), null, 2));
+    } catch {}
     broadcast('config', snapshot().config);
     broadcast('agents', snapshot().agents);
     return json(res, 200, snapshot().config);

@@ -253,3 +253,30 @@ console.log('  capability rules + attribution ok');
   assert.equal(r2.verdict, 'allow', 'and normal work continues straight after');
 }
 console.log('  a refused action does not revoke the agent ok');
+
+// ── The token intake is a trust boundary ───────────────────────────────────
+// /decide is an open local endpoint and the proxy reads usage out of an
+// upstream response. A NaN is the dangerous one: every comparison against the
+// budget evaluates false, so the agent is never stopped by anything.
+{
+  const cfg = { budget: 100000, soft: 0.75 };
+  for (const junk of [NaN, Infinity, -Infinity, -5000, '900000', null, undefined, {}]) {
+    const s = makeState();
+    decide(s, { agent: 'a', tokens: 50000, action: 'x' }, cfg);   // establish a real total
+    decide(s, { agent: 'a', tokens: junk, action: 'y' }, cfg);
+    const t = s.agents['a'].tokens;
+    assert(Number.isFinite(t) && t >= 0, `tokens stayed sane after ${String(junk)} (got ${t})`);
+    assert(t >= 50000, `spend never rewinds after ${String(junk)} (got ${t})`);
+  }
+  // and the budget still bites afterwards
+  const s = makeState();
+  decide(s, { agent: 'a', tokens: NaN, action: 'x' }, cfg);
+  const r = decide(s, { agent: 'a', tokens: 100000, action: 'y' }, cfg);
+  assert.equal(r.verdict, 'deny', 'a junk reading cannot disable the spend limit');
+
+  // running totals must never be poisoned either
+  const s2 = makeState();
+  decide(s2, { agent: 'a', tokens: Infinity, action: 'x' }, cfg);
+  assert(Number.isFinite(s2.periods.day.usd), 'day total survives an Infinity reading');
+}
+console.log('  junk token readings cannot bypass or poison the limits ok');

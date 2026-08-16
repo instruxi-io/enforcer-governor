@@ -239,10 +239,19 @@ export function decide(state, ev, config = {}) {
     }
   }
 
-  // The hook/proxy reports the session's cumulative token total; trust it if given.
+  // The hook/proxy reports the session's cumulative token total. Do NOT trust it
+  // blindly: /decide is an open local endpoint and the proxy reads usage out of
+  // an upstream response. A NaN here is the worst case, because every
+  // comparison against the budget silently evaluates false and the agent is
+  // never stopped at all. Infinity poisons the running totals permanently, and
+  // a negative lets a caller rewind its own spend.
+  const clean = n => (typeof n === 'number' && Number.isFinite(n) && n >= 0) ? n : null;
   const wasTokens = a.tokens;
-  if (typeof ev.tokens === 'number') a.tokens = ev.tokens;
-  else if (typeof ev.deltaTokens === 'number') a.tokens += ev.deltaTokens;
+  const abs = clean(ev.tokens), delta = clean(ev.deltaTokens);
+  // Cumulative totals only ever move forward; a lower figure means a restarted
+  // or re-read transcript, not spend that un-happened.
+  if (abs !== null) a.tokens = Math.max(a.tokens, abs);
+  else if (delta !== null) a.tokens += delta;
   if (typeof ev.cost === 'number') a.cost = ev.cost;
   addSpend(state, a, a.tokens - wasTokens, ev.ts);
 
