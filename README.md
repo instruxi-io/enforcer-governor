@@ -27,26 +27,12 @@ What none of them do is decide **whether an action is allowed at all**:
 | | Sees spend | Stops spend | Gates the ACTION | Names who it acted for | Tamper-evident |
 |---|---|---|---|---|---|
 | Provider dashboards | after the fact | no | no | no | no |
-| Observability tools | yes | no | no | no | logs, editable |
-| LLM gateways | yes | hard cutoff | no | per key | logs, editable |
-| Native + third-party spend caps | yes | yes | **no** | no | no |
+| Observability tools (Helicone, Langfuse, ccusage) | yes | no | no | no | logs, editable |
+| LLM gateways (LiteLLM, Portkey) | yes | hard cutoff | no | per key | logs, editable |
+| Native and third-party spend caps | yes | yes | **no** | no | no |
 | **Enforcer Governor** | **live** | **per agent and per fleet** | **yes, before it runs** | **yes** | **hash-chained** |
 
-A spend cap answers "can it afford this?". It has no opinion on `curl | sh`, on `rm -rf`, or on reading your `.env` &mdash; all of which are cheap. This asks the question Enforcer asks everywhere else: is this actor permitted to do this, right now, and who authorised it.
-
----|---|---|---|---|
-| Provider dashboards (Anthropic, OpenAI) | after the fact | no | no | no |
-| Observability tools (Helicone, Langfuse, ccusage) | yes | no | no | logs, editable |
-| LLM gateways (LiteLLM, Portkey) | yes | hard cutoff, bare error | no | logs, editable |
-| **Enforcer Governor** | **live** | **per agent, with a reason** | **pauses and waits for you** | **hash-chained receipts** |
-
-Three things you will not find together anywhere else:
-
-1. **A third verb.** Everything else is allow or block. The Governor can **escalate**: the agent freezes mid-task, you get the spend context and a yes/no, and your decision is recorded with the receipt. That is the difference between a fuse and a cockpit.
-2. **Receipts, not logs.** Every decision is chained by SHA-256, each hash folding in the last. Edit or delete one entry and the whole chain visibly breaks. A log says trust me; a receipt chain says check for yourself (there is a Verify button on the dashboard that does exactly that).
-3. **Enforcement where it can act.** The Claude Code hook blocks the action *before it runs*, and the gateway refuses the request *before it is billed*. Anthropic has declined to build spend caps or a kill switch into Claude Code itself, and the community's answer so far has been meters with tens of thousands of stars that can only watch. This one acts.
-
----
+A spend cap answers "can it afford this?". It has no opinion on `curl | sh`, on `rm -rf`, or on reading your `.env`, all of which are cheap. This asks the question Enforcer asks everywhere else: is this actor permitted to do this, right now, and who authorised it.
 
 ---
 
