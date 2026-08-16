@@ -1,7 +1,7 @@
 // One runnable check for the brain. `node test/policy.test.mjs`.
 // No framework: asserts that fail throw and exit non-zero.
 import assert from 'node:assert/strict';
-import { makeState, decide, resolve, kill, verifyChain, addSpend, setModel, getAgent, DEFAULTS, burnRate } from '../src/policy.mjs';
+import { makeState, decide, resolve, kill, verifyChain, addSpend, setModel, getAgent, DEFAULTS, burnRate, spawnRate } from '../src/policy.mjs';
 
 let pass = 0;
 const ok = (label, fn) => { fn(); pass++; console.log('  ok  ' + label); };
@@ -402,4 +402,46 @@ console.log('  model advice is conservative ok');
   }
   assert(r.entry.rule === 'pipe the internet into a shell', 'the receipt must name the rule that fired');
   console.log('receipts carry the fields an audit asks for ok');
+}
+
+// Fan-out. Twenty agents that started this morning is a team; twenty that
+// appear inside a minute is an orchestrator spawning spawners.
+{
+  const st = makeState();
+  const cfg = { ...DEFAULTS, dollars: 10000, fanoutLimit: 8, burnLimit: 0, fleetBurnLimit: 0 };
+  const t0 = Date.UTC(2026, 5, 1, 12, 0, 0);
+  const seen = [];
+  for (let i = 1; i <= 10; i++) {
+    getAgent(st, 'sub' + i, cfg, t0 + i * 1000);
+    seen.push(decide(st, { agent: 'sub' + i, tokens: 100, action: 'Read:x', ts: t0 + i * 1000 }, cfg).verdict);
+  }
+  assert(seen.includes('escalate'), `a fan-out should stop and ask, got ${seen.join(',')}`);
+  assert(seen.filter(v => v === 'escalate').length === 1, 'a fan-out should ask once, not once per agent');
+  // A team that arrives over an hour is not a fan-out.
+  const calm = makeState();
+  const slow = [];
+  for (let i = 1; i <= 10; i++) {
+    getAgent(calm, 'team' + i, cfg, t0 + i * 300000);
+    slow.push(decide(calm, { agent: 'team' + i, tokens: 100, action: 'Read:x', ts: t0 + i * 300000 }, cfg).verdict);
+  }
+  assert(!slow.includes('escalate'), 'agents starting over an hour must not read as a fan-out');
+  console.log('fan-out is caught by arrival rate, not head count ok');
+}
+
+// Retry storms. The failed call is cheap; the retry after it is not.
+{
+  const st = makeState();
+  const cfg = { ...DEFAULTS, dollars: 10000, retryLimit: 6, burnLimit: 0, fleetBurnLimit: 0, fanoutLimit: 0 };
+  const t0 = Date.UTC(2026, 5, 1, 12, 0, 0);
+  const a = getAgent(st, 'retrier', cfg, t0);
+  a.fails = Array.from({ length: 6 }, (_, i) => t0 + i * 1000);
+  const r = decide(st, { agent: 'retrier', tokens: 100, action: 'proxy:/v1/messages', ts: t0 + 7000 }, cfg);
+  assert(r.verdict === 'escalate', `a retry storm should stop and ask, got ${r.verdict}: ${r.reason}`);
+  // Old failures age out; yesterday's blip is not today's storm.
+  const st2 = makeState();
+  const b = getAgent(st2, 'blip', cfg, t0);
+  b.fails = Array.from({ length: 6 }, (_, i) => t0 + i * 1000);
+  const r2 = decide(st2, { agent: 'blip', tokens: 100, action: 'proxy:/v1/messages', ts: t0 + 600000 }, cfg);
+  assert(r2.verdict === 'allow', `failures older than the window must age out, got ${r2.verdict}`);
+  console.log('retry storms are caught, old failures age out ok');
 }

@@ -6,7 +6,7 @@ import { readFile, appendFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { makeState, decide, resolve, kill, release, verifyChain, getAgent, setModel, record, rollPeriods, burnRate, sha256, priceOf, weightsFor, modelAdvice, taskShape, MODELS, DEFAULTS, DEFAULT_RULES, tokensForDollars } from './policy.mjs';
+import { makeState, decide, resolve, kill, release, verifyChain, getAgent, setModel, record, rollPeriods, burnRate, spawnRate, sha256, priceOf, weightsFor, modelAdvice, taskShape, MODELS, DEFAULTS, DEFAULT_RULES, tokensForDollars } from './policy.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dir, '..');
@@ -20,7 +20,7 @@ const PERIODS_FILE = join(DATA_DIR, 'periods.json');
 // every limit back to the default while the spend total carries on climbing --
 // you would believe you were capped when you were not.
 const SAVED_FILE = join(DATA_DIR, 'config.json');
-const SAVED_KEYS = ['dollars', 'model', 'soft', 'softAction', 'budgetOn', 'loopOn', 'rulesOn', 'adviseModel', 'enforceModel', 'burnLimit', 'fleetBurnLimit',
+const SAVED_KEYS = ['dollars', 'model', 'soft', 'softAction', 'budgetOn', 'loopOn', 'rulesOn', 'adviseModel', 'enforceModel', 'burnLimit', 'fleetBurnLimit', 'fanoutLimit', 'retryLimit',
                     'dailyLimit', 'weeklyLimit', 'monthlyLimit', 'operator'];
 
 // Config: defaults <- governor.config.json (cwd) <- env.
@@ -91,6 +91,7 @@ function snapshot() {
     dollars: CONFIG.dollars, model: CONFIG.model, models: MODELS,
     dailyLimit: CONFIG.dailyLimit, weeklyLimit: CONFIG.weeklyLimit, monthlyLimit: CONFIG.monthlyLimit,
     burnLimit: CONFIG.burnLimit, fleetBurnLimit: CONFIG.fleetBurnLimit, fleetBurn: +burnRate(state).toFixed(2),
+    fanoutLimit: CONFIG.fanoutLimit, retryLimit: CONFIG.retryLimit, spawnRate: spawnRate(state),
     spent: { day: state.periods.day.usd, week: state.periods.week.usd, month: state.periods.month.usd },
   } };
 }
@@ -218,6 +219,13 @@ async function handleProxy(req, res, path) {
     upstream = await fetch(UPSTREAMS[path], { method: 'POST', headers, body });
   } catch (e) { return json(res, 502, { error: { message: 'upstream unreachable: ' + e.message } }); }
   const respBody = await upstream.text();
+  // Only the proxy sees what the provider actually answered. A 429 or a 5xx
+  // that the caller retries is the cheapest possible way to spend real money.
+  if (upstream.status >= 400) {
+    const k = getAgent(state, agent, CONFIG);
+    (k.fails ||= []).push(Date.now());
+    while (k.fails.length > 40) k.fails.shift();
+  }
   const { tokens: used, model } = extractUsage(respBody, path);
   // Price this agent at whatever model actually answered, before judging it.
   const known = getAgent(state, agent, CONFIG);
@@ -282,7 +290,7 @@ const server = http.createServer(async (req, res) => {
   }
   if (req.method === 'POST' && path === '/config') {
     const patch = JSON.parse((await readBody(req)).toString() || '{}');
-    for (const k of ['budgetOn', 'loopOn', 'rulesOn', 'softAction', 'budget', 'soft', 'dollars', 'model', 'dailyLimit', 'weeklyLimit', 'monthlyLimit', 'operator', 'adviseModel', 'enforceModel', 'burnLimit', 'fleetBurnLimit']) {
+    for (const k of ['budgetOn', 'loopOn', 'rulesOn', 'softAction', 'budget', 'soft', 'dollars', 'model', 'dailyLimit', 'weeklyLimit', 'monthlyLimit', 'operator', 'adviseModel', 'enforceModel', 'burnLimit', 'fleetBurnLimit', 'fanoutLimit', 'retryLimit']) {
       if (k in patch) CONFIG[k] = patch[k];
     }
     // Raising the limit has to affect the agent already running, not just the

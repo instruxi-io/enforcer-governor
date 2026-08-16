@@ -50,7 +50,13 @@ One thing: **Node.js**, a free tool most developers already have. Check by typin
 
 **Spend.** A dollar limit per agent, a soft cap that asks you before it keeps going, and total caps across every agent per day, week and month. Loops and repeated work are caught on behaviour, not just cost.
 
-**Speed, not just totals.** The incidents that actually cost people money are rate incidents: a session fanning out to dozens of subagents reaches four figures in one sitting, and a daily cap only notices once the day's money is gone. The governor watches dollars per minute, per agent and across the fleet, and stops to ask you when it runs away. Ordinary work sits around $0.10 to $0.25 a minute, so the defaults of $2 and $10 a minute leave normal sessions alone.
+**Speed, not just totals.** The incidents that actually cost people money are rate incidents, and every cap that ships elsewhere is a total. Three shapes are watched:
+
+- **Dollars per minute**, per agent and across the fleet. Ordinary work sits around $0.10 to $0.25 a minute, so the defaults of $2 and $10 leave normal sessions alone.
+- **New agents per minute.** A team that starts over an hour is a choice. Eight appearing inside a minute is an orchestrator spawning orchestrators, which is how one documented session reached 49 subagents before anyone looked.
+- **Errors per minute.** A rate-limited call fails cheaply; the retry after it does not. One report had 96% of attempts coming back rate limited while the wrapper kept paying for the rest.
+
+Each one **asks** rather than blocks, and asks once, so an overnight run stops and waits for you instead of dying or nagging.
 
 **The right model for the job.** Running the test suite on your most expensive model is the most common way to overspend without noticing. The governor reads the task the agent was actually given and says when the model looks mismatched, in either direction: a top-tier model on mechanical work, or a light one on work that needs reasoning. It moves one step at a time, along named tiers, and says nothing at all when the task is ambiguous, because a bad downgrade costs more in wasted work than it saves in tokens.
 
@@ -117,6 +123,8 @@ Drop a `governor.config.json` in the directory you run it from:
   "softAction": "escalate",
   "burnLimit": 2,
   "fleetBurnLimit": 10,
+  "fanoutLimit": 8,
+  "retryLimit": 6,
   "port": 4000
 }
 ```
@@ -145,6 +153,8 @@ Claude Code ──hook──┐
 other agents ─proxy─┘        │
                              └──► dashboard (live gauges + decision tape)
 ```
+
+Everything is set from the **owner console** on the dashboard: one panel with a fader for each limit and a switch for each check, so there is one place to answer what these agents may do and what they may spend.
 
 - **Hook** (`PreToolUse`): reads your session transcript, totals the tokens, asks the governor, and translates the verdict into Claude Code's own allow / deny / ask. If the governor is down it fails **open**, so it never blocks your real work.
 - **Proxy**: a passthrough for `/v1/messages` and `/v1/chat/completions` that reads exact usage from responses and refuses when an agent is over its limit. This is the tamper-resistant path, since it runs server-side.

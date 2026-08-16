@@ -169,6 +169,14 @@ const TIERS = {
 };
 const tierOf = (key, t) => (t.top === key ? 'top' : t.mid === key ? 'mid' : t.low === key ? 'low' : null);
 
+// New agents in the last minute. Not a total: a team of twenty that started
+// this morning is a choice, twenty appearing in sixty seconds is a fan-out.
+export function spawnRate(state, now = Date.now()) {
+  if (!state.spawns) return 0;
+  const from = now - BURN_WINDOW;
+  return state.spawns.reduce((n, s) => n + (s.t > from ? 1 : 0), 0);
+}
+
 // { suggest, label, ratio, why } or null when there is nothing worth saying.
 export function modelAdvice(model, shape) {
   if (!shape) return null;
@@ -221,6 +229,14 @@ export const DEFAULTS = {
   // ordinary work and only a genuine runaway reaches them.
   burnLimit: 2,        // per agent
   fleetBurnLimit: 10,  // everything at once
+  // New agents appearing per minute. An orchestrator spawning spawners is
+  // exponential, so this is about the shape of the arrival, not the count.
+  fanoutLimit: 8,
+  // Upstream errors an agent may hit in a minute before we stop it retrying.
+  // A rate-limited call returns quickly and cheaply to the script but the
+  // retry does not: one report had 96% of attempts coming back rate limited
+  // while the wrapper kept paying for the ones that got through.
+  retryLimit: 6,
   budgetOn: true,
   loopOn: true,
   rulesOn: true,      // capability rules: what it may DO
@@ -257,6 +273,10 @@ export function makeState() {
     // 887k tokens a minute reach $15,000 in one sitting, and a daily cap only
     // notices once the day's money is gone. Rate notices in the first minute.
     burn: [],
+    // When each agent first appeared. An orchestrator that spawns spawners is
+    // exponential, and the documented case reached 49 subagents before anyone
+    // looked. Counting arrivals per minute catches it around the sixth.
+    spawns: [],
   };
 }
 
@@ -318,8 +338,13 @@ export function setModel(a, model) {
   a.model = model;
 }
 
-export function getAgent(state, id, cfg) {
+export function getAgent(state, id, cfg, now = Date.now()) {
   if (!state.agents[id]) {
+    if (state.spawns) {
+      state.spawns.push({ t: now, id });
+      const from = now - BURN_WINDOW;
+      while (state.spawns.length && state.spawns[0].t <= from) state.spawns.shift();
+    }
     state.agents[id] = {
       id, tokens: 0, recent: [], escalated: false, status: 'active',
       budget: cfg.budget, soft: cfg.soft, cost: 0,
@@ -443,6 +468,31 @@ export function decide(state, ev, config = {}) {
     }
   }
 
+  // Fan-out. Flagged once per burst on the agent that trips it, so a genuine
+  // twenty-agent job asks a single question rather than twenty.
+  if (cfg.budgetOn && cfg.fanoutLimit > 0 && !state.fanoutFlagged) {
+    const spawned = spawnRate(state, now);
+    if (spawned >= cfg.fanoutLimit) {
+      state.fanoutFlagged = true;
+      a.status = 'paused';
+      return record(state, a, 'escalate',
+        `${spawned} new agents started in the last minute, and you asked to be told past ${cfg.fanoutLimit}`,
+        a.tokens);
+    }
+  }
+
+  // Retry storm. A rate-limited call fails cheaply; the retry does not.
+  if (cfg.budgetOn && cfg.retryLimit > 0 && a.fails && !a.retryFlagged) {
+    const recent = a.fails.reduce((n, t) => n + (t > now - BURN_WINDOW ? 1 : 0), 0);
+    if (recent >= cfg.retryLimit) {
+      a.retryFlagged = true;
+      a.status = 'paused';
+      return record(state, a, 'escalate',
+        `it hit ${recent} errors in a minute and kept going, which is a retry loop, not progress`,
+        a.tokens);
+    }
+  }
+
   if (cfg.budgetOn && a.tokens >= a.budget) {
     a.status = 'grounded';
     return record(state, a, 'deny', 'it reached your spend limit', a.tokens);
@@ -477,7 +527,7 @@ export function resolve(state, agentId, approve, config = {}) {
     a.budgetRaised = true; // a human overrode the cap; stop recomputing it
     a.status = 'active';
     a.escalated = false;
-    a.burnFlagged = false;
+    a.burnFlagged = a.retryFlagged = state.fanoutFlagged = false;
   return record(state, a, 'allow', 'you approved it, limit raised by half', a.tokens, 'human');
   }
   a.status = 'grounded';
@@ -493,7 +543,7 @@ export function release(state, agentId, extra = 1.5) {
   a.status = 'active';
   a.escalated = false;
   a.loopStreak = 0;
-  a.burnFlagged = false;
+  a.burnFlagged = a.retryFlagged = state.fanoutFlagged = false;
   return record(state, a, 'allow', 'you resumed it and raised its limit', a.tokens, 'human');
 }
 

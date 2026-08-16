@@ -56,7 +56,7 @@
   .caps .ctrl-h em{font-style:normal;text-transform:none;letter-spacing:0;color:var(--faint);margin-left:10px;font-size:10.5px;}
   .caprow{display:grid;grid-template-columns:repeat(auto-fill,minmax(232px,1fr));gap:8px;}
   .cap{display:flex;align-items:center;gap:9px;background:#0A0E13;border:1px solid var(--lineS);
-    border-left-width:2px;border-radius:7px;padding:9px 11px;font-size:12.5px;color:var(--dim);}
+    border-left-width:2px;padding:9px 11px;font-size:12.5px;color:var(--dim);}
   .cap.deny{border-left-color:var(--deny);} .cap.ask{border-left-color:var(--esc);}
   .cap b{font-weight:500;color:var(--ink);font-size:12.5px;}
   .cap .verdict{margin-left:auto;font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;flex:none;}
@@ -66,6 +66,59 @@
   .who{font-family:var(--mono);font-size:11px;color:var(--faint);margin-left:auto;}
   .who b{color:var(--teal);font-weight:500;}
   /* Fleet totals: the ceiling that actually bounds a team. */
+  /* ── Owner console ─────────────────────────────────────────────────────
+     One panel, two columns: the numbers on the left as faders, the on/off
+     decisions on the right. Faders rather than number boxes because these are
+     all "how much", and because a stepped fader cannot land you on $37.
+     Motion budget per the craft rules: 100ms on hover and commit, nothing on
+     the thumb itself, which has to track the finger exactly. */
+  .console{margin:14px 0 0;background:var(--panel);border:1px solid var(--line);border-radius:10px;}
+  .con-h{display:flex;align-items:center;gap:14px;padding:15px 18px 13px;border-bottom:1px solid var(--lineS);flex-wrap:wrap;}
+  .con-t{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);font-weight:400;margin:0;}
+  .con-h .who{margin-left:0;}
+  .con-h .sw.master{margin-left:auto;}
+  .con-grid{display:grid;grid-template-columns:1.3fr 1fr;gap:0;}
+  .con-col{padding:16px 18px 18px;min-width:0;}
+  .con-col+.con-col{border-left:1px solid var(--lineS);}
+  .col-h{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);margin:0 0 14px;}
+  .col-h.sub{margin-top:22px;padding-top:16px;border-top:1px solid var(--lineS);}
+  .col-h em{font-style:normal;letter-spacing:.04em;text-transform:none;color:#3E4854;margin-left:8px;}
+
+  .fader{padding:0 0 15px;margin-bottom:15px;border-bottom:1px solid var(--lineS);}
+  .fader:last-of-type{border-bottom:none;}
+  .f-top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:9px;}
+  .f-k{font-size:12.5px;color:var(--dim);}
+  .f-v{font-family:var(--mono);font-size:17px;color:var(--ink);font-variant-numeric:tabular-nums;
+    transition:color .1s var(--ease,cubic-bezier(.2,0,0,1));}
+  .fader.live .f-v{color:var(--teal);}
+  .f-v.off{color:var(--faint);}
+  .f-sub{font-size:10.5px;line-height:1.5;color:var(--faint);margin-top:9px;}
+  .f-sub b{color:var(--dim);font-weight:400;font-family:var(--mono);font-variant-numeric:tabular-nums;}
+
+  /* The fader itself. A tall thin marker on a hairline track, the way a real
+     desk marks a level, rather than the usual round handle. */
+  .f-r{-webkit-appearance:none;appearance:none;width:100%;height:18px;background:none;cursor:pointer;display:block;outline:none;}
+  .f-r::-webkit-slider-runnable-track{height:3px;border-radius:2px;
+    background:linear-gradient(var(--teal),var(--teal)) 0/var(--fill,0%) 100% no-repeat,var(--line);}
+  .f-r::-moz-range-track{height:3px;border-radius:2px;background:var(--line);}
+  .f-r::-moz-range-progress{height:3px;border-radius:2px;background:var(--teal);}
+  .f-r::-webkit-slider-thumb{-webkit-appearance:none;width:4px;height:18px;border-radius:1px;
+    background:var(--ink);margin-top:-7.5px;box-shadow:0 0 0 0 rgba(87,196,184,0);transition:box-shadow .1s ease;}
+  .f-r::-moz-range-thumb{width:4px;height:18px;border:none;border-radius:1px;background:var(--ink);}
+  .f-r:hover::-webkit-slider-thumb,.f-r:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 4px rgba(87,196,184,.18);}
+  .f-r:focus-visible{outline:1px solid var(--teal);outline-offset:6px;border-radius:2px;}
+
+  .swlist{display:flex;flex-direction:column;gap:9px;align-items:flex-start;margin-bottom:14px;}
+  .segrow{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:9px;}
+  .segrow .seg-lbl{margin:0;}
+  .priced{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px;padding-top:14px;border-top:1px solid var(--lineS);}
+  .con-col .caprow{grid-template-columns:1fr;gap:6px;}
+  .con-col .capnote{margin-top:11px;}
+  .console .ungov-banner{margin:0;border-top:1px solid var(--lineS);}
+  @media(max-width:900px){
+    .con-grid{grid-template-columns:1fr;}
+    .con-col+.con-col{border-left:none;border-top:1px solid var(--lineS);}
+  }
   .fleetcaps{margin-top:15px;padding-top:14px;border-top:1px solid var(--lineS);
     display:flex;gap:clamp(14px,3vw,30px);flex-wrap:wrap;align-items:flex-end;}
   .fc{display:flex;flex-direction:column;gap:5px;}
@@ -223,72 +276,98 @@
     <div class="tape" id="tape" aria-live="polite"></div>
   </div>
 </div>
-  <div class="caps">
-    <div class="ctrl-h">What your agents may do <em>checked before anything is spent</em>
-      <span class="who" id="whoFor"></span></div>
-    <div class="caprow" id="capRules"></div>
-    <div class="capfoot">
-      <button class="sw on" id="swRules"><span class="knob"></span><span>Capability checks</span></button>
-      <span class="capnote">Ordinary work passes untouched. These fire even with a full budget, because a dangerous command is usually a cheap one.</span>
-    </div>
-  </div>
-  <div class="spend">
-    <div class="spend-h">Spend limit &middot; per agent</div>
-    <div class="spend-row">
-      <label class="dollar"><span>$</span><input id="dollars" type="number" min="1" max="9999" step="1" value="20" inputmode="numeric" aria-label="Spend limit in dollars"></label>
-      <div class="presets" id="presets">
-        <button class="chipbtn" data-d="5">$5</button>
-        <button class="chipbtn on" data-d="20">$20</button>
-        <button class="chipbtn" data-d="50">$50</button>
-        <button class="chipbtn" data-d="100">$100</button>
-      </div>
-      <div class="rates" id="rates"><span class="rl">priced as</span>
-        <select id="modelSel" class="modelsel" aria-label="Model to price the limit against"></select>
-        <span class="autotag on" id="autoTag">follows your agent</span>
-      </div>
-    </div>
-    <div class="translate">
-      <div class="tr"><div class="v"><em id="trTime">&mdash;</em></div><div class="k">of agent work</div></div>
-      <div class="tr"><div class="v" id="trAsk">$15</div><div class="k">it pauses and asks you at</div></div>
-      <div class="tr"><div class="v" id="trStop">$20</div><div class="k">it stops at</div></div>
-      <div class="tr"><div class="v" id="trTok">4.00M</div><div class="k">tokens, if you care</div></div>
-    </div>
-    <div class="fleetcaps">
-      <div class="fc"><span class="k">everything together, a day</span>
-        <label class="in"><span>$</span><input id="dayLimit" type="number" min="0" step="5" value="0" placeholder="0"></label></div>
-      <div class="fc"><span class="k">a week</span>
-        <label class="in"><span>$</span><input id="weekLimit" type="number" min="0" step="10" value="0"></label></div>
-      <div class="fc"><span class="k">a month</span>
-        <label class="in"><span>$</span><input id="monthLimit" type="number" min="0" step="25" value="0"></label></div>
-      <div class="fc" style="justify-content:flex-end"><span class="k">spent so far</span>
-        <span class="spent" id="fleetSpent">&mdash;</span></div>
-      <div class="fc"><span class="k">stop any agent burning faster than</span>
-        <label class="in"><span>$</span><input id="burnLimit" type="number" min="0" step="1" value="2"></label><span class="perm">a minute</span></div>
-      <div class="fc"><span class="k">stop everything together past</span>
-        <label class="in"><span>$</span><input id="fleetBurnLimit" type="number" min="0" step="5" value="10"></label><span class="perm">a minute</span></div>
-      <div class="fc" style="justify-content:flex-end"><span class="k">burning right now</span>
-        <span class="spent" id="fleetBurn">&mdash;</span></div>
-      <div class="fcnote">A daily cap only notices once the day's money is gone. These watch the speed, so a fan-out that would spend it all in an hour is stopped in the first minute.</div>
-    </div>
-    <div class="spend-note" id="spendNote"></div>
-  </div>
-  <div class="controls">
-    <div class="ctrl-h">Rules</div>
-    <div class="switches">
+  <!-- The owner's desk. One place to answer every question about what these
+       agents may do and what they may spend, instead of three panels that each
+       answered part of it. The faders are stepped: they land on $20, never on
+       $37, because nobody means $37. -->
+  <section class="console" aria-label="Owner console">
+    <div class="con-h">
+      <h2 class="con-t">Owner console</h2>
+      <span class="who" id="whoFor"></span>
       <button class="sw master on" id="swEnforcer"><span class="knob"></span><span>Enforcer</span></button>
-      <button class="sw on" id="swBudget"><span class="knob"></span><span>Stop at the limit</span></button>
-      <button class="sw on" id="swLoop"><span class="knob"></span><span>Stop repeat loops</span></button>
-      <div class="seg"><span class="seg-lbl">when it nears the limit:</span>
-        <button class="seg-b on" id="segEsc">Ask me</button>
-        <button class="seg-b dm" id="segDeny">Just stop it</button>
+    </div>
+
+    <div class="con-grid">
+      <div class="con-col">
+        <div class="col-h">Limits <em>drag to set</em></div>
+
+        <div class="fader">
+          <div class="f-top"><span class="f-k">spend, per agent</span><span class="f-v" id="vDollars">$20</span></div>
+          <input class="f-r" type="range" id="rDollars" min="0" max="8" step="1" value="4" aria-label="Spend limit per agent">
+          <div class="translate">
+            <div class="tr"><div class="v"><em id="trTime">&mdash;</em></div><div class="k">of agent work</div></div>
+            <div class="tr"><div class="v" id="trAsk">$15</div><div class="k">it asks you at</div></div>
+            <div class="tr"><div class="v" id="trStop">$20</div><div class="k">it stops at</div></div>
+            <div class="tr"><div class="v" id="trTok">4.00M</div><div class="k">tokens, if you care</div></div>
+          </div>
+        </div>
+
+        <div class="fader">
+          <div class="f-top"><span class="f-k">speed, per agent</span><span class="f-v" id="vBurn">$2/min</span></div>
+          <input class="f-r" type="range" id="rBurn" min="0" max="7" step="1" value="2" aria-label="Burn rate limit per agent">
+          <div class="f-sub">Ordinary work runs about $0.10 to $0.25 a minute. A daily cap only notices once the day is gone; this notices in the first.</div>
+        </div>
+
+        <div class="fader">
+          <div class="f-top"><span class="f-k">speed, everything together</span><span class="f-v" id="vFleetBurn">$10/min</span></div>
+          <input class="f-r" type="range" id="rFleetBurn" min="0" max="6" step="1" value="2" aria-label="Burn rate limit across all agents">
+          <div class="f-sub">Burning right now: <b id="fleetBurn">nothing</b></div>
+        </div>
+
+        <div class="fader">
+          <div class="f-top"><span class="f-k">new agents a minute</span><span class="f-v" id="vFanout">8</span></div>
+          <input class="f-r" type="range" id="rFanout" min="0" max="30" step="1" value="8" aria-label="New agents per minute before asking">
+          <div class="f-sub">A team that starts over an hour is a choice. Eight appearing inside a minute is an orchestrator spawning orchestrators.</div>
+        </div>
+
+        <div class="fader">
+          <div class="f-top"><span class="f-k">errors before it stops retrying</span><span class="f-v" id="vRetry">6</span></div>
+          <input class="f-r" type="range" id="rRetry" min="0" max="30" step="1" value="6" aria-label="Upstream errors per minute before asking">
+          <div class="f-sub">A rate-limited call fails cheaply. The retry after it does not.</div>
+        </div>
+
+        <div class="fader">
+          <div class="f-top"><span class="f-k">everything together, a day</span><span class="f-v" id="vDay">off</span></div>
+          <input class="f-r" type="range" id="rDay" min="0" max="7" step="1" value="0" aria-label="Total spend limit per day">
+          <div class="f-sub">Spent so far: <b id="fleetSpent">&mdash;</b></div>
+        </div>
+
+        <div class="priced"><span class="rl">priced as</span>
+          <select id="modelSel" class="modelsel" aria-label="Model to price the limit against"></select>
+          <span class="autotag on" id="autoTag">follows your agent</span>
+        </div>
+        <div class="spend-note" id="spendNote"></div>
       </div>
-      <button class="sw on" id="swModel"><span class="knob"></span><span>Match model to task</span></button>
-      <div class="seg"><span class="seg-lbl">on a mismatch:</span>
-        <button class="seg-b on" id="segSay">Tell me</button>
-        <button class="seg-b dm" id="segSwap">Switch it</button>
+
+      <div class="con-col">
+        <div class="col-h">Checks <em>what it does when one trips</em></div>
+        <div class="swlist">
+          <button class="sw on" id="swBudget"><span class="knob"></span><span>Stop at the limit</span></button>
+          <button class="sw on" id="swLoop"><span class="knob"></span><span>Stop repeat loops</span></button>
+          <button class="sw on" id="swRules"><span class="knob"></span><span>Capability checks</span></button>
+          <button class="sw on" id="swModel"><span class="knob"></span><span>Match model to task</span></button>
+        </div>
+        <div class="segrow"><span class="seg-lbl">when it nears the limit</span>
+          <div class="seg"><button class="seg-b on" id="segEsc">Ask me</button><button class="seg-b dm" id="segDeny">Just stop it</button></div>
+        </div>
+        <div class="segrow"><span class="seg-lbl">on a model mismatch</span>
+          <div class="seg"><button class="seg-b on" id="segSay">Tell me</button><button class="seg-b dm" id="segSwap">Switch it</button></div>
+        </div>
+
+        <div class="col-h sub">What your agents may do <em>checked before anything is spent</em></div>
+        <div class="caprow" id="capRules"></div>
+        <p class="capnote">Ordinary work passes untouched. These fire even on a full budget, because a dangerous command is usually a cheap one.</p>
       </div>
     </div>
-    <div class="ungov-banner">CHECKS ARE OFF · your agents can spend without limit, and nothing is being recorded.</div>
+    <div class="ungov-banner">CHECKS ARE OFF &middot; your agents can spend without limit, and nothing is being recorded.</div>
+  </section>
+
+  <!-- Kept as the source of truth the faders write into, so every existing
+       control path stays exactly as it was and only the surface changed. -->
+  <div hidden>
+    <input id="dollars" type="number" value="20"><div id="presets"></div>
+    <input id="dayLimit" type="number" value="0"><input id="weekLimit" type="number" value="0"><input id="monthLimit" type="number" value="0">
+    <input id="burnLimit" type="number" value="2"><input id="fleetBurnLimit" type="number" value="10">
   </div>
 <footer><div class="wrap" style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;width:100%"><span>INSTRUXI · ENFORCER GOVERNOR</span><span>deterministic checks decide · humans judge · every decision receipted</span></div></footer>
 <div class="esc-modal" id="escModal"><div class="esc-card">
@@ -454,7 +533,8 @@
   }
   function renderFleet(c){
     if(!c) return;
-    const set=(id,v)=>{ const el=$(id); if(el && document.activeElement!==el) el.value=v||0; };
+    const set=(id,v)=>{ const el=$(id);
+      if(el && document.activeElement!==el && !window.__faderBusy) el.value=v||0; };
     set('dayLimit',c.dailyLimit); set('weekLimit',c.weeklyLimit); set('monthLimit',c.monthlyLimit);
     const sp=c.spent||{}, el=$('fleetSpent'); if(!el) return;
     el.textContent = `${money(sp.day||0)} today  ·  ${money(sp.week||0)} this week  ·  ${money(sp.month||0)} this month`;
@@ -651,6 +731,66 @@
     $(id).onchange=()=>{ const v=Math.max(0,+$(id).value||0); if(id==='burnLimit')BURN=v;
       if(LIVE)fetch('/config',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({[key]:v})}).catch(()=>{}); };
   }
+  // ── Faders ──────────────────────────────────────────────────────────────
+  // Each one drives a hidden number input and fires its existing change event,
+  // so every control path behind these is the one that was already tested.
+  // Stepped scales, so a drag lands on $20 or $50 and never on $37.
+  const SCALES = {
+    rDollars:   { steps:[1,2,5,10,20,50,100,200,500], out:'dollars',        fmt:v=>'$'+v },
+    rBurn:      { steps:[0,.5,1,2,3,5,10,25],         out:'burnLimit',      fmt:v=>v?'$'+v+'/min':'off' },
+    rFleetBurn: { steps:[0,2,5,10,25,50,100],         out:'fleetBurnLimit', fmt:v=>v?'$'+v+'/min':'off' },
+    rDay:       { steps:[0,10,25,50,100,250,500,1000],out:'dayLimit',       fmt:v=>v?'$'+v:'off' },
+    rFanout:    { steps:null,                          out:null,            fmt:v=>v?String(v):'off', cfg:'fanoutLimit' },
+    rRetry:     { steps:null,                          out:null,            fmt:v=>v?String(v):'off', cfg:'retryLimit' },
+  };
+  // Read by renderFleet, which writes the same hidden inputs from the server.
+  Object.defineProperty(window,'__faderBusy',{get(){ return Object.keys(touched).some(recentlyTouched); }});
+  const READOUT = { rDollars:'vDollars', rBurn:'vBurn', rFleetBurn:'vFleetBurn', rDay:'vDay', rFanout:'vFanout', rRetry:'vRetry' };
+  const valOf = (id,i)=>{ const sc=SCALES[id]; return sc.steps ? sc.steps[Math.max(0,Math.min(sc.steps.length-1,i))] : i; };
+
+  function paintFader(id){
+    const r=$(id), sc=SCALES[id], v=valOf(id,+r.value), out=$(READOUT[id]);
+    // Fill the track behind the marker. Firefox has ::-moz-range-progress and
+    // needs nothing; WebKit does not, hence the variable.
+    r.style.setProperty('--fill', (r.value-r.min)/(r.max-r.min)*100+'%');
+    out.textContent = sc.fmt(v);
+    out.classList.toggle('off', !v && id!=='rDollars');
+    return v;
+  }
+  // A snapshot arrives about once a second. Without this, the server's current
+  // value stomps the number you just dragged to, before your change has even
+  // been sent, and the fader springs back under your finger.
+  const touched = {};
+  const recentlyTouched = id => (Date.now() - (touched[id] || 0)) < 2500;
+
+  function commitFader(id, live){
+    touched[id] = Date.now();
+    const sc=SCALES[id], v=paintFader(id);
+    $(id).closest('.fader').classList.toggle('live', !!live);
+    if(live) return;                       // paint while dragging, act on release
+    // Both events: the controls behind these were written against `oninput`
+    // in one place and `onchange` in another, and a fader that silently moves
+    // only some of them is worse than no fader.
+    if(sc.out){ const n=$(sc.out); n.value=v;
+      n.dispatchEvent(new Event('input',{bubbles:true}));
+      n.dispatchEvent(new Event('change',{bubbles:true})); }
+    if(sc.cfg && LIVE) fetch('/config',{method:'POST',headers:{'content-type':'application/json'},
+      body:JSON.stringify({[sc.cfg]:v})}).catch(()=>{});
+  }
+  for(const id of Object.keys(SCALES)){
+    $(id).addEventListener('input',()=>commitFader(id,true));
+    $(id).addEventListener('change',()=>commitFader(id,false));
+    paintFader(id);
+  }
+  // Set a fader from the server without echoing the change straight back.
+  function setFader(id, value){
+    if(recentlyTouched(id)) return;
+    const sc=SCALES[id];
+    $(id).value = sc.steps
+      ? sc.steps.reduce((best,v,i)=>Math.abs(v-value)<Math.abs(sc.steps[best]-value)?i:best,0)
+      : Math.max(+$(id).min, Math.min(+$(id).max, value));
+    paintFader(id);
+  }
   $('swModel').onclick=()=>{ policy.advise=!policy.advise; $('swModel').classList.toggle('on',policy.advise);
     if(!policy.advise){ policy.enforceModel=false; $('segSwap').classList.remove('on'); $('segSay').classList.add('on'); }
     pushConfig(); };
@@ -699,8 +839,12 @@
     const applyConfig=c=>{
       if(typeof c.budgetOn==='boolean'){ policy.budget=c.budgetOn; $('swBudget').classList.toggle('on',c.budgetOn); }
       if(typeof c.loopOn==='boolean'){ policy.loop=c.loopOn; $('swLoop').classList.toggle('on',c.loopOn); }
-      if(typeof c.burnLimit==='number'){ BURN=c.burnLimit; $('burnLimit').value=c.burnLimit; }
-      if(typeof c.fleetBurnLimit==='number') $('fleetBurnLimit').value=c.fleetBurnLimit;
+      if(typeof c.burnLimit==='number'){ BURN=c.burnLimit; $('burnLimit').value=c.burnLimit; setFader('rBurn',c.burnLimit); }
+      if(typeof c.fleetBurnLimit==='number'){ $('fleetBurnLimit').value=c.fleetBurnLimit; setFader('rFleetBurn',c.fleetBurnLimit); }
+      if(typeof c.fanoutLimit==='number') setFader('rFanout',c.fanoutLimit);
+      if(typeof c.retryLimit==='number') setFader('rRetry',c.retryLimit);
+      if(typeof c.dollars==='number') setFader('rDollars',c.dollars);
+      if(typeof c.dailyLimit==='number') setFader('rDay',c.dailyLimit);
       if(typeof c.fleetBurn==='number'){
         const fb=$('fleetBurn'); fb.textContent = c.fleetBurn>0 ? money(c.fleetBurn)+'/min' : 'nothing';
         fb.style.color = (c.fleetBurnLimit>0 && c.fleetBurn>=c.fleetBurnLimit*0.6) ? 'var(--esc)' : '';
@@ -712,7 +856,10 @@
       if(c.models&&Object.keys(c.models).length){ MODELS=c.models; reKeys(); buildModelSelect(); }
       if(c.model&&MODELS[c.model]) modelKey=c.model;
       // Never yank the field out from under someone mid-keystroke.
-      if(typeof c.dollars==='number' && document.activeElement!==$('dollars')){ dollars=c.dollars; $('dollars').value=c.dollars; }
+      // The activeElement guard was written for a visible number box. The box
+      // is now a fader, so it is never the focused element and the guard never
+      // fired: every drag was undone by the next snapshot.
+      if(typeof c.dollars==='number' && document.activeElement!==$('dollars') && !window.__faderBusy){ dollars=c.dollars; $('dollars').value=c.dollars; }
       if(Array.isArray(c.rules)){ RULES=c.rules; renderRules(); }
       if(typeof c.rulesOn==='boolean') $('swRules').classList.toggle('on',c.rulesOn);
       if(c.operator) $('whoFor').innerHTML='agents act for <b>'+c.operator+'</b>';
