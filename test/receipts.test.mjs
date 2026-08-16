@@ -38,3 +38,26 @@ writeFileSync(file, short.join('\n'));
 assert(walkReceipts(file).brokeAt === 2, 'a deleted receipt must be named');
 
 console.log('receipts survive a restart and fail loudly on edits and deletions ok');
+
+// Concurrency. The hashes are computed in decision order, so the lines must
+// land in decision order. Twelve agents deciding at once was enough to
+// interleave concurrent appends and break a chain that was correct in memory.
+{
+  const { spawn } = await import('node:child_process');
+  const home = mkdtempSync(join(tmpdir(), 'gov-conc-'));
+  const port = 4199;
+  const gov = spawn(process.execPath, ['src/governor.mjs', 'start', '--no-open'],
+    { env: { ...process.env, HOME: home, GOVERNOR_PORT: String(port) }, stdio: 'ignore' });
+  const up = async () => { for (let i = 0; i < 60; i++) {
+    try { await fetch(`http://localhost:${port}/verify`); return true; } catch { await new Promise(r => setTimeout(r, 100)); } } return false; };
+  try {
+    assert(await up(), 'the governor did not come up');
+    await Promise.all(Array.from({ length: 40 }, (_, i) => fetch(`http://localhost:${port}/decide`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ agent: 'c' + i, deltaTokens: 1000, tool: 'Read', action: 'Read:f' + i, model: 'claude-opus-5' }),
+    })));
+    const v = await (await fetch(`http://localhost:${port}/verify`)).json();
+    assert(v.ok && v.receipts === 40, `40 concurrent decisions broke the chain: ${JSON.stringify(v)}`);
+    console.log('the chain holds under concurrent decisions ok');
+  } finally { gov.kill(); }
+}

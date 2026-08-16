@@ -96,12 +96,21 @@ function snapshot() {
 // The hash is written WITH the entry. Without it, the file is only a log: you
 // can recompute a chain over edited entries and it verifies happily, because
 // nothing on disk says what the hashes were meant to be.
-async function persist(r) {
-  try {
-    await mkdir(DATA_DIR, { recursive: true });
-    await appendFile(RECEIPTS, JSON.stringify({ ...r.entry, hash: r.hash }) + '\n');
-    periodsDirty = true;
-  } catch {}
+// Writes go through ONE queue. The hashes are computed in decision order, so
+// the lines have to land in decision order too. Concurrent appends do not
+// guarantee that: twelve agents deciding at once was enough to interleave the
+// file and break verification of a chain that was perfectly correct in memory.
+let writeQueue = Promise.resolve();
+function persist(r) {
+  const line = JSON.stringify({ ...r.entry, hash: r.hash }) + '\n';
+  periodsDirty = true;
+  writeQueue = writeQueue.then(async () => {
+    try {
+      await mkdir(DATA_DIR, { recursive: true });
+      await appendFile(RECEIPTS, line);
+    } catch {}
+  });
+  return writeQueue;
 }
 
 // Walk the receipts on disk. This is the real verification -- the in-memory
