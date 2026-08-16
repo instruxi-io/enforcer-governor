@@ -6,7 +6,7 @@ import { readFile, appendFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { makeState, decide, resolve, kill, release, verifyChain, getAgent, setModel, record, rollPeriods, sha256, priceOf, weightsFor, modelAdvice, taskShape, MODELS, DEFAULTS, DEFAULT_RULES, tokensForDollars } from './policy.mjs';
+import { makeState, decide, resolve, kill, release, verifyChain, getAgent, setModel, record, rollPeriods, burnRate, sha256, priceOf, weightsFor, modelAdvice, taskShape, MODELS, DEFAULTS, DEFAULT_RULES, tokensForDollars } from './policy.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dir, '..');
@@ -20,7 +20,7 @@ const PERIODS_FILE = join(DATA_DIR, 'periods.json');
 // every limit back to the default while the spend total carries on climbing --
 // you would believe you were capped when you were not.
 const SAVED_FILE = join(DATA_DIR, 'config.json');
-const SAVED_KEYS = ['dollars', 'model', 'soft', 'softAction', 'budgetOn', 'loopOn', 'rulesOn', 'adviseModel', 'enforceModel',
+const SAVED_KEYS = ['dollars', 'model', 'soft', 'softAction', 'budgetOn', 'loopOn', 'rulesOn', 'adviseModel', 'enforceModel', 'burnLimit', 'fleetBurnLimit',
                     'dailyLimit', 'weeklyLimit', 'monthlyLimit', 'operator'];
 
 // Config: defaults <- governor.config.json (cwd) <- env.
@@ -78,7 +78,8 @@ function snapshot() {
   rollPeriods(state);
   return { agents: Object.values(state.agents).map(a => ({
     id: a.id, tokens: Math.round(a.tokens), budget: a.budget, soft: a.soft,
-    status: a.status, cost: a.cost, model: a.model || '', task: a.task || '',
+    status: a.status, cost: a.cost, model: a.model || '', task: a.task || '', billing: a.billing || '',
+    burn: +burnRate(state, undefined, a.id).toFixed(2),
     // Carried on the snapshot too, or the advice only ever appears on a card
     // built by a live decision and vanishes the moment you reload the page.
     advice: CONFIG.adviseModel !== false ? modelAdvice(a.model, taskShape(a.task)) : null,
@@ -89,6 +90,7 @@ function snapshot() {
     adviseModel: CONFIG.adviseModel, enforceModel: CONFIG.enforceModel,
     dollars: CONFIG.dollars, model: CONFIG.model, models: MODELS,
     dailyLimit: CONFIG.dailyLimit, weeklyLimit: CONFIG.weeklyLimit, monthlyLimit: CONFIG.monthlyLimit,
+    burnLimit: CONFIG.burnLimit, fleetBurnLimit: CONFIG.fleetBurnLimit, fleetBurn: +burnRate(state).toFixed(2),
     spent: { day: state.periods.day.usd, week: state.periods.week.usd, month: state.periods.month.usd },
   } };
 }
@@ -254,7 +256,7 @@ const server = http.createServer(async (req, res) => {
     if (ev.task) a.task = ev.task;
     if (!a.budgetRaised) a.budget = budgetFor(a);
     const r = decide(state, ev, CONFIG);
-    broadcast('decision', { ...r, model: ev.model || '', task: ev.task || '', advice: r.advice || null });
+    broadcast('decision', { ...r, model: ev.model || '', task: ev.task || '', advice: r.advice || null, billing: ev.billing || '' });
     await persist(r);
     return json(res, 200, r);
   }
@@ -280,7 +282,7 @@ const server = http.createServer(async (req, res) => {
   }
   if (req.method === 'POST' && path === '/config') {
     const patch = JSON.parse((await readBody(req)).toString() || '{}');
-    for (const k of ['budgetOn', 'loopOn', 'rulesOn', 'softAction', 'budget', 'soft', 'dollars', 'model', 'dailyLimit', 'weeklyLimit', 'monthlyLimit', 'operator', 'adviseModel', 'enforceModel']) {
+    for (const k of ['budgetOn', 'loopOn', 'rulesOn', 'softAction', 'budget', 'soft', 'dollars', 'model', 'dailyLimit', 'weeklyLimit', 'monthlyLimit', 'operator', 'adviseModel', 'enforceModel', 'burnLimit', 'fleetBurnLimit']) {
       if (k in patch) CONFIG[k] = patch[k];
     }
     // Raising the limit has to affect the agent already running, not just the

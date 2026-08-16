@@ -1,6 +1,6 @@
 {
   "name": "enforcer-governor",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "description": "Real-time token-spend control for AI agents. Allow, deny, or escalate every agent action, with hash-chained receipts. Free to run on your own agents, self-hosted.",
   "type": "module",
   "bin": {

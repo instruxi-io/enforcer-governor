@@ -79,6 +79,14 @@ function emit(decision, reason, systemMessage) {
   process.exit(0);
 }
 
+// Which wallet is paying. Claude Code on a plan is flat-rate; an API key in
+// the environment moves the same work onto per-token billing, and that is the
+// gap the worst surprise bills fall through. We can see the key is set, not
+// that it was used, so this is reported as "may be" and never acted on.
+function billingMode() {
+  return (process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN) ? 'api' : 'plan';
+}
+
 async function main() {
   let ev = {};
   try { ev = JSON.parse(readStdin() || '{}'); } catch {}
@@ -90,7 +98,7 @@ async function main() {
   try {
     const resp = await fetch(`http://localhost:${PORT}/decide`, {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ agent, tokens, action, task, tool: ev.tool_name, model: model || 'claude-code' }),
+      body: JSON.stringify({ agent, tokens, action, task, tool: ev.tool_name, model: model || 'claude-code', billing: billingMode() }),
       signal: AbortSignal.timeout(2500),
     });
     r = await resp.json();

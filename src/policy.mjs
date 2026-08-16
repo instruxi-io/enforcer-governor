@@ -214,6 +214,13 @@ export const DEFAULTS = {
   dailyLimit: 0,
   weeklyLimit: 0,
   monthlyLimit: 0,
+  // Dollars per minute. Unlike the totals above these are ON by default,
+  // because the incidents worth preventing are all rate incidents and a
+  // control that ships switched off prevents nothing. A normal single session
+  // runs around $0.10 to $0.25 a minute, so these sit roughly 8x above
+  // ordinary work and only a genuine runaway reaches them.
+  burnLimit: 2,        // per agent
+  fleetBurnLimit: 10,  // everything at once
   budgetOn: true,
   loopOn: true,
   rulesOn: true,      // capability rules: what it may DO
@@ -245,7 +252,31 @@ export function makeState() {
     // teammates on a $20 per-agent cap can spend $140. These totals are the
     // ceiling that actually holds.
     periods: { day: { k: '', usd: 0 }, week: { k: '', usd: 0 }, month: { k: '', usd: 0 } },
+    // Recent spend, one entry per charge, trimmed to BURN_WINDOW. Totals are
+    // the wrong instrument for the worst real incidents: 49 subagents burning
+    // 887k tokens a minute reach $15,000 in one sitting, and a daily cap only
+    // notices once the day's money is gone. Rate notices in the first minute.
+    burn: [],
   };
+}
+
+const BURN_WINDOW = 60000;   // one minute, so the sum IS dollars per minute
+
+// Dollars per minute, for one agent or for everything at once. Needs a few
+// samples across a few seconds before it will answer, because one big charge
+// against no history reads as an infinite rate and would stop honest work.
+export function burnRate(state, now = Date.now(), agent = null) {
+  if (!state.burn || !state.burn.length) return 0;
+  const from = now - BURN_WINDOW;
+  const rows = state.burn.filter(b => b.t > from && (!agent || b.agent === agent));
+  if (rows.length < 3) return 0;
+  const span = now - rows[0].t;
+  // Per minute, measured over however much of the minute has actually
+  // happened. Summing the raw window instead would mean waiting a full minute
+  // before the rate reads true, and at $50 a minute that wait is the whole
+  // loss. The floor keeps a single early charge from reading as infinite.
+  if (span < 15000) return 0;
+  return rows.reduce((s, b) => s + b.usd, 0) * (60000 / span);
 }
 
 // Roll the running totals forward, resetting any period whose key has changed.
@@ -267,6 +298,11 @@ export function addSpend(state, a, deltaTokens, now = Date.now()) {
   rollPeriods(state, now);
   const usd = dollarsForTokens(deltaTokens, priceOf(a.model).in);
   for (const [name] of PERIODS) state.periods[name].usd += usd;
+  if (state.burn) {
+    state.burn.push({ t: now, usd, agent: a.id });
+    const from = now - BURN_WINDOW;
+    while (state.burn.length && state.burn[0].t <= from) state.burn.shift();
+  }
 }
 
 // An effective token is denominated as "one input-token of cost AT THIS
@@ -302,6 +338,11 @@ export function decide(state, ev, config = {}) {
   if (cfg.operator) a.operator = cfg.operator;
   if (ev.task) a.task = ev.task;
   if (ev.model) setModel(a, ev.model);
+  a.tool = ev.tool || String(ev.action || '').split(':')[0] || a.tool;
+  // Whether this session is drawing on a subscription or on API credit. The
+  // nastiest surprise bills are people who believed they were on a flat plan
+  // while an API key quietly moved them onto per-token billing.
+  if (ev.billing) a.billing = ev.billing;
 
   // Master switch wins over everything, including a grounded agent. Turning the
   // governor off in the dashboard has to actually let work through, otherwise
@@ -327,12 +368,12 @@ export function decide(state, ev, config = {}) {
       // Refuse the ACTION, do not ground the agent. A capability check says
       // "not that", not "you are finished" -- grounding here meant one blocked
       // command silently turned every later verdict into "agent is stopped".
-      return record(state, a, 'deny', `not allowed to ${hit.name}`, a.tokens);
+      return record(state, a, 'deny', `not allowed to ${hit.name}`, a.tokens, undefined, undefined, { rule: hit.name });
     }
     if (hit && hit.action === 'ask') {
       // Deliberately does NOT latch a.escalated: every separate dangerous
       // action deserves its own answer, not one blanket approval.
-      return record(state, a, 'escalate', `wants to ${hit.name}`, a.tokens);
+      return record(state, a, 'escalate', `wants to ${hit.name}`, a.tokens, undefined, undefined, { rule: hit.name });
     }
   }
 
@@ -383,6 +424,25 @@ export function decide(state, ev, config = {}) {
     return record(state, a, 'deny',
       `it repeated the same action ${repeats} times in its last ${a.recent.length} - that is a loop`, a.tokens);
   }
+  // Speed, before totals. A runaway is recognisable by how fast it spends
+  // long before it reaches any ceiling, and by the time a daily cap notices,
+  // the day's money is already gone. Escalating rather than denying is
+  // deliberate: an overnight run stops and waits for a human, which is exactly
+  // what should have happened in every one of these incidents.
+  if (cfg.budgetOn && !a.burnFlagged) {
+    const mine = burnRate(state, now, a.id), all = burnRate(state, now);
+    const hit = cfg.burnLimit > 0 && mine >= cfg.burnLimit
+      ? ['this agent is spending', mine, cfg.burnLimit]
+      : cfg.fleetBurnLimit > 0 && all >= cfg.fleetBurnLimit
+      ? ['your agents together are spending', all, cfg.fleetBurnLimit] : null;
+    if (hit) {
+      a.burnFlagged = true;
+      a.status = 'paused';
+      return record(state, a, 'escalate',
+        `${hit[0]} $${hit[1].toFixed(2)} a minute, over your $${hit[2]} a minute mark`, a.tokens);
+    }
+  }
+
   if (cfg.budgetOn && a.tokens >= a.budget) {
     a.status = 'grounded';
     return record(state, a, 'deny', 'it reached your spend limit', a.tokens);
@@ -417,7 +477,8 @@ export function resolve(state, agentId, approve, config = {}) {
     a.budgetRaised = true; // a human overrode the cap; stop recomputing it
     a.status = 'active';
     a.escalated = false;
-    return record(state, a, 'allow', 'you approved it, limit raised by half', a.tokens, 'human');
+    a.burnFlagged = false;
+  return record(state, a, 'allow', 'you approved it, limit raised by half', a.tokens, 'human');
   }
   a.status = 'grounded';
   return record(state, a, 'deny', 'you said no', a.tokens, 'human');
@@ -432,6 +493,7 @@ export function release(state, agentId, extra = 1.5) {
   a.status = 'active';
   a.escalated = false;
   a.loopStreak = 0;
+  a.burnFlagged = false;
   return record(state, a, 'allow', 'you resumed it and raised its limit', a.tokens, 'human');
 }
 
@@ -444,8 +506,15 @@ export function kill(state, agentId) {
 
 // Append a hash-chained receipt. Each hash folds in the previous one, so any
 // later edit or deletion breaks the chain and verifyChain() catches it.
-export function record(state, a, verdict, reason, tokens, authority, operator) {
+export function record(state, a, verdict, reason, tokens, authority, operator, extra) {
   const entry = { ts: Date.now(), agent: a.id, verdict, reason, tokens: Math.round(tokens) };
+  // An auditor asks four things of an agent action: who it acted for, what it
+  // tried to do, which policy answered, and on what. A prose reason answers
+  // none of them in a form you can query, so the facts are recorded as fields
+  // as well. This is the shape the 2026 rules ask for.
+  if (a.tool) entry.tool = a.tool;
+  if (a.model) entry.model = a.model;
+  if (extra && extra.rule) entry.rule = extra.rule;
   // An agent acts FOR someone. A receipt that cannot say who is evidence of
   // nothing, which is the whole point of keeping receipts.
   if (operator || a.operator) entry.operator = operator || a.operator;

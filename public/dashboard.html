@@ -69,6 +69,7 @@
   .fleetcaps{margin-top:15px;padding-top:14px;border-top:1px solid var(--lineS);
     display:flex;gap:clamp(14px,3vw,30px);flex-wrap:wrap;align-items:flex-end;}
   .fc{display:flex;flex-direction:column;gap:5px;}
+  .fcnote{grid-column:1/-1;font-size:10.5px;line-height:1.45;color:var(--faint);margin-top:2px;}
   .fc .k{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);}
   .fc .in{display:flex;align-items:baseline;gap:2px;border-bottom:1px solid var(--line);padding-bottom:3px;}
   .fc .in span{font-family:var(--mono);font-size:12px;color:var(--faint);}
@@ -117,6 +118,16 @@
   .a-advice{display:none;margin:10px 0 2px;font-size:11px;line-height:1.4;color:var(--esc);
     border-left:2px solid rgba(212,167,44,.45);padding-left:8px;}
   .a-advice.show{display:block;}
+  .perm{font-family:var(--mono);font-size:9.5px;color:var(--faint);margin-left:6px;}
+  /* Rate, shown next to the money it is turning into. Amber only when it is
+     actually near the mark, so a glance at a calm fleet stays calm. */
+  .rate{font-family:var(--mono);font-size:10px;color:var(--faint);margin-left:auto;white-space:nowrap;}
+  .rate.hot{color:var(--esc);}
+  /* Where the money comes from. Silent on a plan, visible when an API key
+     moves the same work onto per-token billing without anyone deciding to. */
+  .bill{display:none;font-family:var(--mono);font-size:9px;letter-spacing:.06em;
+    color:var(--esc);border:1px solid rgba(212,167,44,.4);border-radius:3px;padding:1px 5px;margin-left:6px;}
+  .bill.show{display:inline-block;}
   .a-advice b{color:var(--ink);font-weight:500;}
   .a-meta{font-family:var(--mono);font-size:9.5px;color:var(--faint);margin-top:6px;letter-spacing:.04em;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -133,14 +144,14 @@
   .fill::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,255,255,.16),transparent 42%);}
   .agent.burning .fill{animation:breathe 2.4s cubic-bezier(.2,0,0,1) infinite;}
   @keyframes breathe{50%{filter:brightness(1.2);}}
-  .a-left{font-family:var(--mono);font-size:10px;color:var(--faint);}
+  .a-left{font-family:var(--mono);font-size:10px;color:var(--faint);white-space:nowrap;}
   .gauge{position:relative;height:132px;margin:4px 11px 0;border:1px solid var(--lineS);border-radius:6px;background:#080B10;overflow:hidden;}
   .fill{position:absolute;left:0;right:0;bottom:0;height:0;background:linear-gradient(180deg,rgba(87,196,184,.85),rgba(87,196,184,.35));transition:height .6s cubic-bezier(.3,.7,.3,1);}
   .warn .fill{background:linear-gradient(180deg,rgba(212,167,44,.9),rgba(212,167,44,.4));} .esc .fill{background:linear-gradient(180deg,rgba(212,167,44,.95),rgba(212,167,44,.5));} .grounded .fill,.free .fill{background:linear-gradient(180deg,rgba(229,83,75,.85),rgba(229,83,75,.4));}
   .softmark{position:absolute;left:0;right:0;border-top:1px dashed rgba(229,83,75,.5);} .softmark::after{content:"cap";position:absolute;right:4px;top:-13px;font-family:var(--mono);font-size:9px;color:var(--faint);}
   .gpct{position:absolute;top:8px;left:0;right:0;text-align:center;font-family:var(--mono);font-size:24px;font-weight:600;z-index:2;mix-blend-mode:difference;color:#fff;} .gtok{position:absolute;bottom:6px;left:0;right:0;text-align:center;font-family:var(--mono);font-size:10.5px;color:var(--ink);z-index:2;}
   .loopbadge{position:absolute;top:6px;right:6px;font-family:var(--mono);font-size:9.5px;font-weight:600;color:var(--deny);background:rgba(229,83,75,.14);border:1px solid rgba(229,83,75,.5);border-radius:4px;padding:1px 5px;z-index:3;opacity:0;} .loopbadge.show{opacity:1;}
-  .a-foot{display:flex;align-items:center;justify-content:space-between;padding:9px 12px 11px;font-family:var(--mono);font-size:10.5px;color:var(--dim);} .a-status{display:flex;align-items:center;gap:5px;} .st-dot{width:6px;height:6px;border-radius:50%;background:var(--allow);flex:none;} .warn .st-dot{background:var(--esc);}.esc .st-dot{background:var(--esc);}.grounded .st-dot,.free .st-dot{background:var(--deny);}
+  .a-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 12px 11px;font-family:var(--mono);font-size:10.5px;color:var(--dim);} .a-status{display:flex;align-items:center;gap:5px;} .st-dot{width:6px;height:6px;border-radius:50%;background:var(--allow);flex:none;} .warn .st-dot{background:var(--esc);}.esc .st-dot{background:var(--esc);}.grounded .st-dot,.free .st-dot{background:var(--deny);}
   .kill{font-family:var(--mono);font-size:10px;color:var(--faint);background:none;border:1px solid var(--line);border-radius:5px;padding:3px 8px;cursor:pointer;flex:none;} .kill:hover{border-color:var(--deny);color:var(--deny);} .kill:disabled{opacity:.35;cursor:default;}
   .tape-wrap{margin:22px 0 36px;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;}
   .tape-top{display:flex;align-items:center;gap:14px;padding:11px 15px;border-bottom:1px solid var(--line);background:var(--panel2);font-family:var(--mono);font-size:11px;} .tape-top .lbl{letter-spacing:.16em;text-transform:uppercase;color:var(--faint);} .tape-top .legend{display:flex;gap:14px;margin-left:auto;color:var(--dim);} .tape-top .legend i{width:8px;height:8px;border-radius:2px;display:inline-block;margin-right:5px;vertical-align:middle;}
@@ -251,6 +262,13 @@
         <label class="in"><span>$</span><input id="monthLimit" type="number" min="0" step="25" value="0"></label></div>
       <div class="fc" style="justify-content:flex-end"><span class="k">spent so far</span>
         <span class="spent" id="fleetSpent">&mdash;</span></div>
+      <div class="fc"><span class="k">stop any agent burning faster than</span>
+        <label class="in"><span>$</span><input id="burnLimit" type="number" min="0" step="1" value="2"></label><span class="perm">a minute</span></div>
+      <div class="fc"><span class="k">stop everything together past</span>
+        <label class="in"><span>$</span><input id="fleetBurnLimit" type="number" min="0" step="5" value="10"></label><span class="perm">a minute</span></div>
+      <div class="fc" style="justify-content:flex-end"><span class="k">burning right now</span>
+        <span class="spent" id="fleetBurn">&mdash;</span></div>
+      <div class="fcnote">A daily cap only notices once the day's money is gone. These watch the speed, so a fan-out that would spend it all in an hour is stopped in the first minute.</div>
     </div>
     <div class="spend-note" id="spendNote"></div>
   </div>
@@ -286,6 +304,7 @@
   const fmt=n=>n>=1e6?(n/1e6).toFixed(2)+'M':n>=1e3?(n/1e3).toFixed(1)+'k':String(Math.round(n));
   const cards={}; let allow=0,deny=0,esc=0;
   const policy={enforcer:true,budget:true,loop:true,soft:'escalate',advise:true,enforceModel:false};
+  let BURN=2;   // per-agent dollars a minute, mirrored from the server
   $('modeTag').textContent = LIVE?'LIVE · governing your agents':'DEMO · simulated fleet';
   if (LIVE) $('modeTag').classList.add('live');
   $('fleetHint').textContent = LIVE?'agents appear as your tools run · kill any of them':'watch scraper-07 loop · approve research-swarm-03 when it asks';
@@ -495,13 +514,13 @@
     const el=document.createElement('div'); el.className='agent'+(wasEmpty?' arriving':'');
     el.innerHTML=`<div class="a-top">
         <div class="a-head"><span class="pulse"></span><span class="a-task idle">waiting for a task</span></div>
-        <div class="a-meta"><span class="aid">${id}</span><span class="amdl"></span></div>
+        <div class="a-meta"><span class="aid">${id}</span><span class="amdl"></span><span class="bill">API BILLING</span></div>
       </div>
       <div class="gauge"><div class="softmark" style="bottom:${(soft||.75)*100}%"></div><div class="fill"></div><div class="loopbadge">REPEAT</div><div class="gpct">0%</div><div class="gtok">$0</div></div>
       <div class="sparklbl">cost per action</div>
       <div class="sparkwrap"><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" aria-hidden="true"><g></g></svg></div>
       <div class="a-advice"></div>
-      <div class="a-foot"><div class="a-status"><span class="st-dot"></span><span class="stxt">working</span></div><span class="a-left"></span><button class="kill">kill</button></div>`;
+      <div class="a-foot"><div class="a-status"><span class="st-dot"></span><span class="stxt">working</span></div><span class="rate"></span><span class="a-left"></span><button class="kill">kill</button></div>`;
     $('fleet').appendChild(el);
     const c={el,budget:budget||200000,soft:soft||.75};
     el.querySelector('.kill').onclick=()=>killAgent(id);
@@ -514,7 +533,7 @@
     };
     cards[id]=c; return c;
   }
-  function paint(id, {tokens,budget,status,model,task,loopStreak,advice}){
+  function paint(id, {tokens,budget,status,model,task,loopStreak,advice,burn,billing}){
     const c=card(id,model,budget); if(budget)c.budget=budget;
     if(model)c.model=model;
     if(task && task!==c.task){ c.task=task; const t=c.el.querySelector('.a-task'); t.textContent=task; t.classList.remove('idle'); }
@@ -553,6 +572,12 @@
     c.el.querySelector('.gpct').textContent=Math.round(tokens/c.budget*100)+'%';
     // Money on the card, not raw tokens. The token count is the machinery.
     c.el.querySelector('.gtok').textContent=money(usdForAgent(tokens,c.model))+' of '+money(usdForAgent(c.budget,c.model));
+    if(billing) c.el.querySelector('.bill').classList.toggle('show', billing==='api');
+    if(burn!==undefined){
+      const re=c.el.querySelector('.rate');
+      re.textContent = burn>0 ? money(burn)+'/min' : '';
+      re.classList.toggle('hot', BURN>0 && burn >= BURN*0.6);
+    }
     const lt=c.el.querySelector('.a-left'), rem=Math.max(0,c.budget-tokens), rw=runway(rem);
     lt.textContent = status==='grounded' ? '' : (rw.measured?'':'~')+human(rw.mins)+' left';
     const lb=c.el.querySelector('.loopbadge'); if(loopStreak>=3){lb.textContent='REPEAT x'+loopStreak;lb.classList.add('show');}else lb.classList.remove('show');
@@ -569,7 +594,7 @@
   function bump(v){ if(v==='allow')allow++;else if(v==='deny')deny++;else if(v==='escalate')esc++; $('mAllow').textContent=allow;$('mDeny').textContent=deny;$('mEsc').textContent=esc; }
   function onDecision(d){
     if(d.verdict==='gap'){ chip('gap',d.agent.id||d.agent,d.reason,null,null); paint(d.agent.id||d.agent,d.agent); return; }
-    const a=d.agent; paint(a.id,{...a,model:d.model,task:d.task,advice:d.advice||null});
+    const a=d.agent; paint(a.id,{...a,model:d.model,task:d.task,advice:d.advice||null,billing:d.billing||''});
     chip(d.verdict,a.id,d.reason,d.receipt,d.entry&&d.entry.authority);
     bump(d.verdict);
     if(d.verdict==='escalate') openEsc(a);
@@ -622,6 +647,10 @@
   tog('swBudget','budget'); tog('swLoop','loop');
   $('segEsc').onclick=()=>{policy.soft='escalate';$('segEsc').classList.add('on');$('segDeny').classList.remove('on');pushConfig();};
   $('segDeny').onclick=()=>{policy.soft='deny';$('segDeny').classList.add('on');$('segEsc').classList.remove('on');pushConfig();};
+  for (const [id,key] of [['burnLimit','burnLimit'],['fleetBurnLimit','fleetBurnLimit']]) {
+    $(id).onchange=()=>{ const v=Math.max(0,+$(id).value||0); if(id==='burnLimit')BURN=v;
+      if(LIVE)fetch('/config',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({[key]:v})}).catch(()=>{}); };
+  }
   $('swModel').onclick=()=>{ policy.advise=!policy.advise; $('swModel').classList.toggle('on',policy.advise);
     if(!policy.advise){ policy.enforceModel=false; $('segSwap').classList.remove('on'); $('segSay').classList.add('on'); }
     pushConfig(); };
@@ -670,6 +699,12 @@
     const applyConfig=c=>{
       if(typeof c.budgetOn==='boolean'){ policy.budget=c.budgetOn; $('swBudget').classList.toggle('on',c.budgetOn); }
       if(typeof c.loopOn==='boolean'){ policy.loop=c.loopOn; $('swLoop').classList.toggle('on',c.loopOn); }
+      if(typeof c.burnLimit==='number'){ BURN=c.burnLimit; $('burnLimit').value=c.burnLimit; }
+      if(typeof c.fleetBurnLimit==='number') $('fleetBurnLimit').value=c.fleetBurnLimit;
+      if(typeof c.fleetBurn==='number'){
+        const fb=$('fleetBurn'); fb.textContent = c.fleetBurn>0 ? money(c.fleetBurn)+'/min' : 'nothing';
+        fb.style.color = (c.fleetBurnLimit>0 && c.fleetBurn>=c.fleetBurnLimit*0.6) ? 'var(--esc)' : '';
+      }
       if(typeof c.adviseModel==='boolean'){ policy.advise=c.adviseModel; $('swModel').classList.toggle('on',c.adviseModel); }
       if(typeof c.enforceModel==='boolean'){ policy.enforceModel=c.enforceModel;
         $('segSwap').classList.toggle('on',c.enforceModel); $('segSay').classList.toggle('on',!c.enforceModel); }

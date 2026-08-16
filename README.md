@@ -46,9 +46,11 @@ One thing: **Node.js**, a free tool most developers already have. Check by typin
 
 **Control.** What the agent may DO, checked before it does it. Piping the internet into a shell is refused outright. Deleting a tree, rewriting git history, reading credentials, publishing or deploying: those stop and ask you. Ordinary work passes untouched. These are capability decisions, not spend ones, so they fire with a full budget.
 
-**Receipts.** Every decision is hash-chained, and each one names the human the agent was acting for. Edit or delete a single record and the chain visibly breaks.
+**Receipts.** Every decision is hash-chained, and each one names the human the agent was acting for, the tool it tried to use, the model answering, and the rule that decided. Edit or delete a single record and the chain visibly breaks. Those are the fields an audit asks for, recorded as fields rather than buried in prose.
 
 **Spend.** A dollar limit per agent, a soft cap that asks you before it keeps going, and total caps across every agent per day, week and month. Loops and repeated work are caught on behaviour, not just cost.
+
+**Speed, not just totals.** The incidents that actually cost people money are rate incidents: a session fanning out to dozens of subagents reaches four figures in one sitting, and a daily cap only notices once the day's money is gone. The governor watches dollars per minute, per agent and across the fleet, and stops to ask you when it runs away. Ordinary work sits around $0.10 to $0.25 a minute, so the defaults of $2 and $10 a minute leave normal sessions alone.
 
 **The right model for the job.** Running the test suite on your most expensive model is the most common way to overspend without noticing. The governor reads the task the agent was actually given and says when the model looks mismatched, in either direction: a top-tier model on mechanical work, or a light one on work that needs reasoning. It moves one step at a time, along named tiers, and says nothing at all when the task is ambiguous, because a bad downgrade costs more in wasted work than it saves in tokens.
 
@@ -113,6 +115,8 @@ Drop a `governor.config.json` in the directory you run it from:
   "soft": 0.75,
   "loopLimit": 4,
   "softAction": "escalate",
+  "burnLimit": 2,
+  "fleetBurnLimit": 10,
   "port": 4000
 }
 ```
@@ -125,7 +129,7 @@ Under the hood the cap is **cost-weighted effective tokens**, not raw counts. Ca
 
 The weights are per model, because the output multiplier is not a constant: Anthropic prices output at 5x input across its range, OpenAI runs 4x to 8x, and Gemini runs 4x to 8.33x. Cached input differs too. Two Gemini caveats are baked in: the Flash 3.7/3.6 rates are the ones in force through 2026-12-31, and the Pro rates are the sub-200k-prompt tier. `$20` is 4,000,000 effective tokens on Opus 5 and 16,000,000 on GPT-5. Set `budget` directly instead if you would rather think in tokens.
 
-Prices are the providers' published list rates. **On a Claude, ChatGPT or Gemini subscription you are not billed per token**, so read the dollar figures as equivalent API cost rather than an invoice.
+Prices are the providers' published list rates. **On a Claude, ChatGPT or Gemini subscription you are not billed per token**, so read the dollar figures as equivalent API cost rather than an invoice. When an API key is present in the environment the same work may be billing per token instead of against your plan, which is where the nastiest surprise bills come from, so the dashboard flags that agent rather than leaving you to find out on the invoice.
 
 `softAction` is `"escalate"` (ask a human) or `"deny"` (auto-block at the soft cap). Everything is also flippable live from the dashboard switches.
 
