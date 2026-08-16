@@ -26,7 +26,7 @@ function readStdin() {
 function readTranscript(path) {
   const out = { tokens: 0, model: '', task: '' };
   if (!path) return out;
-  let total = 0;
+  let usd = 0;
   const counted = new Set();
   try {
     // ponytail: re-reads the whole transcript on every tool call, so cost is
@@ -49,25 +49,33 @@ function readTranscript(path) {
       // each message id once.
       const id = m?.message?.id || m?.requestId;
       if (id) { if (counted.has(id)) continue; counted.add(id); }
-      total += (u.input_tokens || 0) + 5 * (u.output_tokens || 0)
-             + 1.25 * (u.cache_creation_input_tokens || 0)
-             + 0.1 * (u.cache_read_input_tokens || 0);
+      // Price each message at the model that ANSWERED it. A session that
+      // switched models part-way (which is exactly what this tool now suggests
+      // you do) is a mix, and pricing the whole transcript at whatever is
+      // current mis-states it by the ratio between the two -- 1.7x between
+      // Opus 5 and Sonnet 5.
+      const eff = (u.input_tokens || 0) + 5 * (u.output_tokens || 0)
+                + 1.25 * (u.cache_creation_input_tokens || 0)
+                + 0.1 * (u.cache_read_input_tokens || 0);
+      usd += eff * priceOf(m?.message?.model || out.model).in / 1e6;
     }
   } catch {}
-  out.tokens = Math.round(total);
+  // Back into effective tokens at the model answering NOW, which is the unit
+  // the governor's budget is denominated in.
+  out.tokens = Math.round(usd * 1e6 / priceOf(out.model).in);
   out.task = out.task.replace(/\s+/g, ' ').trim().slice(0, 140);
   return out;
 }
 
-function emit(decision, reason) {
+function emit(decision, reason, systemMessage) {
   // decision: 'allow' | 'deny' | 'ask'
-  process.stdout.write(JSON.stringify({
-    hookSpecificOutput: {
-      hookEventName: 'PreToolUse',
-      permissionDecision: decision,
-      permissionDecisionReason: reason,
-    },
-  }));
+  const out = {
+    hookEventName: 'PreToolUse',
+    permissionDecision: decision,
+    permissionDecisionReason: reason,
+  };
+  if (systemMessage) out.systemMessage = systemMessage;
+  process.stdout.write(JSON.stringify({ hookSpecificOutput: out }));
   process.exit(0);
 }
 
@@ -108,6 +116,13 @@ async function main() {
   if (r.verdict === 'escalate') {
     return emit('ask', `Enforcer is checking with you: ${r.reason}. It has spent ${of}. `
       + `Allow it to keep going?`);
+  }
+  // A PreToolUse hook cannot change the model -- verified against the hooks
+  // docs -- so the honest move is to tell the human, who can switch with
+  // /model. systemMessage surfaces it without interrupting the work.
+  if (r.advice) {
+    return emit('allow', `Enforcer: ${of}`,
+      `Enforcer: ${r.advice.why}. Consider /model ${r.advice.suggest}.`);
   }
   return emit('allow', `Enforcer: ${of}`);
 }

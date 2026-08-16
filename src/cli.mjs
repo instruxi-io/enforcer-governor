@@ -7,7 +7,7 @@
 const cmd = process.argv[2];
 
 if (cmd === 'start' || !cmd) {
-  await import('./governor.mjs');
+  (await import('./governor.mjs')).start();
 } else if (cmd === 'uninstall-hook' || cmd === 'uninstall') {
   const { uninstall } = await import('./install.mjs');
   uninstall(process.argv.includes('--global'));
@@ -21,7 +21,7 @@ if (cmd === 'start' || !cmd) {
   // to run. Wire the hook, then bring the dashboard up. --no-start opts out.
   if (!process.argv.includes('--no-start')) {
     console.log('  Starting the governor and opening your dashboard...');
-    await import('./governor.mjs');
+    (await import('./governor.mjs')).start();
   }
 } else {
   console.log(`Enforcer Governor

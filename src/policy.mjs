@@ -122,8 +122,11 @@ export const DEFAULT_RULES = [
 
 // First rule whose tool and pattern both match. An empty tool means any tool.
 export function matchRule(rules, ev) {
-  const tool = String(ev.tool || '').toLowerCase();
   const text = String(ev.action || '');
+  // Fall back to the prefix of the action ("Bash:...") when the caller did not
+  // name the tool. A missing field used to make every capability rule quietly
+  // miss, which fails in the one direction a guard must never fail in.
+  const tool = String(ev.tool || text.split(':')[0] || '').toLowerCase();
   for (const r of rules || []) {
     if (r.tool && r.tool.toLowerCase() !== tool) continue;
     let re;
@@ -131,6 +134,69 @@ export function matchRule(rules, ev) {
     if (re.test(text)) return r;
   }
   return null;
+}
+
+// ── Is this task worth the model that is answering it? ────────────────────
+//
+// Anthropic's own cost guidance names the two biggest causes of surprise
+// spend: long sessions that are never cleared, and a top-tier model left as
+// the default on work that does not need it.
+//
+// This is a HEURISTIC and is treated as one. A wrong downgrade produces worse
+// work, which costs more than the money it saves, so the rule is: only speak
+// up on a clear mechanical signal with NO reasoning signal, and stay silent on
+// anything ambiguous. Silence is the safe default here, not a guess.
+const MECHANICAL = /\b(?:re-?)?run(?:ning)? (?:the |all |every )?(?:\w+ )?(?:tests?|suite|build|linter)|npm (?:test|run build)|pytest|go test|cargo test|\blint(?:ing|er)?\b|prettier|gofmt|\btypos?\b|rename (?:the |this )?(?:variable|file|function|method)|bump the version|update the (?:changelog|readme|docs)|add a test for|fix the (?:formatting|indentation|imports?)/i;
+const REASONING  = /\b(?:why|design|architect(?:ure)?|debug|investigate|figure out|root cause|refactor|re-?architect|plan|approach|trade-?offs?|decide|strategy|should we|compare|evaluate|migrate)\b/i;
+
+// 'reasoning' | 'mechanical' | null (unknown -> say nothing)
+export function taskShape(task = '') {
+  const t = String(task || '');
+  if (!t.trim()) return null;
+  if (REASONING.test(t)) return 'reasoning';       // reasoning wins ties
+  if (MECHANICAL.test(t)) return 'mechanical';
+  return null;
+}
+
+// Named tiers, NOT "cheapest in the family". Sorting by price suggested
+// gpt-5-nano for a changelog bump -- a 100x saving on paper and useless in
+// practice, because nano cannot carry multi-step work. Advice moves ONE step,
+// to a model that can actually do the job.
+const TIERS = {
+  anthropic: { top: 'claude-opus-5',   mid: 'claude-sonnet-5',    low: 'claude-haiku-4-5' },
+  openai:    { top: 'gpt-5.6-sol',     mid: 'gpt-5.4',            low: 'gpt-5-mini' },
+  google:    { top: 'gemini-3.1-pro',  mid: 'gemini-3.5-flash',   low: 'gemini-2.5-flash-lite' },
+};
+const tierOf = (key, t) => (t.top === key ? 'top' : t.mid === key ? 'mid' : t.low === key ? 'low' : null);
+
+// { suggest, label, ratio, why } or null when there is nothing worth saying.
+export function modelAdvice(model, shape) {
+  if (!shape) return null;
+  const me = priceOf(model);
+  const t = TIERS[me.p];
+  if (!t) return null;
+  // Anything off the named ladder (a Pro or a dated variant) is left alone
+  // rather than guessed at.
+  const here = tierOf(me.key, t);
+  if (!here) return null;
+
+  let suggest = null;
+  if (shape === 'mechanical' && here === 'top') suggest = t.mid;
+  else if (shape === 'mechanical' && here === 'mid') suggest = t.low;
+  else if (shape === 'reasoning' && here === 'low') suggest = t.mid;
+  else if (shape === 'reasoning' && here === 'mid') suggest = t.top;
+  if (!suggest || suggest === me.key) return null;
+
+  const to = MODELS[suggest];
+  const cheaper = to.in < me.in;
+  return {
+    suggest, label: to.label,
+    ratio: +(cheaper ? me.in / to.in : to.in / me.in).toFixed(1),
+    cheaper,
+    why: cheaper
+      ? `this looks like mechanical work, and ${me.label} costs ${+(me.in / to.in).toFixed(1)}x ${to.label}`
+      : `this looks like reasoning work, and ${me.label} is a lighter model than ${to.label}`,
+  };
 }
 
 export const DEFAULTS = {
@@ -151,6 +217,10 @@ export const DEFAULTS = {
   budgetOn: true,
   loopOn: true,
   rulesOn: true,      // capability rules: what it may DO
+  adviseModel: true,  // say when the model looks mismatched to the task
+  enforceModel: false,// rewrite the model on the proxy. Off by default: silently
+                      // changing someone's model is a big deal, and we can only
+                      // do it where we own the request (never for Claude Code).
   rules: null,        // null = DEFAULT_RULES; set your own to override
   operator: '',       // the human this agent acts for; stamped on every receipt
   softAction: 'escalate', // 'escalate' -> ask a human; 'deny' -> auto-block
@@ -179,14 +249,37 @@ export function makeState() {
 }
 
 // Roll the running totals forward, resetting any period whose key has changed.
-export function addSpend(state, a, deltaTokens, now = Date.now()) {
-  if (!state.periods || !(deltaTokens > 0)) return;
-  const usd = dollarsForTokens(deltaTokens, priceOf(a.model).in);
+// Clear any period whose date key has moved on. This has to run on READS as
+// well as writes: totals used to reset only when the next dollar was spent, so
+// an agent grounded on yesterday's daily cap stayed grounded after midnight
+// until something else spent money, and a fresh agent could be grounded at
+// 00:01 by a figure belonging to yesterday.
+export function rollPeriods(state, now = Date.now()) {
+  if (!state.periods) return;
   for (const [name, keyFn] of PERIODS) {
     const p = state.periods[name], k = keyFn(now);
     if (p.k !== k) { p.k = k; p.usd = 0; }
-    p.usd += usd;
   }
+}
+
+export function addSpend(state, a, deltaTokens, now = Date.now()) {
+  if (!state.periods || !(deltaTokens > 0)) return;
+  rollPeriods(state, now);
+  const usd = dollarsForTokens(deltaTokens, priceOf(a.model).in);
+  for (const [name] of PERIODS) state.periods[name].usd += usd;
+}
+
+// An effective token is denominated as "one input-token of cost AT THIS
+// MODEL'S price". Switching model mid-session therefore changes the unit, so
+// the running total has to be converted with it. Without this, an agent moved
+// from Opus to Sonnet keeps its old total against a bigger token budget and
+// quietly gets 1.7x more money than the human set. Model switching used to be
+// rare; the model-matching feature makes it deliberate, so it has to be right.
+export function setModel(a, model) {
+  if (!model || model === a.model) return;
+  const from = priceOf(a.model, model).in, to = priceOf(model).in;
+  if (a.model && a.tokens > 0 && from !== to) a.tokens = Math.round(a.tokens * from / to);
+  a.model = model;
 }
 
 export function getAgent(state, id, cfg) {
@@ -203,8 +296,12 @@ export function getAgent(state, id, cfg) {
 // verdict is one of: allow | deny | escalate.
 export function decide(state, ev, config = {}) {
   const cfg = { ...DEFAULTS, ...config };
+  const now = ev.ts || Date.now();
+  rollPeriods(state, now);
   const a = getAgent(state, ev.agent || 'default', cfg);
   if (cfg.operator) a.operator = cfg.operator;
+  if (ev.task) a.task = ev.task;
+  if (ev.model) setModel(a, ev.model);
 
   // Master switch wins over everything, including a grounded agent. Turning the
   // governor off in the dashboard has to actually let work through, otherwise
@@ -253,7 +350,7 @@ export function decide(state, ev, config = {}) {
   if (abs !== null) a.tokens = Math.max(a.tokens, abs);
   else if (delta !== null) a.tokens += delta;
   if (typeof ev.cost === 'number') a.cost = ev.cost;
-  addSpend(state, a, a.tokens - wasTokens, ev.ts);
+  addSpend(state, a, a.tokens - wasTokens, now);
 
   // Totals first: a team of agents can each sit inside its own limit while
   // together spending many times what the human intended.
@@ -299,7 +396,15 @@ export function decide(state, ev, config = {}) {
     a.status = 'grounded';
     return record(state, a, 'deny', 'it passed the warn-me mark, and you set that to stop it', a.tokens);
   }
-  return record(state, a, 'allow', 'inside the limit, doing new work', a.tokens);
+  const r = record(state, a, 'allow', 'inside the limit, doing new work', a.tokens);
+  // Advisory only: it never changes the verdict, it just tells you the model
+  // and the job look mismatched. Enforcement happens only on the proxy, where
+  // we actually own the request.
+  if (cfg.adviseModel !== false) {
+    const advice = modelAdvice(a.model, taskShape(a.task || ev.task));
+    if (advice) r.advice = advice;
+  }
+  return r;
 }
 
 // Human resolves an escalation.
@@ -348,6 +453,10 @@ export function record(state, a, verdict, reason, tokens, authority, operator) {
   const json = JSON.stringify(entry);
   const hash = sha256(state.prevHash + json);
   state.chain.push({ json, hash });
+  // The file is the record; memory only holds a recent tail. A daemon left
+  // running for weeks used to grow this array forever. Dropping the oldest
+  // links means the in-memory check now starts from the oldest one KEPT.
+  if (state.chain.length > 5000) { state.chainStart = state.chain.shift().hash; }
   state.prevHash = hash;
   return {
     verdict, reason, receipt: 'rcpt_' + hash.slice(0, 12), hash,
@@ -356,8 +465,10 @@ export function record(state, a, verdict, reason, tokens, authority, operator) {
   };
 }
 
+// Checks the links this process holds. A restarted governor picks the chain up
+// from the file, so it starts from wherever it resumed, not from genesis.
 export function verifyChain(state) {
-  let h = 'genesis';
+  let h = state.chainStart || 'genesis';
   for (const link of state.chain) {
     h = sha256(h + link.json);
     if (h !== link.hash) return false;

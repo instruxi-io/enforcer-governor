@@ -6,7 +6,7 @@ import { readFile, appendFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { makeState, decide, resolve, kill, release, verifyChain, getAgent, priceOf, weightsFor, MODELS, DEFAULTS, DEFAULT_RULES, tokensForDollars } from './policy.mjs';
+import { makeState, decide, resolve, kill, release, verifyChain, getAgent, setModel, record, rollPeriods, sha256, priceOf, weightsFor, modelAdvice, taskShape, MODELS, DEFAULTS, DEFAULT_RULES, tokensForDollars } from './policy.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dir, '..');
@@ -20,7 +20,7 @@ const PERIODS_FILE = join(DATA_DIR, 'periods.json');
 // every limit back to the default while the spend total carries on climbing --
 // you would believe you were capped when you were not.
 const SAVED_FILE = join(DATA_DIR, 'config.json');
-const SAVED_KEYS = ['dollars', 'model', 'soft', 'softAction', 'budgetOn', 'loopOn', 'rulesOn',
+const SAVED_KEYS = ['dollars', 'model', 'soft', 'softAction', 'budgetOn', 'loopOn', 'rulesOn', 'adviseModel', 'enforceModel',
                     'dailyLimit', 'weeklyLimit', 'monthlyLimit', 'operator'];
 
 // Config: defaults <- governor.config.json (cwd) <- env.
@@ -63,6 +63,9 @@ const state = makeState();
 try {
   if (existsSync(PERIODS_FILE)) Object.assign(state.periods, JSON.parse(readFileSync(PERIODS_FILE, 'utf8')));
 } catch {}
+// Pick the chain back up where it stopped, so restarting the governor does not
+// silently start a second chain and orphan every receipt written before it.
+try { state.prevHash = state.chainStart = walkReceipts().head; } catch {}
 let periodsDirty = false;
 const clients = new Set(); // SSE connections
 
@@ -72,25 +75,61 @@ function broadcast(eventName, payload) {
 }
 
 function snapshot() {
+  rollPeriods(state);
   return { agents: Object.values(state.agents).map(a => ({
     id: a.id, tokens: Math.round(a.tokens), budget: a.budget, soft: a.soft,
     status: a.status, cost: a.cost, model: a.model || '', task: a.task || '',
+    // Carried on the snapshot too, or the advice only ever appears on a card
+    // built by a live decision and vanishes the moment you reload the page.
+    advice: CONFIG.adviseModel !== false ? modelAdvice(a.model, taskShape(a.task)) : null,
   })), config: {
     budget: CONFIG.budget, soft: CONFIG.soft, loopLimit: CONFIG.loopLimit,
     softAction: CONFIG.softAction, budgetOn: CONFIG.budgetOn, loopOn: CONFIG.loopOn,
     rulesOn: CONFIG.rulesOn, operator: CONFIG.operator, rules: CONFIG.rules || DEFAULT_RULES,
+    adviseModel: CONFIG.adviseModel, enforceModel: CONFIG.enforceModel,
     dollars: CONFIG.dollars, model: CONFIG.model, models: MODELS,
     dailyLimit: CONFIG.dailyLimit, weeklyLimit: CONFIG.weeklyLimit, monthlyLimit: CONFIG.monthlyLimit,
     spent: { day: state.periods.day.usd, week: state.periods.week.usd, month: state.periods.month.usd },
   } };
 }
 
+// The hash is written WITH the entry. Without it, the file is only a log: you
+// can recompute a chain over edited entries and it verifies happily, because
+// nothing on disk says what the hashes were meant to be.
 async function persist(r) {
   try {
     await mkdir(DATA_DIR, { recursive: true });
-    await appendFile(RECEIPTS, JSON.stringify(r.entry) + '\n');
+    await appendFile(RECEIPTS, JSON.stringify({ ...r.entry, hash: r.hash }) + '\n');
     periodsDirty = true;
   } catch {}
+}
+
+// Walk the receipts on disk. This is the real verification -- the in-memory
+// chain only covers what THIS process wrote, so before this a restart began a
+// fresh chain and everything written earlier could be deleted without the
+// remaining file failing a check. Returns the head hash so the chain continues
+// across restarts, and the first line that does not add up.
+//
+// ponytail: reads the whole file. 700 receipts is ~0.1MB and instant; the
+// upgrade path when it is not is a periodic checkpoint {line, hash} so verify
+// starts from the last checkpoint instead of genesis.
+export function walkReceipts(file = RECEIPTS) {
+  const out = { head: 'genesis', n: 0, legacy: 0, brokeAt: 0 };
+  if (!existsSync(file)) return out;
+  let lineNo = 0;
+  for (const line of readFileSync(file, 'utf8').split('\n')) {
+    if (!line.trim()) continue;
+    lineNo++;
+    let obj; try { obj = JSON.parse(line); } catch { out.brokeAt ||= lineNo; continue; }
+    const { hash, ...entry } = obj;
+    const want = sha256(out.head + JSON.stringify(entry));
+    if (!hash) { out.legacy++; out.head = want; continue; }   // written before hashes were stored
+    if (hash !== want) { out.brokeAt ||= lineNo; }
+    out.head = hash;   // keep going from what is recorded, so one break does not cascade
+    out.n++;
+  }
+  out.n += out.legacy;
+  return out;
 }
 // Flushed on a timer rather than per decision: the totals are small and losing
 // at most a second of spend on a hard kill is not worth a write per tool call.
@@ -144,7 +183,24 @@ async function handleProxy(req, res, path) {
     broadcast('decision', { ...pre, model: 'proxy' }); await persist(pre);
     return json(res, 429, { error: { type: 'enforcer_blocked', message: 'Enforcer blocked this agent: ' + pre.reason, receipt: pre.receipt } });
   }
-  const body = await readBody(req);
+  let body = await readBody(req);
+  // The one place a downgrade is actually possible: we own this request, so we
+  // can rewrite the model before forwarding. Off unless explicitly enabled --
+  // silently changing someone's model is a big decision. Only ever downgrades:
+  // spending MORE of someone's money without asking is not ours to do.
+  let swapped = null;
+  if (CONFIG.enforceModel) {
+    try {
+      const j = JSON.parse(body.toString());
+      const known = state.agents[agent];
+      const advice = modelAdvice(j.model, taskShape(known && known.task));
+      if (advice && advice.cheaper) {
+        j.model = advice.suggest;
+        body = Buffer.from(JSON.stringify(j));
+        swapped = advice;
+      }
+    } catch {}
+  }
   const headers = { ...req.headers }; delete headers.host; delete headers['content-length'];
   let upstream;
   try {
@@ -154,11 +210,18 @@ async function handleProxy(req, res, path) {
   const { tokens: used, model } = extractUsage(respBody, path);
   // Price this agent at whatever model actually answered, before judging it.
   const known = getAgent(state, agent, CONFIG);
-  if (model) known.model = model;
+  // Changing someone's model is an enforcement action, so it gets its own
+  // receipt in the chain. An unrecorded intervention is exactly the thing this
+  // tool exists to stop.
+  if (swapped) {
+    const sw = record(state, known, 'allow', `switched this request to ${swapped.label}: ${swapped.why}`, known.tokens, 'policy');
+    broadcast('decision', { ...sw, model: swapped.suggest }); await persist(sw);
+  }
+  if (model) setModel(known, model);
   if (!known.budgetRaised) known.budget = budgetFor(known);
   const post = decide(state, { agent, deltaTokens: used, action: 'proxy:' + path }, CONFIG);
   post.agent.lastUsed = used;
-  broadcast('decision', { ...post, model: model || 'proxy' }); await persist(post);
+  broadcast('decision', { ...post, model: model || 'proxy', advice: post.advice || null }); await persist(post);
   res.writeHead(upstream.status, { 'content-type': upstream.headers.get('content-type') || 'application/json', 'x-enforcer-verdict': post.verdict, 'x-enforcer-receipt': post.receipt });
   res.end(respBody);
 }
@@ -178,11 +241,11 @@ const server = http.createServer(async (req, res) => {
     // Price the agent at its own model BEFORE judging it, not after, or the
     // first action of every session is measured against the wrong cap.
     const a = getAgent(state, ev.agent || 'default', CONFIG);
-    if (ev.model) a.model = ev.model;
+    if (ev.model) setModel(a, ev.model);
     if (ev.task) a.task = ev.task;
     if (!a.budgetRaised) a.budget = budgetFor(a);
     const r = decide(state, ev, CONFIG);
-    broadcast('decision', { ...r, model: ev.model || '', task: ev.task || '' });
+    broadcast('decision', { ...r, model: ev.model || '', task: ev.task || '', advice: r.advice || null });
     await persist(r);
     return json(res, 200, r);
   }
@@ -208,7 +271,7 @@ const server = http.createServer(async (req, res) => {
   }
   if (req.method === 'POST' && path === '/config') {
     const patch = JSON.parse((await readBody(req)).toString() || '{}');
-    for (const k of ['budgetOn', 'loopOn', 'rulesOn', 'softAction', 'budget', 'soft', 'dollars', 'model', 'dailyLimit', 'weeklyLimit', 'monthlyLimit', 'operator']) {
+    for (const k of ['budgetOn', 'loopOn', 'rulesOn', 'softAction', 'budget', 'soft', 'dollars', 'model', 'dailyLimit', 'weeklyLimit', 'monthlyLimit', 'operator', 'adviseModel', 'enforceModel']) {
       if (k in patch) CONFIG[k] = patch[k];
     }
     // Raising the limit has to affect the agent already running, not just the
@@ -236,7 +299,14 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, snapshot().config);
   }
   if (req.method === 'GET' && path === '/state') return json(res, 200, snapshot());
-  if (req.method === 'GET' && path === '/verify') return json(res, 200, { ok: verifyChain(state), receipts: state.chain.length });
+  if (req.method === 'GET' && path === '/verify') {
+    const w = walkReceipts();
+    return json(res, 200, {
+      ok: w.brokeAt === 0 && verifyChain(state), receipts: w.n,
+      brokeAt: w.brokeAt || undefined,
+      unverifiable: w.legacy || undefined,   // receipts written before hashes were stored
+    });
+  }
 
   // SSE stream
   if (req.method === 'GET' && path === '/events') {
@@ -260,6 +330,9 @@ const server = http.createServer(async (req, res) => {
   json(res, 404, { error: 'not found' });
 });
 
+// Listening is opt-in, so importing this file (a test, a tool) does not start a
+// daemon and grab port 4000 as a side effect of the import.
+export function start() {
 server.listen(CONFIG.port, () => {
   const url = `http://localhost:${CONFIG.port}`;
   console.log(`\n  Enforcer Governor is running.`);
@@ -293,3 +366,7 @@ server.listen(CONFIG.port, () => {
     });
   }
 });
+}
+
+// `node src/governor.mjs` still just runs. The CLI calls start() itself.
+if (process.argv[1] && process.argv[1].endsWith('governor.mjs')) start();

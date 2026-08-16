@@ -50,6 +50,8 @@ One thing: **Node.js**, a free tool most developers already have. Check by typin
 
 **Spend.** A dollar limit per agent, a soft cap that asks you before it keeps going, and total caps across every agent per day, week and month. Loops and repeated work are caught on behaviour, not just cost.
 
+**The right model for the job.** Running the test suite on your most expensive model is the most common way to overspend without noticing. The governor reads the task the agent was actually given and says when the model looks mismatched, in either direction: a top-tier model on mechanical work, or a light one on work that needs reasoning. It moves one step at a time, along named tiers, and says nothing at all when the task is ambiguous, because a bad downgrade costs more in wasted work than it saves in tokens.
+
 It does **not** claim to detect hallucination &mdash; nobody can do that reliably. It catches the mechanical waste that is actually detectable, and escalates the judgment calls to you.
 
 ---
@@ -127,6 +129,8 @@ Prices are the providers' published list rates. **On a Claude, ChatGPT or Gemini
 
 `softAction` is `"escalate"` (ask a human) or `"deny"` (auto-block at the soft cap). Everything is also flippable live from the dashboard switches.
 
+**Matching the model to the task** is on by default as advice (`adviseModel`). Set `enforceModel: true` and the governor will actually rewrite the request to the cheaper model on the proxy path, where it owns the request. It only ever downgrades: spending more of your money without asking is not its call. On Claude Code it stays advice, because a `PreToolUse` hook cannot change the model, so the suggestion is surfaced to you instead and you switch with `/model`.
+
 ---
 
 ## How it works
@@ -140,13 +144,14 @@ other agents ─proxy─┘        │
 
 - **Hook** (`PreToolUse`): reads your session transcript, totals the tokens, asks the governor, and translates the verdict into Claude Code's own allow / deny / ask. If the governor is down it fails **open**, so it never blocks your real work.
 - **Proxy**: a passthrough for `/v1/messages` and `/v1/chat/completions` that reads exact usage from responses and refuses when an agent is over its limit. This is the tamper-resistant path, since it runs server-side.
-- **Receipts**: appended to `~/.enforcer-governor/receipts.jsonl`, each hash folding in the previous one. `GET /verify` walks the chain; any edit or deletion breaks it.
+- **Receipts**: appended to `~/.enforcer-governor/receipts.jsonl`, each line carrying its own hash, folded in from the previous line. `GET /verify` walks the **file** and names the first line that does not add up, so an edit or a deletion anywhere in the history is caught, including in a stretch written before the last restart. Receipts written by versions before 0.11 have no stored hash and are reported as `unverifiable` rather than quietly passed.
 
 ## Honest limits (v0.1)
 
 - The proxy buffers responses; streaming passthrough is next.
 - Token totals come from the transcript, which writes asynchronously, so a decision can lag real spend by one turn. Enforcement at the tool boundary makes this safe in practice.
 - On subscription billing, dollar figures are estimates at list prices, labelled `est.`
+- Model matching is a heuristic on the wording of the task, so it stays quiet unless the signal is clear. It is advice everywhere except the proxy, where it can downgrade if you turn that on.
 
 ## Run the tests
 

@@ -112,6 +112,12 @@
   .a-task{font-family:var(--serif);font-size:13.5px;line-height:1.34;color:var(--ink);
     display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:2.68em;}
   .a-task.idle{color:var(--faint);font-style:italic;}
+  /* Model-vs-task mismatch. Advisory, so it reads as a note and never as an
+     alarm: a wrong downgrade costs more in bad work than it saves in tokens. */
+  .a-advice{display:none;margin:10px 0 2px;font-size:11px;line-height:1.4;color:var(--esc);
+    border-left:2px solid rgba(212,167,44,.45);padding-left:8px;}
+  .a-advice.show{display:block;}
+  .a-advice b{color:var(--ink);font-weight:500;}
   .a-meta{font-family:var(--mono);font-size:9.5px;color:var(--faint);margin-top:6px;letter-spacing:.04em;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   /* Burn trace: what this agent has been spending, moment to moment. */
@@ -258,6 +264,11 @@
         <button class="seg-b on" id="segEsc">Ask me</button>
         <button class="seg-b dm" id="segDeny">Just stop it</button>
       </div>
+      <button class="sw on" id="swModel"><span class="knob"></span><span>Match model to task</span></button>
+      <div class="seg"><span class="seg-lbl">on a mismatch:</span>
+        <button class="seg-b on" id="segSay">Tell me</button>
+        <button class="seg-b dm" id="segSwap">Switch it</button>
+      </div>
     </div>
     <div class="ungov-banner">CHECKS ARE OFF · your agents can spend without limit, and nothing is being recorded.</div>
   </div>
@@ -274,7 +285,7 @@
   const $=id=>document.getElementById(id), LIVE=window.__GOVERNOR_LIVE__===true;
   const fmt=n=>n>=1e6?(n/1e6).toFixed(2)+'M':n>=1e3?(n/1e3).toFixed(1)+'k':String(Math.round(n));
   const cards={}; let allow=0,deny=0,esc=0;
-  const policy={enforcer:true,budget:true,loop:true,soft:'escalate'};
+  const policy={enforcer:true,budget:true,loop:true,soft:'escalate',advise:true,enforceModel:false};
   $('modeTag').textContent = LIVE?'LIVE · governing your agents':'DEMO · simulated fleet';
   if (LIVE) $('modeTag').classList.add('live');
   $('fleetHint').textContent = LIVE?'agents appear as your tools run · kill any of them':'watch scraper-07 loop · approve research-swarm-03 when it asks';
@@ -489,6 +500,7 @@
       <div class="gauge"><div class="softmark" style="bottom:${(soft||.75)*100}%"></div><div class="fill"></div><div class="loopbadge">REPEAT</div><div class="gpct">0%</div><div class="gtok">$0</div></div>
       <div class="sparklbl">cost per action</div>
       <div class="sparkwrap"><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" aria-hidden="true"><g></g></svg></div>
+      <div class="a-advice"></div>
       <div class="a-foot"><div class="a-status"><span class="st-dot"></span><span class="stxt">working</span></div><span class="a-left"></span><button class="kill">kill</button></div>`;
     $('fleet').appendChild(el);
     const c={el,budget:budget||200000,soft:soft||.75};
@@ -502,7 +514,7 @@
     };
     cards[id]=c; return c;
   }
-  function paint(id, {tokens,budget,status,model,task,loopStreak}){
+  function paint(id, {tokens,budget,status,model,task,loopStreak,advice}){
     const c=card(id,model,budget); if(budget)c.budget=budget;
     if(model)c.model=model;
     if(task && task!==c.task){ c.task=task; const t=c.el.querySelector('.a-task'); t.textContent=task; t.classList.remove('idle'); }
@@ -522,6 +534,13 @@
       }).join('');
     }
     c.el.querySelector('.amdl').textContent=c.model?' · '+c.model:'';
+    // Advice arrives on decisions and disappears when the mismatch is gone.
+    if(advice!==undefined){
+      const adv=c.el.querySelector('.a-advice');
+      if(advice){ adv.innerHTML=(advice.cheaper?'A cheaper model would do':'This needs a stronger model')
+        +': <b>'+advice.label+'</b>. '+advice.why+'.'; adv.classList.add('show'); }
+      else adv.classList.remove('show');
+    }
     const pct=Math.min(100,tokens/c.budget*100);
     c.el.classList.remove('warn','esc','grounded','free');
     let cls='', txt='working';
@@ -550,7 +569,7 @@
   function bump(v){ if(v==='allow')allow++;else if(v==='deny')deny++;else if(v==='escalate')esc++; $('mAllow').textContent=allow;$('mDeny').textContent=deny;$('mEsc').textContent=esc; }
   function onDecision(d){
     if(d.verdict==='gap'){ chip('gap',d.agent.id||d.agent,d.reason,null,null); paint(d.agent.id||d.agent,d.agent); return; }
-    const a=d.agent; paint(a.id,{...a,model:d.model,task:d.task});
+    const a=d.agent; paint(a.id,{...a,model:d.model,task:d.task,advice:d.advice||null});
     chip(d.verdict,a.id,d.reason,d.receipt,d.entry&&d.entry.authority);
     bump(d.verdict);
     if(d.verdict==='escalate') openEsc(a);
@@ -575,8 +594,8 @@
   async function killAgent(id){ if(LIVE){ try{ await fetch('/kill',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({agent:id})}); }catch{} } else demoKill(id); }
 
   // ── Switches ──
-  function pushConfig(){ if(!LIVE)return; fetch('/config',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({budgetOn:policy.budget,loopOn:policy.loop,softAction:policy.soft})}).catch(()=>{}); }
-  function syncSw(){ $('swBudget').classList.toggle('dis',!policy.enforcer); $('swLoop').classList.toggle('dis',!policy.enforcer); document.querySelector('.seg').style.opacity=policy.enforcer?'1':'.4'; document.body.classList.toggle('ungoverned',!policy.enforcer); }
+  function pushConfig(){ if(!LIVE)return; fetch('/config',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({budgetOn:policy.budget,loopOn:policy.loop,softAction:policy.soft,adviseModel:policy.advise,enforceModel:policy.enforceModel})}).catch(()=>{}); }
+  function syncSw(){ $('swBudget').classList.toggle('dis',!policy.enforcer); $('swLoop').classList.toggle('dis',!policy.enforcer); document.querySelectorAll('.seg').forEach(e=>e.style.opacity=policy.enforcer?'1':'.4'); document.body.classList.toggle('ungoverned',!policy.enforcer); }
   // Master switch. It MUST reach the server: turning it off only in the browser
   // leaves the screen saying "checks are off" while the governor keeps blocking,
   // which reads as broken and leaves no way out. Remember the individual rules
@@ -603,6 +622,13 @@
   tog('swBudget','budget'); tog('swLoop','loop');
   $('segEsc').onclick=()=>{policy.soft='escalate';$('segEsc').classList.add('on');$('segDeny').classList.remove('on');pushConfig();};
   $('segDeny').onclick=()=>{policy.soft='deny';$('segDeny').classList.add('on');$('segEsc').classList.remove('on');pushConfig();};
+  $('swModel').onclick=()=>{ policy.advise=!policy.advise; $('swModel').classList.toggle('on',policy.advise);
+    if(!policy.advise){ policy.enforceModel=false; $('segSwap').classList.remove('on'); $('segSay').classList.add('on'); }
+    pushConfig(); };
+  // "Switch it" only does anything on the proxy path, where we own the request.
+  // A Claude Code hook cannot change the model, so there it stays advice.
+  $('segSay').onclick=()=>{policy.enforceModel=false;$('segSay').classList.add('on');$('segSwap').classList.remove('on');pushConfig();};
+  $('segSwap').onclick=()=>{policy.enforceModel=true;$('segSwap').classList.add('on');$('segSay').classList.remove('on');pushConfig();};
 
   $('verifyBtn').onclick=async()=>{ const b=$('verifyBtn'); b.textContent='checking...';
     if(LIVE){ try{ const r=await(await fetch('/verify')).json(); $('mChain').innerHTML=r.ok?`<span class="chainok">all ${r.receipts} match</span>`:`<span class="chainbad">do not match</span>`; b.textContent=r.ok?`All ${r.receipts} records check out`:'Records do not match'; }catch{ b.textContent='governor offline'; } }
@@ -644,6 +670,9 @@
     const applyConfig=c=>{
       if(typeof c.budgetOn==='boolean'){ policy.budget=c.budgetOn; $('swBudget').classList.toggle('on',c.budgetOn); }
       if(typeof c.loopOn==='boolean'){ policy.loop=c.loopOn; $('swLoop').classList.toggle('on',c.loopOn); }
+      if(typeof c.adviseModel==='boolean'){ policy.advise=c.adviseModel; $('swModel').classList.toggle('on',c.adviseModel); }
+      if(typeof c.enforceModel==='boolean'){ policy.enforceModel=c.enforceModel;
+        $('segSwap').classList.toggle('on',c.enforceModel); $('segSay').classList.toggle('on',!c.enforceModel); }
       if(c.softAction){ policy.soft=c.softAction; $('segEsc').classList.toggle('on',c.softAction==='escalate'); $('segDeny').classList.toggle('on',c.softAction==='deny'); }
       if(c.models&&Object.keys(c.models).length){ MODELS=c.models; reKeys(); buildModelSelect(); }
       if(c.model&&MODELS[c.model]) modelKey=c.model;
