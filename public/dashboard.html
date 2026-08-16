@@ -50,6 +50,34 @@
   .tr .k{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-top:6px;}
   .spend-note{font-family:var(--mono);font-size:11px;color:var(--faint);margin-top:12px;line-height:1.75;max-width:88ch;}
   .spend-note b{color:var(--dim);font-weight:500;}
+  /* Capability panel: what an agent may DO. Deliberately sits ABOVE the spend
+     panel, because that is the order the checks run in. */
+  .caps{margin:14px 0 0;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px 14px;}
+  .caps .ctrl-h em{font-style:normal;text-transform:none;letter-spacing:0;color:var(--faint);margin-left:10px;font-size:10.5px;}
+  .caprow{display:grid;grid-template-columns:repeat(auto-fill,minmax(232px,1fr));gap:8px;}
+  .cap{display:flex;align-items:center;gap:9px;background:#0A0E13;border:1px solid var(--lineS);
+    border-left-width:2px;border-radius:7px;padding:9px 11px;font-size:12.5px;color:var(--dim);}
+  .cap.deny{border-left-color:var(--deny);} .cap.ask{border-left-color:var(--esc);}
+  .cap b{font-weight:500;color:var(--ink);font-size:12.5px;}
+  .cap .verdict{margin-left:auto;font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;flex:none;}
+  .cap.deny .verdict{color:var(--deny);} .cap.ask .verdict{color:var(--esc);}
+  .capfoot{display:flex;align-items:center;gap:14px;margin-top:13px;padding-top:12px;border-top:1px solid var(--lineS);flex-wrap:wrap;}
+  .capnote{font-family:var(--mono);font-size:11px;color:var(--faint);line-height:1.6;}
+  .who{font-family:var(--mono);font-size:11px;color:var(--faint);margin-left:auto;}
+  .who b{color:var(--teal);font-weight:500;}
+  /* Fleet totals: the ceiling that actually bounds a team. */
+  .fleetcaps{margin-top:15px;padding-top:14px;border-top:1px solid var(--lineS);
+    display:flex;gap:clamp(14px,3vw,30px);flex-wrap:wrap;align-items:flex-end;}
+  .fc{display:flex;flex-direction:column;gap:5px;}
+  .fc .k{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);}
+  .fc .in{display:flex;align-items:baseline;gap:2px;border-bottom:1px solid var(--line);padding-bottom:3px;}
+  .fc .in span{font-family:var(--mono);font-size:12px;color:var(--faint);}
+  .fc input{font-family:var(--mono);font-size:16px;width:5ch;background:none;border:none;color:var(--ink);
+    font-variant-numeric:tabular-nums;padding:0;outline:none;}
+  .fc input:focus{color:var(--teal);}
+  .fc input::-webkit-outer-spin-button,.fc input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
+  .fc .spent{font-family:var(--mono);font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums;}
+  .fc .spent.over{color:var(--deny);}
   .controls{margin:14px 0 6px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;}
   .ctrl-h{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);margin-bottom:12px;}
   .switches{display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
@@ -178,6 +206,15 @@
     <div class="tape" id="tape" aria-live="polite"></div>
   </div>
 </div>
+  <div class="caps">
+    <div class="ctrl-h">What your agents may do <em>checked before anything is spent</em>
+      <span class="who" id="whoFor"></span></div>
+    <div class="caprow" id="capRules"></div>
+    <div class="capfoot">
+      <button class="sw on" id="swRules"><span class="knob"></span><span>Capability checks</span></button>
+      <span class="capnote">Ordinary work passes untouched. These fire even with a full budget, because a dangerous command is usually a cheap one.</span>
+    </div>
+  </div>
   <div class="spend">
     <div class="spend-h">Spend limit &middot; per agent</div>
     <div class="spend-row">
@@ -198,6 +235,16 @@
       <div class="tr"><div class="v" id="trAsk">$15</div><div class="k">it pauses and asks you at</div></div>
       <div class="tr"><div class="v" id="trStop">$20</div><div class="k">it stops at</div></div>
       <div class="tr"><div class="v" id="trTok">4.00M</div><div class="k">tokens, if you care</div></div>
+    </div>
+    <div class="fleetcaps">
+      <div class="fc"><span class="k">everything together, a day</span>
+        <label class="in"><span>$</span><input id="dayLimit" type="number" min="0" step="5" value="0" placeholder="0"></label></div>
+      <div class="fc"><span class="k">a week</span>
+        <label class="in"><span>$</span><input id="weekLimit" type="number" min="0" step="10" value="0"></label></div>
+      <div class="fc"><span class="k">a month</span>
+        <label class="in"><span>$</span><input id="monthLimit" type="number" min="0" step="25" value="0"></label></div>
+      <div class="fc" style="justify-content:flex-end"><span class="k">spent so far</span>
+        <span class="spent" id="fleetSpent">&mdash;</span></div>
     </div>
     <div class="spend-note" id="spendNote"></div>
   </div>
@@ -363,6 +410,44 @@
       + ' Priced at ' + prov + '\u2019s list rates for ' + (m.label || modelKey) + '.'
       + '<br><b>On a Claude or ChatGPT subscription you are not billed per token</b>, so treat these as equivalent API cost, not a bill.';
   }
+
+  // Render the rules the SERVER is enforcing, not a hardcoded copy -- if they
+  // ever drift, the screen should show the truth.
+  let RULES=[];
+  function renderRules(){
+    const box=$('capRules'); if(!box) return;
+    box.innerHTML = RULES.length ? RULES.map(r=>{
+      const act = r.action==='deny' ? 'deny' : 'ask';
+      const verdict = act==='deny' ? 'refused' : 'asks you';
+      return `<div class="cap ${act}"><b>${r.name}</b><span class="verdict">${verdict}</span></div>`;
+    }).join('') : '<div class="capnote">No capability rules are set, so only spend is checked.</div>';
+  }
+  function renderFleet(c){
+    if(!c) return;
+    const set=(id,v)=>{ const el=$(id); if(el && document.activeElement!==el) el.value=v||0; };
+    set('dayLimit',c.dailyLimit); set('weekLimit',c.weeklyLimit); set('monthLimit',c.monthlyLimit);
+    const sp=c.spent||{}, el=$('fleetSpent'); if(!el) return;
+    el.textContent = `${money(sp.day||0)} today  ·  ${money(sp.week||0)} this week  ·  ${money(sp.month||0)} this month`;
+    // Red the moment any period is at its cap, so it reads as the reason work stopped.
+    const over = (c.dailyLimit>0 && (sp.day||0)>=c.dailyLimit)
+              || (c.weeklyLimit>0 && (sp.week||0)>=c.weeklyLimit)
+              || (c.monthlyLimit>0 && (sp.month||0)>=c.monthlyLimit);
+    el.classList.toggle('over',over);
+  }
+  function pushFleet(){
+    if(!LIVE) return;
+    fetch('/config',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({
+      dailyLimit:+$('dayLimit').value||0, weeklyLimit:+$('weekLimit').value||0, monthlyLimit:+$('monthLimit').value||0,
+    })}).catch(()=>{});
+  }
+  let fleetT=null;
+  for(const id of ['dayLimit','weekLimit','monthLimit'])
+    $(id).oninput=()=>{ clearTimeout(fleetT); fleetT=setTimeout(pushFleet,400); };
+  $('swRules').onclick=()=>{
+    const on=!$('swRules').classList.contains('on');
+    $('swRules').classList.toggle('on',on);
+    if(LIVE) fetch('/config',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({rulesOn:on})}).catch(()=>{});
+  };
 
   let pushT=null;
   function setDollars(v){
@@ -564,6 +649,10 @@
       if(c.model&&MODELS[c.model]) modelKey=c.model;
       // Never yank the field out from under someone mid-keystroke.
       if(typeof c.dollars==='number' && document.activeElement!==$('dollars')){ dollars=c.dollars; $('dollars').value=c.dollars; }
+      if(Array.isArray(c.rules)){ RULES=c.rules; renderRules(); }
+      if(typeof c.rulesOn==='boolean') $('swRules').classList.toggle('on',c.rulesOn);
+      if(c.operator) $('whoFor').innerHTML='agents act for <b>'+c.operator+'</b>';
+      renderFleet(c);
       renderSpend();
     };
     const es=new EventSource('/events');
