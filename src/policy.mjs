@@ -19,6 +19,13 @@ export const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 // therefore derived per model from the prices below.
 export const MODELS = {
   // ── Anthropic ──  cache read 0.1x input, 5-minute cache write 1.25x
+  // xAI. Prices are the sub-200k tier; xAI doubles them past 200k, so a very
+  // long context is metered low here rather than high, which is the safe
+  // direction for a cap but worth knowing.
+  'grok-4.6':          { p: 'xai',  label: 'Grok 4.6',    in: 2,    out: 6,  cin: 0.5 },
+  'grok-4.5':          { p: 'xai',  label: 'Grok 4.5',    in: 2,    out: 6,  cin: 0.3 },
+  'grok-4.3':          { p: 'xai',  label: 'Grok 4.3',    in: 1.25, out: 2.5, cin: 0.2 },
+  'grok-build-0.1':    { p: 'xai',  label: 'Grok Build',  in: 1,    out: 2,  cin: 0.2 },
   'claude-fable-5':    { p: 'anthropic', label: 'Fable 5',     in: 10,   out: 50 },
   'claude-opus-5':     { p: 'anthropic', label: 'Opus 5',      in: 5,    out: 25 },
   'claude-opus-4-8':   { p: 'anthropic', label: 'Opus 4.8',    in: 5,    out: 25 },
@@ -173,6 +180,7 @@ const TIERS = {
   anthropic: { top: 'claude-opus-5',   mid: 'claude-sonnet-5',    low: 'claude-haiku-4-5' },
   openai:    { top: 'gpt-5.6-sol',     mid: 'gpt-5.4',            low: 'gpt-5-mini' },
   google:    { top: 'gemini-3.1-pro',  mid: 'gemini-3.5-flash',   low: 'gemini-2.5-flash-lite' },
+  xai:       { top: 'grok-4.6',        mid: 'grok-4.3',           low: 'grok-build-0.1' },
 };
 const tierOf = (key, t) => (t.top === key ? 'top' : t.mid === key ? 'mid' : t.low === key ? 'low' : null);
 
