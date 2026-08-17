@@ -461,3 +461,26 @@ console.log('  model advice is conservative ok');
   assert(broke.verdict === 'deny' && !broke.entry.rule, 'a spend stop must NOT look like a capability refusal');
   console.log('a refusal and a stop are distinguishable on the receipt ok');
 }
+
+// The handoff has to cut where a tool call is not separated from its result.
+// Cutting anywhere else produces a request the provider rejects.
+{
+  const { safeCut, handoffRequest, resumeWith } = await import('../src/handoff.mjs');
+  const convo = [
+    { role: 'user', content: 'fix the webhook' },
+    { role: 'assistant', content: 'reading the file' },
+    { role: 'user', content: 'tool_result: line 31 stringifies the body' },
+    { role: 'assistant', content: 'calling a tool' },
+    { role: 'tool', content: 'result' },
+  ];
+  const cut = safeCut(convo);
+  assert(convo[cut].role === 'user', `the cut must land on a user turn, landed on ${convo[cut].role}`);
+  assert(cut === 2, `the cut should be the LAST user turn, got ${cut}`);
+  const req = handoffRequest(convo);
+  assert(req[req.length - 1].content.includes('GOAL:'), 'the brief request must ask for the five labels');
+  assert(!req.some(m => m.role === 'tool'), 'the brief request must not end mid tool call');
+  const resume = resumeWith('BRIEF TEXT', convo);
+  assert(resume[0].content.includes('BRIEF TEXT'), 'the resume must carry the brief');
+  assert(resume.every(m => m.role === 'user'), 'the resume must not fabricate assistant turns the new model never said');
+  console.log('a handoff cuts on a user turn and carries the brief ok');
+}

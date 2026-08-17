@@ -252,6 +252,13 @@ export const DEFAULTS = {
   // retry does not: one report had 96% of attempts coming back rate limited
   // while the wrapper kept paying for the ones that got through.
   retryLimit: 6,
+  // Reroute: when an agent is out of budget, finish the job somewhere cheaper
+  // instead of stopping. Off by default, because moving someone's work to
+  // another model is not a decision to take without being asked.
+  rerouteOn: false,
+  fallbackUrl: '',        // e.g. http://localhost:1234/v1/chat/completions
+  fallbackModel: '',      // e.g. qwen3.8-27b-mlx
+  fallbackHeaders: {},
   budgetOn: true,
   loopOn: true,
   rulesOn: true,      // capability rules: what it may DO

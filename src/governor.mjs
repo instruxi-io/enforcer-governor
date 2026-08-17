@@ -6,6 +6,7 @@ import { readFile, appendFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { handoffRequest, resumeWith, HANDOFF_OPTS } from './handoff.mjs';
 import { makeState, decide, resolve, kill, release, verifyChain, getAgent, setModel, record, rollPeriods, burnRate, spawnRate, sha256, priceOf, dollarsForTokens, weightsFor, modelAdvice, taskShape, MODELS, DEFAULTS, DEFAULT_RULES, tokensForDollars } from './policy.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
@@ -20,7 +21,7 @@ const PERIODS_FILE = join(DATA_DIR, 'periods.json');
 // every limit back to the default while the spend total carries on climbing --
 // you would believe you were capped when you were not.
 const SAVED_FILE = join(DATA_DIR, 'config.json');
-const SAVED_KEYS = ['dollars', 'model', 'soft', 'softAction', 'budgetOn', 'loopOn', 'rulesOn', 'adviseModel', 'enforceModel', 'burnLimit', 'fleetBurnLimit', 'fanoutLimit', 'retryLimit',
+const SAVED_KEYS = ['dollars', 'model', 'soft', 'softAction', 'budgetOn', 'loopOn', 'rulesOn', 'adviseModel', 'enforceModel', 'burnLimit', 'fleetBurnLimit', 'fanoutLimit', 'retryLimit', 'rerouteOn', 'fallbackUrl', 'fallbackModel',
                     'dailyLimit', 'weeklyLimit', 'monthlyLimit', 'operator'];
 
 // Config: defaults <- governor.config.json (cwd) <- env.
@@ -196,15 +197,63 @@ function extractUsage(body, path) {
       + w.cacheWrite * (u.cache_creation_input_tokens || 0) + w.cacheRead * (u.cache_read_input_tokens || 0)) };
   } catch { return { model: '', tokens: 0 }; }
 }
+// Ask the outgoing model for a brief, then run the work on the fallback with
+// only that brief. Returns true if it handled the response.
+//
+// Repeated compaction degrades a session, so this fires once per agent. A
+// second breach after a reroute is a real stop.
+async function reroute(agent, body, pre, res, path) {
+  const known = getAgent(state, agent, CONFIG);
+  if (known.handoffs) return false;
+  let j; try { j = JSON.parse(body.toString()); } catch { return false; }
+  if (!Array.isArray(j.messages) || !j.messages.length) return false;
+  known.handoffs = 1;
+  try {
+    // 1. The brief, written by the model that did the reasoning. Bounded, since
+    //    this is money spent by an agent that has already run out.
+    const hb = await fetch(UPSTREAMS[path], {
+      method: 'POST', headers: { 'content-type': 'application/json', ...CONFIG.fallbackHeaders },
+      body: JSON.stringify({ ...j, messages: handoffRequest(j.messages), ...HANDOFF_OPTS, stream: false }),
+    });
+    const hj = await hb.json();
+    const brief = (hj.choices?.[0]?.message?.content || hj.content?.[0]?.text || '').trim();
+    // An empty brief is worse than no reroute: the fallback would start from
+    // nothing and look like it had lost the task. Fail back to the refusal.
+    if (brief.length < 80) { known.handoffs = 0; return false; }
+
+    // 2. The work, on the fallback, from the brief alone.
+    const out = await fetch(CONFIG.fallbackUrl, {
+      method: 'POST', headers: { 'content-type': 'application/json', ...CONFIG.fallbackHeaders },
+      body: JSON.stringify({ ...j, model: CONFIG.fallbackModel || j.model,
+        messages: resumeWith(brief, j.messages), stream: false }),
+    });
+    const text = await out.text();
+
+    const r = record(state, known, 'allow',
+      `out of budget, so it was handed to ${CONFIG.fallbackModel || 'the fallback model'} with a ${brief.length}-character brief`,
+      known.tokens, 'policy', undefined, { rule: 'reroute' });
+    r.brief = brief;
+    broadcast('decision', { ...r, model: CONFIG.fallbackModel || 'fallback' });
+    await persist(r);
+    res.writeHead(out.status, { 'content-type': 'application/json',
+      'x-enforcer-verdict': 'reroute', 'x-enforcer-receipt': r.receipt,
+      'x-enforcer-handoff-chars': String(brief.length) });
+    res.end(text);
+    return true;
+  } catch { known.handoffs = 0; return false; }
+}
+
 async function handleProxy(req, res, path) {
   const agent = req.headers['x-enforcer-agent'] || 'proxy-agent';
   // Pre-check: if this agent is already grounded/over budget, refuse before spending.
   const pre = decide(state, { agent, deltaTokens: 0, action: 'proxy:' + path }, CONFIG);
+  let body = await readBody(req);
   if (pre.verdict === 'deny') {
+    const moved = CONFIG.rerouteOn && CONFIG.fallbackUrl && await reroute(agent, body, pre, res, path);
+    if (moved) return;
     broadcast('decision', { ...pre, model: 'proxy' }); await persist(pre);
     return json(res, 429, { error: { type: 'enforcer_blocked', message: 'Enforcer blocked this agent: ' + pre.reason, receipt: pre.receipt } });
   }
-  let body = await readBody(req);
   // The one place a downgrade is actually possible: we own this request, so we
   // can rewrite the model before forwarding. Off unless explicitly enabled --
   // silently changing someone's model is a big decision. Only ever downgrades:
@@ -304,7 +353,7 @@ const server = http.createServer(async (req, res) => {
   }
   if (req.method === 'POST' && path === '/config') {
     const patch = JSON.parse((await readBody(req)).toString() || '{}');
-    for (const k of ['budgetOn', 'loopOn', 'rulesOn', 'softAction', 'budget', 'soft', 'dollars', 'model', 'dailyLimit', 'weeklyLimit', 'monthlyLimit', 'operator', 'adviseModel', 'enforceModel', 'burnLimit', 'fleetBurnLimit', 'fanoutLimit', 'retryLimit']) {
+    for (const k of ['budgetOn', 'loopOn', 'rulesOn', 'softAction', 'budget', 'soft', 'dollars', 'model', 'dailyLimit', 'weeklyLimit', 'monthlyLimit', 'operator', 'adviseModel', 'enforceModel', 'burnLimit', 'fleetBurnLimit', 'fanoutLimit', 'retryLimit', 'rerouteOn', 'fallbackUrl', 'fallbackModel']) {
       if (k in patch) CONFIG[k] = patch[k];
     }
     // Raising the limit has to affect the agent already running, not just the
