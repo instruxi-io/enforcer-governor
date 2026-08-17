@@ -3,7 +3,8 @@
 // decisions over SSE, and proxies agent traffic for non-Claude agents.
 import http from 'node:http';
 import { readFile, appendFile, writeFile, mkdir } from 'node:fs/promises';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { handoffRequest, resumeWith, postJSON, HANDOFF_OPTS, RESUME_OPTS } from './handoff.mjs';
@@ -23,6 +24,72 @@ const PERIODS_FILE = join(DATA_DIR, 'periods.json');
 const SAVED_FILE = join(DATA_DIR, 'config.json');
 const SAVED_KEYS = ['dollars', 'model', 'soft', 'softAction', 'budgetOn', 'loopOn', 'rulesOn', 'adviseModel', 'enforceModel', 'burnLimit', 'fleetBurnLimit', 'fanoutLimit', 'retryLimit', 'rerouteOn', 'fallbackUrl', 'fallbackModel', 'clients', 'clientLimits',
                     'dailyLimit', 'weeklyLimit', 'monthlyLimit', 'operator'];
+const TOKEN_FILE = join(DATA_DIR, 'token');
+
+// ── Who may talk to this daemon ─────────────────────────────────────────────
+//
+// It can switch off every check and hand over the whole record, so it needs a
+// door. Before this, POST /config was unauthenticated and the preflight
+// answered `access-control-allow-origin: *` -- which meant any page open in the
+// user's browser could turn off enforcement or read /receipts.csv, a log of
+// their work. A guard anyone can silently reconfigure is not a guard.
+//
+// Written once, 0600, next to the receipts. Any process running as this user
+// can read it -- that is the intended boundary, since such a process could edit
+// the config file directly anyway. The threat this closes is the REMOTE one.
+function loadToken() {
+  if (process.env.GOVERNOR_TOKEN) return process.env.GOVERNOR_TOKEN;
+  try {
+    if (existsSync(TOKEN_FILE)) {
+      const t = readFileSync(TOKEN_FILE, 'utf8').trim();
+      if (t) return t;
+    }
+  } catch {}
+  const t = randomBytes(32).toString('hex');
+  try {
+    mkdirSync(DATA_DIR, { recursive: true });
+    writeFileSync(TOKEN_FILE, t + '\n', { mode: 0o600 });
+  } catch {}
+  return t;
+}
+const TOKEN = loadToken();
+
+// Constant-time, so nobody learns the token one byte at a time off the wire.
+function tokenOk(given) {
+  if (typeof given !== 'string' || given.length !== TOKEN.length) return false;
+  try { return timingSafeEqual(Buffer.from(given), Buffer.from(TOKEN)); } catch { return false; }
+}
+function authed(req, url) {
+  const h = String(req.headers.authorization || '');
+  if (h.startsWith('Bearer ') && tokenOk(h.slice(7))) return true;
+  // EventSource cannot set headers, so /events carries the token in the query.
+  return tokenOk(url.searchParams.get('token') || '');
+}
+
+// DNS rebinding is why the token alone is not enough: a hostile page can make
+// its OWN origin resolve to 127.0.0.1, at which point it is same-origin with us
+// and can simply GET / and read the token out of the page we serve it. Pinning
+// the Host header is what stops that.
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
+function hostOk(req) {
+  const h = String(req.headers.host || '');
+  const name = h.startsWith('[') ? h.slice(0, h.indexOf(']') + 1) : h.split(':')[0];
+  return LOCAL_HOSTS.has(name);
+}
+
+// Injected into the dashboard the daemon serves, at the same seam as the live
+// flag. Wrapping fetch and EventSource here means the page's own call sites --
+// thirteen of them, each with hand-written headers -- need no edit and cannot
+// forget the header.
+const bootstrap = () => 'window.__GOVERNOR_LIVE__=true;'
+  + `window.__GOVERNOR_TOKEN__=${JSON.stringify(TOKEN)};`
+  + '(()=>{const T=window.__GOVERNOR_TOKEN__,f=window.fetch;'
+  + 'window.fetch=(u,o={})=>{if(typeof u!=="string"||u[0]!=="/")return f(u,o);'
+  + 'const h=new Headers(o.headers||{});h.set("authorization","Bearer "+T);'
+  + 'return f(u,{...o,headers:h});};'
+  + 'const E=window.EventSource;window.EventSource=function(u,o){'
+  + 'if(typeof u==="string"&&u[0]==="/")u+=(u.includes("?")?"&":"?")+"token="+encodeURIComponent(T);'
+  + 'return new E(u,o);};})();';
 
 // Config: defaults <- governor.config.json (cwd) <- env.
 // Dollars are the source of truth; budget (effective tokens) is derived, so
@@ -316,10 +383,24 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   const path = url.pathname;
 
-  if (req.method === 'OPTIONS') { res.writeHead(204, { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*' }); return res.end(); }
+  if (!hostOk(req)) return json(res, 403, { error: 'forbidden: unexpected Host header' });
 
-  // Proxy paths (real agent traffic)
+  // No CORS, deliberately. The dashboard is served BY this daemon and is
+  // therefore same-origin; nothing else has any business calling it from a
+  // browser. Refusing the preflight is also what forces a cross-origin POST to
+  // stay "simple", where the missing Authorization header fails the check below.
+  if (req.method === 'OPTIONS') { res.writeHead(403); return res.end(); }
+
+  // Proxy paths stay open: they carry the CALLER's own provider credentials, we
+  // inject none of our own, and every documented integration works by pointing
+  // OPENAI_BASE_URL at them. Requiring a token here would break the setup in
+  // the README for no credential-theft benefit.
   if (req.method === 'POST' && UPSTREAMS[path]) return handleProxy(req, res, path);
+
+  // The dashboard page is public (it carries the token to the browser); every
+  // endpoint it then calls is not.
+  const isDashboard = req.method === 'GET' && (path === '/' || path === '/index.html');
+  if (!isDashboard && !authed(req, url)) return json(res, 401, { error: 'unauthorized' });
 
   // Decision API  -  the hook posts here
   if (req.method === 'POST' && path === '/decide') {
@@ -465,7 +546,7 @@ const server = http.createServer(async (req, res) => {
 
   // SSE stream
   if (req.method === 'GET' && path === '/events') {
-    res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive', 'access-control-allow-origin': '*' });
+    res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' });
     res.write(`event: snapshot\ndata: ${JSON.stringify(snapshot())}\n\n`);
     clients.add(res);
     const ping = setInterval(() => { try { res.write(': ping\n\n'); } catch {} }, 20000);
@@ -477,8 +558,9 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && (path === '/' || path === '/index.html')) {
     try {
       let html = await readFile(join(ROOT, 'public', 'dashboard.html'), 'utf8');
-      html = html.replace('/*__LIVE__*/', 'window.__GOVERNOR_LIVE__=true;');
-      res.writeHead(200, { 'content-type': 'text/html' }); return res.end(html);
+      html = html.replace('/*__LIVE__*/', bootstrap());
+      res.writeHead(200, { 'content-type': 'text/html', 'cache-control': 'no-store' });
+      return res.end(html);
     } catch { return json(res, 500, { error: 'dashboard not found' }); }
   }
 

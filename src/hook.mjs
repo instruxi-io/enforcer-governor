@@ -5,9 +5,48 @@
 // Contract that actually works (learned the hard way): exit 0 and print JSON.
 // Never exit 2 with JSON  -  that combination is ignored by Claude Code.
 import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { priceOf } from './policy.mjs';
 
 const PORT = process.env.GOVERNOR_PORT || 4000;
+const HOME = process.env.HOME || process.env.USERPROFILE || '.';
+
+// The daemon writes this on first run (0600). Missing token just means the
+// governor has never run here, which the fail-open path below already covers.
+function token() {
+  if (process.env.GOVERNOR_TOKEN) return process.env.GOVERNOR_TOKEN;
+  try { return readFileSync(join(HOME, '.enforcer-governor', 'token'), 'utf8').trim(); } catch { return ''; }
+}
+
+// ── What the capability rules actually get to see ───────────────────────────
+//
+// Rules match against this string, so whatever it leaves out is unenforced.
+// It used to be JSON.stringify(tool_input).slice(0, 200), which put a
+// 200-character ceiling on the guard: `rm -rf /` on the far side of a long
+// command was simply invisible, and padding the front of a command was enough
+// to walk past every rule.
+//
+// So: pull the fields the rules care about to the FRONT, where a cap cannot
+// displace them, then let the rest of the payload follow. Bulk content fields
+// (a file body being written) are deliberately not promoted -- no default rule
+// matches file contents, and hoisting them would cost size and sweep source
+// code into the match text for nothing.
+//
+// This is a mitigation, not a proof. A regex over a shell command can always be
+// dodged by an adversary with obfuscation or indirection; these rules are a
+// safety net for accidents and for a model that has lost the plot, not an
+// adversarial control.
+const MATCH_FIELDS = ['command', 'file_path', 'path', 'notebook_path', 'url', 'pattern'];
+const MATCH_CAP = 8192;
+function matchText(tool, input) {
+  const name = tool || 'tool';
+  if (input == null) return `${name}:`;
+  if (typeof input !== 'object') return `${name}:${String(input).slice(0, MATCH_CAP)}`;
+  const front = [];
+  for (const k of MATCH_FIELDS) if (typeof input[k] === 'string' && input[k]) front.push(input[k]);
+  let rest = ''; try { rest = JSON.stringify(input); } catch {}
+  return `${name}:${[...front, rest].join('\n').slice(0, MATCH_CAP)}`;
+}
 
 function readStdin() {
   try { return readFileSync(0, 'utf8'); } catch { return ''; }
@@ -92,17 +131,24 @@ async function main() {
   try { ev = JSON.parse(readStdin() || '{}'); } catch {}
   const agent = ev.session_id ? 'claude:' + String(ev.session_id).slice(0, 8) : 'claude-code';
   const { tokens, model, task } = readTranscript(ev.transcript_path);
-  const action = `${ev.tool_name || 'tool'}:${JSON.stringify(ev.tool_input ?? '').slice(0, 200)}`;
+  const action = matchText(ev.tool_name, ev.tool_input);
 
   let r;
   try {
     const resp = await fetch(`http://localhost:${PORT}/decide`, {
-      method: 'POST', headers: { 'content-type': 'application/json' },
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer ' + token() },
       body: JSON.stringify({ agent, tokens, action, task, tool: ev.tool_name, model: model || 'claude-code',
         billing: billingMode(), cwd: ev.cwd }),
       signal: AbortSignal.timeout(2500),
     });
+    // A 401 is a perfectly successful HTTP response, so it would sail past the
+    // catch below and then blow up on r.agent a few lines down -- crashing the
+    // hook, which prints nothing and leaves the agent's action in limbo. Treat
+    // any non-2xx exactly like an unreachable governor.
+    if (!resp.ok) throw new Error('governor returned ' + resp.status);
     r = await resp.json();
+    if (!r || !r.verdict || !r.agent) throw new Error('governor returned an unexpected shape');
   } catch {
     // Fail OPEN: if the governor is down, never block the user's real work.
     return emit('allow', 'Enforcer is not running, so this was not checked. Nothing is blocked.');
