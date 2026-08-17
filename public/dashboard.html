@@ -20,7 +20,10 @@
     *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;}
   }
   *{box-sizing:border-box;margin:0;} body{background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;overflow-x:hidden;} body.ungoverned{background:#0c0708;}
-  .wrap{max-width:1240px;margin:0 auto;padding:0 clamp(14px,3vw,32px);}
+  .wrap{max-width:1860px;margin:0 auto;padding:0 clamp(14px,2.5vw,32px);}
+  /* Prose stays readable even when the page does not: a measure is a measure
+     regardless of how wide the window is. */
+  .status,.st-sub,.tape-empty{max-width:68ch;}
   .top{border-bottom:1px solid var(--line);padding:16px 0 14px;position:sticky;top:0;background:var(--bg);z-index:20;} body.ungoverned .top{border-color:rgba(229,83,75,.4);}
   .top .row{display:flex;align-items:center;gap:20px;flex-wrap:wrap;}
   .brand{font-family:var(--mono);font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);} .brand b{color:var(--teal);}
@@ -124,7 +127,14 @@
   .con-t{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);font-weight:400;margin:0;}
   .con-h .who{margin-left:0;}
   .con-h .sw.master{margin-left:auto;}
-  .con-grid{display:grid;grid-template-columns:1.25fr 1fr;gap:0;}
+  /* The checks run the full width, so four switches sit on one line. */
+  .checks{padding:16px;border-bottom:1px solid var(--lineS);}
+  .checks .col-h{margin-bottom:13px;}
+  .checks .segrow{margin-bottom:0;}
+  .checks .segrow+.segrow{margin-top:9px;}
+  .segwrap{display:flex;gap:14px 40px;flex-wrap:wrap;}
+  .con-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:0;}
+  @media(max-width:1400px){ .con-grid{grid-template-columns:1fr 1fr;} .con-col:nth-child(3){grid-column:1/-1;border-left:none;border-top:1px solid var(--lineS);} }
   .con-col{padding:16px;min-width:0;}
   .con-col+.con-col{border-left:1px solid var(--lineS);}
   .col-h{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);margin:0 0 16px;}
@@ -138,7 +148,8 @@
 
   /* By client. A row per client, the bar showing its share of the month, and
      its cap inline so setting one is not a trip to a config file. */
-  .byclient{margin-top:22px;padding-top:18px;border-top:1px solid var(--lineS);}
+  .byclient{margin:0;}
+  .byclient.col{padding:0;}
   .bc-h{font-family:var(--sans);font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
     color:var(--dim);display:flex;align-items:baseline;gap:8px;margin-bottom:14px;}
   .bc-h em{font-style:normal;font-weight:400;letter-spacing:.04em;text-transform:none;color:var(--faint);}
@@ -200,7 +211,7 @@
   .f-r:active::-webkit-slider-thumb{background:var(--teal);box-shadow:0 0 0 1px var(--teal),0 0 0 8px rgba(87,196,184,.16);}
   .f-r:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 1px var(--teal),0 0 0 6px rgba(87,196,184,.22);}
 
-  .swlist{display:flex;flex-direction:column;gap:11px;align-items:flex-start;margin-bottom:18px;}
+  .swlist{display:flex;flex-wrap:wrap;gap:8px 22px;align-items:center;margin-bottom:20px;}
   .swrow{display:flex;align-items:center;gap:2px;}
   .swrow .f-k{position:relative;line-height:1;}
   .segrow{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:10px;}
@@ -272,8 +283,11 @@
   .fleet-h{display:flex;align-items:baseline;gap:12px;margin:8px 0 12px;flex-wrap:wrap;}
   .fleet-h .lbl{flex:none;white-space:nowrap;}
   @media(max-width:620px){.fleet-h .hint{display:none;}} .fleet-h .lbl{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);} .fleet-h .hint{font-family:var(--mono);font-size:11px;color:var(--faint);margin-left:auto;}
-  .fleet{display:flex;flex-wrap:wrap;gap:1px;background:var(--line);border:1px solid var(--line);}
-  .agent{flex:1 1 258px;min-width:258px;}
+  /* Grid, not flex. Flex stretches a lone card on the last row across the
+     whole page, which reads as broken; a grid leaves the gap, which reads as
+     a row that is not full. At this width six cards sit on one line anyway. */
+  .fleet{display:grid;grid-template-columns:repeat(auto-fit,minmax(272px,1fr));
+    gap:1px;background:var(--line);border:1px solid var(--line);}
   .empty{grid-column:1/-1;background:var(--panel);border:1px dashed var(--line);border-radius:0;padding:22px 24px;}
   .e-h{font-size:15px;color:var(--ink);font-weight:600;margin-bottom:14px;}
   .e-step{margin-bottom:14px;} .e-step b{display:block;font-size:13px;color:var(--teal);margin-bottom:2px;} .e-step span{font-size:12.5px;color:var(--dim);display:block;margin-bottom:7px;}
@@ -457,20 +471,45 @@
       <button class="sw master on" id="swEnforcer"><span class="knob"></span><span>Enforcer</span></button>
     </div>
 
+    <div class="checks">
+      <div class="col-h">Checks</div>
+      <div class="swlist">
+          <div class="swrow"><button class="sw on" id="swBudget"><span class="knob"></span><span>Stop at the limit</span></button>
+            <span class="f-k"><button class="q" type="button" aria-label="What is this?">?</button>
+            <span class="qtip">Enforces the money and speed limits on the left. Turn it off and agents run uncapped, though everything is still recorded.</span></span></div>
+          <div class="swrow"><button class="sw on" id="swLoop"><span class="knob"></span><span>Stop repeat loops</span></button>
+            <span class="f-k"><button class="q" type="button" aria-label="What is this?">?</button>
+            <span class="qtip">Stops an agent repeating the same action over and over, including the alternating kind that a simple streak check never catches.</span></span></div>
+          <div class="swrow"><button class="sw on" id="swRules"><span class="knob"></span><span>Capability checks</span></button>
+            <span class="f-k"><button class="q" type="button" aria-label="What is this?">?</button>
+            <span class="qtip">Judges what an agent may DO, not just what it may spend. Piping the internet into a shell is refused outright. Deleting a whole tree, rewriting git history, reading or writing credentials, and publishing or deploying all stop and ask you first. Ordinary work passes untouched, and these fire even on a full budget, because a dangerous command is usually a cheap one.</span></span></div>
+          <div class="swrow"><button class="sw on" id="swModel"><span class="knob"></span><span>Match model to task</span></button>
+            <span class="f-k"><button class="q" type="button" aria-label="What is this?">?</button>
+            <span class="qtip">Reads the task the person typed and says when the model looks wrong for it, in either direction. Where the governor sits in front of a coding agent as a hook it can only advise, because a hook cannot change a model. On the API route it can switch it for you.</span></span></div>
+        </div>
+        <div class="segwrap">
+        <div class="segrow"><span class="seg-lbl">when it nears the limit</span><span class="f-k"><button class="q" type="button" aria-label="What is this?">?</button><span class="qtip">At three quarters of the spend limit, either pause and ask you, or stop the agent outright without asking.</span></span>
+          <div class="seg"><button class="seg-b on" id="segEsc">Ask me</button><button class="seg-b dm" id="segDeny">Just stop it</button></div>
+        </div>
+        <div class="segrow"><span class="seg-lbl">on a model mismatch</span><span class="f-k"><button class="q" type="button" aria-label="What is this?">?</button><span class="qtip">Tell me leaves the choice to you. Switch it rewrites the request to the cheaper model, and only ever downgrades. That works on the API route, where the governor owns the request.</span></span>
+          <div class="seg"><button class="seg-b on" id="segSay">Tell me</button><button class="seg-b dm" id="segSwap">Switch it</button></div>
+        </div>
+        </div>
+
+        <div class="caprow" id="capRules" hidden></div>
+    </div>
+
     <div class="con-grid">
       <div class="con-col">
         <!-- The model comes first because it is the frame for every figure
              below it: $20 is four million tokens on one model and sixteen on
-             another. Setting a limit before saying what it is priced in is
-             the wrong order to ask a person to think in. -->
+             another. -->
         <div class="priced-top">
           <span class="rl">everything below is priced as</span>
           <select id="modelSel" class="modelsel" aria-label="Model to price the limits against"></select>
           <span class="autotag on" id="autoTag">auto-detected</span>
         </div>
-
         <div class="col-h">Money</div>
-
         <div class="fader">
           <div class="f-top"><span class="f-k">spend, per agent
             <button class="q" type="button" aria-label="What is this?">?</button>
@@ -484,7 +523,6 @@
             <div class="tr"><div class="v" id="trTok">4.00M</div><div class="k">tokens, if you care</div></div>
           </div>
         </div>
-
         <div class="fader">
           <div class="f-top"><span class="f-k">everything together, a day
             <button class="q" type="button" aria-label="What is this?">?</button>
@@ -493,9 +531,11 @@
           <input class="f-r" type="range" id="rDay" min="0" max="7" step="1" value="0" aria-label="Total spend limit per day">
           <div class="f-sub">Spent so far: <b id="fleetSpent">&mdash;</b></div>
         </div>
+        <div class="spend-note" id="spendNote"></div>
+      </div>
 
-        <div class="col-h sub">Speed</div>
-
+      <div class="con-col">
+        <div class="col-h">Speed and shape</div>
         <div class="fader">
           <div class="f-top"><span class="f-k">speed, per agent
             <button class="q" type="button" aria-label="What is this?">?</button>
@@ -503,7 +543,6 @@
           </span><span class="f-v" id="vBurn">$2/min</span></div>
           <input class="f-r" type="range" id="rBurn" min="0" max="7" step="1" value="2" aria-label="Burn rate limit per agent">
         </div>
-
         <div class="fader">
           <div class="f-top"><span class="f-k">speed, everything together
             <button class="q" type="button" aria-label="What is this?">?</button>
@@ -512,7 +551,6 @@
           <input class="f-r" type="range" id="rFleetBurn" min="0" max="6" step="1" value="2" aria-label="Burn rate limit across all agents">
           <div class="f-sub">Burning right now: <b id="fleetBurn">nothing</b></div>
         </div>
-
         <div class="fader">
           <div class="f-top"><span class="f-k">new agents a minute
             <button class="q" type="button" aria-label="What is this?">?</button>
@@ -520,7 +558,6 @@
           </span><span class="f-v" id="vFanout">8</span></div>
           <input class="f-r" type="range" id="rFanout" min="0" max="30" step="1" value="8" aria-label="New agents per minute before asking">
         </div>
-
         <div class="fader">
           <div class="f-top"><span class="f-k">errors before it stops retrying
             <button class="q" type="button" aria-label="What is this?">?</button>
@@ -528,41 +565,15 @@
           </span><span class="f-v" id="vRetry">6</span></div>
           <input class="f-r" type="range" id="rRetry" min="0" max="30" step="1" value="6" aria-label="Upstream errors per minute before asking">
         </div>
+      </div>
 
+      <div class="con-col">
         <div class="byclient" id="byClient" hidden>
           <div class="bc-h">By client <em>this month</em>
             <span class="bc-total" id="bcTotal"></span></div>
           <div class="bc-rows" id="bcRows"></div>
           <p class="bc-note">Set a monthly cap on any client and it stops on its own when it reaches it. The others carry on.</p>
         </div>
-        <div class="spend-note" id="spendNote"></div>
-      </div>
-      <div class="con-col">
-        <div class="col-h">Checks</div>
-        <div class="swlist">
-          <div class="swrow"><button class="sw on" id="swBudget"><span class="knob"></span><span>Stop at the limit</span></button>
-            <span class="f-k"><button class="q" type="button" aria-label="What is this?">?</button>
-            <span class="qtip">Enforces the money and speed limits on the left. Turn it off and agents run uncapped, though everything is still recorded.</span></span></div>
-          <div class="swrow"><button class="sw on" id="swLoop"><span class="knob"></span><span>Stop repeat loops</span></button>
-            <span class="f-k"><button class="q" type="button" aria-label="What is this?">?</button>
-            <span class="qtip">Stops an agent repeating the same action over and over, including the alternating kind that a simple streak check never catches.</span></span></div>
-          <div class="swrow"><button class="sw on" id="swRules"><span class="knob"></span><span>Capability checks</span></button>
-            <span class="f-k"><button class="q" type="button" aria-label="What is this?">?</button>
-            <span class="qtip">Judges what an agent may DO, listed below. These fire even on a full budget, because a dangerous command is usually a cheap one.</span></span></div>
-          <div class="swrow"><button class="sw on" id="swModel"><span class="knob"></span><span>Match model to task</span></button>
-            <span class="f-k"><button class="q" type="button" aria-label="What is this?">?</button>
-            <span class="qtip">Reads the task the person typed and says when the model looks wrong for it, in either direction. Where the governor sits in front of a coding agent as a hook it can only advise, because a hook cannot change a model. On the API route it can switch it for you.</span></span></div>
-        </div>
-        <div class="segrow"><span class="seg-lbl">when it nears the limit</span><span class="f-k"><button class="q" type="button" aria-label="What is this?">?</button><span class="qtip">At three quarters of the spend limit, either pause and ask you, or stop the agent outright without asking.</span></span>
-          <div class="seg"><button class="seg-b on" id="segEsc">Ask me</button><button class="seg-b dm" id="segDeny">Just stop it</button></div>
-        </div>
-        <div class="segrow"><span class="seg-lbl">on a model mismatch</span><span class="f-k"><button class="q" type="button" aria-label="What is this?">?</button><span class="qtip">Tell me leaves the choice to you. Switch it rewrites the request to the cheaper model, and only ever downgrades. That works on the API route, where the governor owns the request.</span></span>
-          <div class="seg"><button class="seg-b on" id="segSay">Tell me</button><button class="seg-b dm" id="segSwap">Switch it</button></div>
-        </div>
-
-        <div class="col-h sub">What your agents may do <em>checked before anything is spent</em></div>
-        <div class="caprow" id="capRules"></div>
-        <p class="capnote">Ordinary work passes untouched. These fire even on a full budget, because a dangerous command is usually a cheap one.</p>
       </div>
     </div>
     <div class="ungov-banner">CHECKS ARE OFF &middot; your agents can spend without limit, and nothing is being recorded.</div>
