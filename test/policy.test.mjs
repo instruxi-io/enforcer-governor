@@ -484,3 +484,43 @@ console.log('  model advice is conservative ok');
   assert(resume.every(m => m.role === 'user'), 'the resume must not fabricate assistant turns the new model never said');
   console.log('a handoff cuts on a user turn and carries the brief ok');
 }
+
+// An agency bills by client, so spend has to split by client without anyone
+// remembering to label a session. The working directory is the one fact every
+// call already carries, so the mapping is done once per folder, not per run.
+{
+  const { clientFor } = await import('../src/policy.mjs');
+  const map = { '/w/acme': 'Acme Corp', '/w': 'Internal', '/w/acme/legacy': 'Acme Legacy' };
+  assert(clientFor('/w/acme/api', map) === 'Acme Corp', 'a subfolder belongs to its client');
+  assert(clientFor('/w/acme/legacy/x', map) === 'Acme Legacy', 'the longest matching prefix wins, not the first');
+  assert(clientFor('/w/other', map) === 'Internal', 'a parent mapping still catches what is under it');
+  assert(clientFor('/elsewhere/zeta', map) === '?zeta', 'an unmapped path is GUESSED and marked, never billed silently');
+  assert(clientFor('', map) === '', 'no directory means no client');
+
+  // And the money follows the client, not the agent.
+  const st = makeState();
+  const cfg = { ...DEFAULTS, dollars: 10000, fanoutLimit: 0, clients: map };
+  decide(st, { agent: 'a1', tokens: 1_000_000, action: 'Read:x', model: 'claude-opus-5', cwd: '/w/acme/api' }, cfg);
+  decide(st, { agent: 'a2', tokens: 1_000_000, action: 'Read:y', model: 'claude-opus-5', cwd: '/w/acme/web' }, cfg);
+  decide(st, { agent: 'a3', tokens: 1_000_000, action: 'Read:z', model: 'claude-opus-5', cwd: '/w/other' }, cfg);
+  const by = st.clients.month.by;
+  assert(Math.abs(by['Acme Corp'] - 10) < 0.01, `two agents in one client's folders should sum: got ${by['Acme Corp']}`);
+  assert(Math.abs(by['Internal'] - 5) < 0.01, `the other client is separate: got ${by['Internal']}`);
+  console.log('spend splits by client from the folder, with no labelling ok');
+}
+
+// A client that has eaten its month stops, without touching the other four.
+{
+  const st = makeState();
+  const cfg = { ...DEFAULTS, dollars: 10000, fanoutLimit: 0,
+    clients: { '/w/beta': 'Beta Ltd', '/w/acme': 'Acme Corp' }, clientLimits: { 'Beta Ltd': 4 } };
+  decide(st, { agent: 'b1', tokens: 1_000_000, action: 'Read:x', model: 'claude-opus-5', cwd: '/w/beta' }, cfg);
+  // A FRESH session in the same client's folder, which is the case that
+  // matters: the client is out of budget, so nobody new starts work on it.
+  const stopped = decide(st, { agent: 'b2', tokens: 100, action: 'Read:y', model: 'claude-opus-5', cwd: '/w/beta' }, cfg);
+  assert(stopped.verdict === 'deny' && /Beta Ltd/.test(stopped.reason),
+    `the over-budget client should stop and say so: ${stopped.verdict} ${stopped.reason}`);
+  const other = decide(st, { agent: 'a1', tokens: 1_000_000, action: 'Read:x', model: 'claude-opus-5', cwd: '/w/acme' }, cfg);
+  assert(other.verdict === 'allow', 'one client hitting its cap must not stop the others');
+  console.log('a per-client cap stops that client alone ok');
+}

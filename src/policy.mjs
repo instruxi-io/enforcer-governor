@@ -164,6 +164,36 @@ const MECHANICAL = /\b(?:re-?)?run(?:ning)? (?:the |all |every )?(?:\w+ )?(?:tes
 const REASONING  = /\b(?:why|design|architect(?:ure)?|debug|investigate|figure out|root cause|refactor|re-?architect|plan|approach|trade-?offs?|decide|strategy|should we|compare|evaluate|migrate)\b/i;
 
 // 'reasoning' | 'mechanical' | null (unknown -> say nothing)
+// Which client is this work for?
+//
+// An agency running five projects needs spend split by client, and the answer
+// cannot be "label every session", because nobody does that reliably and the
+// one they forget is the one they cannot bill. So it is derived: Claude Code
+// tells the hook its working directory on every call, and work for a client
+// almost always lives in that client's folder. Map the folder once and every
+// session after it is attributed with nobody typing anything.
+//
+// Longest prefix wins, so ~/work/acme/api is Acme even when ~/work is mapped
+// to something else. An unmapped path falls back to the last folder name,
+// which is usually the project, so a new client shows up as itself rather
+// than as "unattributed" until somebody notices.
+export function clientFor(cwd, clients) {
+  const path = String(cwd || '');
+  if (!path) return '';
+  let best = '', bestLen = -1;
+  for (const [prefix, name] of Object.entries(clients || {})) {
+    if (path === prefix || path.startsWith(prefix.replace(/\/+$/, '') + '/')) {
+      if (prefix.length > bestLen) { best = name; bestLen = prefix.length; }
+    }
+  }
+  if (best) return best;
+  // Nothing mapped. Guess from the folder name so the work is not lost, and
+  // mark it so the dashboard can ask a human to confirm rather than quietly
+  // putting it on an invoice.
+  const parts = path.split('/').filter(Boolean);
+  return parts.length ? '?' + parts[parts.length - 1] : '';
+}
+
 export function taskShape(task = '') {
   const t = String(task || '');
   if (!t.trim()) return null;
@@ -266,6 +296,11 @@ export const DEFAULTS = {
   enforceModel: false,// rewrite the model on the proxy. Off by default: silently
                       // changing someone's model is a big deal, and we can only
                       // do it where we own the request (never for Claude Code).
+  // Directory prefix -> client name. Map a folder once and every session in it
+  // is attributed automatically. { "/Users/me/work/acme": "Acme Corp" }
+  clients: {},
+  // Per-client spend caps in dollars, by the same names. 0 or absent is off.
+  clientLimits: {},
   rules: null,        // null = DEFAULT_RULES; set your own to override
   operator: '',       // the human this agent acts for; stamped on every receipt
   softAction: 'escalate', // 'escalate' -> ask a human; 'deny' -> auto-block
@@ -299,6 +334,9 @@ export function makeState() {
     // exponential, and the documented case reached 49 subagents before anyone
     // looked. Counting arrivals per minute catches it around the sixth.
     spawns: [],
+    // Dollars per client, per period. Keyed the same way the fleet totals are,
+    // so a new day resets them without a scheduler.
+    clients: { day: { k: '', by: {} }, week: { k: '', by: {} }, month: { k: '', by: {} } },
   };
 }
 
@@ -332,6 +370,10 @@ export function rollPeriods(state, now = Date.now()) {
   for (const [name, keyFn] of PERIODS) {
     const p = state.periods[name], k = keyFn(now);
     if (p.k !== k) { p.k = k; p.usd = 0; }
+    if (state.clients) {
+      const c = state.clients[name];
+      if (c.k !== k) { c.k = k; c.by = {}; }
+    }
   }
 }
 
@@ -340,6 +382,12 @@ export function addSpend(state, a, deltaTokens, now = Date.now()) {
   rollPeriods(state, now);
   const usd = dollarsForTokens(deltaTokens, priceOf(a.model).in);
   for (const [name] of PERIODS) state.periods[name].usd += usd;
+  if (state.clients && a.client) {
+    for (const [name] of PERIODS) {
+      const c = state.clients[name];
+      c.by[a.client] = (c.by[a.client] || 0) + usd;
+    }
+  }
   if (state.burn) {
     state.burn.push({ t: now, usd, agent: a.id });
     const from = now - BURN_WINDOW;
@@ -386,6 +434,10 @@ export function decide(state, ev, config = {}) {
   if (ev.task) a.task = ev.task;
   if (ev.model) setModel(a, ev.model);
   a.tool = ev.tool || String(ev.action || '').split(':')[0] || a.tool;
+  // An explicit client always wins over a derived one, so a header or a config
+  // entry can correct a directory that guessed wrong.
+  const named = ev.client || clientFor(ev.cwd, cfg.clients);
+  if (named) a.client = named;
   // Whether this session is drawing on a subscription or on API credit. The
   // nastiest surprise bills are people who believed they were on a flat plan
   // while an API key quietly moved them onto per-token billing.
@@ -515,6 +567,17 @@ export function decide(state, ev, config = {}) {
     }
   }
 
+  if (cfg.budgetOn && a.client && state.clients) {
+    const cap = (cfg.clientLimits || {})[a.client];
+    const spent = state.clients.month.by[a.client] || 0;
+    if (cap > 0 && spent >= cap) {
+      a.status = 'grounded';
+      return record(state, a, 'deny',
+        `work for ${a.client} has cost $${spent.toFixed(2)} this month, which is its $${cap} limit`,
+        a.tokens);
+    }
+  }
+
   if (cfg.budgetOn && a.tokens >= a.budget) {
     a.status = 'grounded';
     return record(state, a, 'deny', 'it reached your spend limit', a.tokens);
@@ -584,6 +647,7 @@ export function record(state, a, verdict, reason, tokens, authority, operator, e
   // tried to do, which policy answered, and on what. A prose reason answers
   // none of them in a form you can query, so the facts are recorded as fields
   // as well. This is the shape the 2026 rules ask for.
+  if (a.client) entry.client = a.client;
   if (a.tool) entry.tool = a.tool;
   if (a.model) entry.model = a.model;
   if (extra && extra.rule) entry.rule = extra.rule;

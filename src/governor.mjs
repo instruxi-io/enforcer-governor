@@ -6,7 +6,7 @@ import { readFile, appendFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { handoffRequest, resumeWith, HANDOFF_OPTS } from './handoff.mjs';
+import { handoffRequest, resumeWith, HANDOFF_OPTS, RESUME_OPTS } from './handoff.mjs';
 import { makeState, decide, resolve, kill, release, verifyChain, getAgent, setModel, record, rollPeriods, burnRate, spawnRate, sha256, priceOf, dollarsForTokens, weightsFor, modelAdvice, taskShape, MODELS, DEFAULTS, DEFAULT_RULES, tokensForDollars } from './policy.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
@@ -21,7 +21,7 @@ const PERIODS_FILE = join(DATA_DIR, 'periods.json');
 // every limit back to the default while the spend total carries on climbing --
 // you would believe you were capped when you were not.
 const SAVED_FILE = join(DATA_DIR, 'config.json');
-const SAVED_KEYS = ['dollars', 'model', 'soft', 'softAction', 'budgetOn', 'loopOn', 'rulesOn', 'adviseModel', 'enforceModel', 'burnLimit', 'fleetBurnLimit', 'fanoutLimit', 'retryLimit', 'rerouteOn', 'fallbackUrl', 'fallbackModel',
+const SAVED_KEYS = ['dollars', 'model', 'soft', 'softAction', 'budgetOn', 'loopOn', 'rulesOn', 'adviseModel', 'enforceModel', 'burnLimit', 'fleetBurnLimit', 'fanoutLimit', 'retryLimit', 'rerouteOn', 'fallbackUrl', 'fallbackModel', 'clients', 'clientLimits',
                     'dailyLimit', 'weeklyLimit', 'monthlyLimit', 'operator'];
 
 // Config: defaults <- governor.config.json (cwd) <- env.
@@ -80,6 +80,7 @@ function snapshot() {
   return { agents: Object.values(state.agents).map(a => ({
     id: a.id, tokens: Math.round(a.tokens), budget: a.budget, soft: a.soft,
     status: a.status, cost: a.cost, model: a.model || '', task: a.task || '', billing: a.billing || '',
+    client: a.client || '',
     burn: +burnRate(state, undefined, a.id).toFixed(2),
     // Carried on the snapshot too, or the advice only ever appears on a card
     // built by a live decision and vanishes the moment you reload the page.
@@ -94,6 +95,7 @@ function snapshot() {
     burnLimit: CONFIG.burnLimit, fleetBurnLimit: CONFIG.fleetBurnLimit, fleetBurn: +burnRate(state).toFixed(2),
     fanoutLimit: CONFIG.fanoutLimit, retryLimit: CONFIG.retryLimit, spawnRate: spawnRate(state),
     spent: { day: state.periods.day.usd, week: state.periods.week.usd, month: state.periods.month.usd },
+    clientLimits: CONFIG.clientLimits, byClient: state.clients ? state.clients.month.by : {},
   } };
 }
 
@@ -225,7 +227,7 @@ async function reroute(agent, body, pre, res, path) {
     const out = await fetch(CONFIG.fallbackUrl, {
       method: 'POST', headers: { 'content-type': 'application/json', ...CONFIG.fallbackHeaders },
       body: JSON.stringify({ ...j, model: CONFIG.fallbackModel || j.model,
-        messages: resumeWith(brief, j.messages), stream: false }),
+        messages: resumeWith(brief, j.messages), ...RESUME_OPTS, stream: false }),
     });
     const text = await out.text();
 
@@ -246,7 +248,7 @@ async function reroute(agent, body, pre, res, path) {
 async function handleProxy(req, res, path) {
   const agent = req.headers['x-enforcer-agent'] || 'proxy-agent';
   // Pre-check: if this agent is already grounded/over budget, refuse before spending.
-  const pre = decide(state, { agent, deltaTokens: 0, action: 'proxy:' + path }, CONFIG);
+  const pre = decide(state, { agent, client, deltaTokens: 0, action: 'proxy:' + path }, CONFIG);
   let body = await readBody(req);
   if (pre.verdict === 'deny') {
     const moved = CONFIG.rerouteOn && CONFIG.fallbackUrl && await reroute(agent, body, pre, res, path);
@@ -296,7 +298,7 @@ async function handleProxy(req, res, path) {
   }
   if (model) setModel(known, model);
   if (!known.budgetRaised) known.budget = budgetFor(known);
-  const post = decide(state, { agent, deltaTokens: used, action: 'proxy:' + path }, CONFIG);
+  const post = decide(state, { agent, client, deltaTokens: used, action: 'proxy:' + path }, CONFIG);
   post.agent.lastUsed = used;
   broadcast('decision', { ...post, model: model || 'proxy', advice: post.advice || null }); await persist(post);
   res.writeHead(upstream.status, { 'content-type': upstream.headers.get('content-type') || 'application/json', 'x-enforcer-verdict': post.verdict, 'x-enforcer-receipt': post.receipt });
@@ -353,7 +355,7 @@ const server = http.createServer(async (req, res) => {
   }
   if (req.method === 'POST' && path === '/config') {
     const patch = JSON.parse((await readBody(req)).toString() || '{}');
-    for (const k of ['budgetOn', 'loopOn', 'rulesOn', 'softAction', 'budget', 'soft', 'dollars', 'model', 'dailyLimit', 'weeklyLimit', 'monthlyLimit', 'operator', 'adviseModel', 'enforceModel', 'burnLimit', 'fleetBurnLimit', 'fanoutLimit', 'retryLimit', 'rerouteOn', 'fallbackUrl', 'fallbackModel']) {
+    for (const k of ['budgetOn', 'loopOn', 'rulesOn', 'softAction', 'budget', 'soft', 'dollars', 'model', 'dailyLimit', 'weeklyLimit', 'monthlyLimit', 'operator', 'adviseModel', 'enforceModel', 'burnLimit', 'fleetBurnLimit', 'fanoutLimit', 'retryLimit', 'rerouteOn', 'fallbackUrl', 'fallbackModel', 'clients', 'clientLimits']) {
       if (k in patch) CONFIG[k] = patch[k];
     }
     // Raising the limit has to affect the agent already running, not just the
@@ -386,7 +388,7 @@ const server = http.createServer(async (req, res) => {
   // passed off as verified when it was not.
   if (req.method === 'GET' && path === '/receipts.csv') {
     const w = walkReceipts();
-    const cols = ['ts', 'iso', 'agent', 'operator', 'verdict', 'reason', 'rule', 'tool', 'model', 'tokens', 'usd', 'authority', 'hash'];
+    const cols = ['ts', 'iso', 'client', 'agent', 'operator', 'verdict', 'reason', 'rule', 'tool', 'model', 'tokens', 'usd', 'authority', 'hash'];
     const esc = v => {
       const t = v === undefined || v === null ? '' : String(v);
       return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;

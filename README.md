@@ -158,6 +158,30 @@ Prices are the providers' published list rates. **On a flat subscription you are
 
 ---
 
+## Working for more than one client
+
+An agency running five projects needs spend split by client, and the honest problem with that is labelling: nobody tags every session reliably, and the one they forget is the one they cannot bill.
+
+So it is derived. Claude Code tells the hook its working directory on every call, and work for a client almost always lives in that client's folder. Map each folder once:
+
+```json
+{
+  "clients": {
+    "/Users/me/work/acme": "Acme Corp",
+    "/Users/me/work/beta": "Beta Ltd"
+  },
+  "clientLimits": { "Beta Ltd": 400 }
+}
+```
+
+Every session in those folders is attributed from then on with nobody typing anything. The longest matching prefix wins, so `~/work/acme/api` is Acme even when `~/work` is mapped to something else. On the API route there is no working directory, so one header does the same job: `x-enforcer-client: Acme Corp`.
+
+A folder you have not mapped is still counted, under a guessed name marked with `?`, because losing the work is worse than guessing at it. It is marked precisely so it does not go on an invoice as though it were certain.
+
+`clientLimits` caps a client for the month. A project that has eaten its budget stops on its own, and the other four carry on. Every receipt carries the client, and it is the first column of the CSV export, so the invoice is a filter rather than a reconstruction.
+
+---
+
 ## How it works
 
 ```

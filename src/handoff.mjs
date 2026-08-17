@@ -34,6 +34,15 @@ export const HANDOFF_OPTS = {
   reasoning_effort: 'low',                            // OpenAI-shaped reasoning models
 };
 
+// The resume needs headroom too, and for a different reason. Measured on a
+// local Qwen 3.6 27B continuing the same task: given the full transcript it
+// spent 3361 tokens reasoning and 639 answering, and finished inside 4000.
+// Given only the brief it spent 3999 reasoning and returned an empty string.
+// A brief with no conversational context appears to invite MORE re-derivation,
+// not less, so a resume budget sized off the original is too small. Ask for
+// what the fallback needs, not what the outgoing model used.
+export const RESUME_OPTS = { max_tokens: 12000 };
+
 export const HANDOFF_PROMPT = `You are handing this task to a different model that has NONE of this conversation.
 Write the brief it needs. No preamble, no sign-off, no markdown headings beyond the five labels.
 

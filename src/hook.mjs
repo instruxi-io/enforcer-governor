@@ -98,7 +98,8 @@ async function main() {
   try {
     const resp = await fetch(`http://localhost:${PORT}/decide`, {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ agent, tokens, action, task, tool: ev.tool_name, model: model || 'claude-code', billing: billingMode() }),
+      body: JSON.stringify({ agent, tokens, action, task, tool: ev.tool_name, model: model || 'claude-code',
+        billing: billingMode(), cwd: ev.cwd }),
       signal: AbortSignal.timeout(2500),
     });
     r = await resp.json();
