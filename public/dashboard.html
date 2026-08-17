@@ -1033,10 +1033,14 @@
         box.querySelectorAll('.bc-cap input').forEach(x=>{ const v=+x.value||0; if(v>0) limits[x.dataset.client]=v; });
         if(LIVE) fetch('/clients',{method:'POST',headers:{'content-type':'application/json'},
           body:JSON.stringify({clients:{},limits})}).catch(()=>{});
+        else Object.assign(window.__demoCaps||{}, limits);
       },600); };
     });
     box.hidden=false;
   }
+
+  window.__usd = usdForAgent;
+  window.__byClient = renderByClient;
 
   function renderSplit(c){
     const box=$('split'); if(!box || splitOff) return;
@@ -1284,12 +1288,12 @@ window.__runDemo = (paint, onDecision, getPolicy, wire) => {
   const rand=(a,b)=>a+Math.random()*(b-a), pick=a=>a[Math.floor(Math.random()*a.length)];
   const enc=new TextEncoder(); const sha=async s=>{const h=await crypto.subtle.digest('SHA-256',enc.encode(s));return[...new Uint8Array(h)].map(b=>b.toString(16).padStart(2,'0')).join('');};
   const AG=[
-    {id:'data-pipeline-01',task:"normalise yesterday's events and load them into the warehouse",model:'claude-sonnet',budget:180000,soft:.75,burn:[900,1800],plan:'steady'},
-    {id:'research-swarm-03',task:"compare our pricing against the top five competitors",model:'claude-opus',budget:220000,soft:.60,burn:[2600,4200],plan:'escalate'},
-    {id:'scraper-07',task:"pull every product listing from the supplier catalogue",model:'claude-haiku',budget:150000,soft:.80,burn:[700,1400],plan:'loop'},
-    {id:'report-gen-02',task:"build the weekly ops report and email it to the team",model:'claude-sonnet',budget:160000,soft:.75,burn:[800,1500],plan:'steady'},
-    {id:'test-runner-05',task:"run the full suite and fix whatever fails",model:'claude-haiku',budget:120000,soft:.80,burn:[500,1100],plan:'steady'},
-    {id:'summarizer-09',task:"summarise the last 200 support tickets by theme",model:'claude-sonnet',budget:150000,soft:.75,burn:[700,1300],plan:'steady'},
+    {id:'data-pipeline-01',client:'Acme Corp',task:"normalise yesterday's events and load them into the warehouse",model:'claude-sonnet',budget:180000,soft:.75,burn:[900,1800],plan:'steady'},
+    {id:'research-swarm-03',client:'Delta Health',task:"compare our pricing against the top five competitors",model:'claude-opus',budget:220000,soft:.60,burn:[2600,4200],plan:'escalate'},
+    {id:'scraper-07',client:'Beta Ltd',task:"pull every product listing from the supplier catalogue",model:'claude-haiku',budget:150000,soft:.80,burn:[700,1400],plan:'loop'},
+    {id:'report-gen-02',client:'Acme Corp',task:"build the weekly ops report and email it to the team",model:'claude-sonnet',budget:160000,soft:.75,burn:[800,1500],plan:'steady'},
+    {id:'test-runner-05',client:'Beta Ltd',task:"run the full suite and fix whatever fails",model:'claude-haiku',budget:120000,soft:.80,burn:[500,1100],plan:'steady'},
+    {id:'summarizer-09',client:'?support-tools',task:"summarise the last 200 support tickets by theme",model:'claude-sonnet',budget:150000,soft:.75,burn:[700,1300],plan:'steady'},
   ];
   const STEADY=['read src/api.ts','edit handler.go','run test suite','grep usage','read schema.sql','write report.md','call mcp:search'];
   const st={}; let prev='genesis'; const chain=[]; let escA=null;
@@ -1303,6 +1307,22 @@ window.__runDemo = (paint, onDecision, getPolicy, wire) => {
     paint(a.id,{tokens:s.tokens,budget:s.budget,status:s.status,model:a.model,task:a.task,loopStreak:s.loopStreak||0});
   });
   window.__demoBudget();
+
+  // The by-client split, from what the simulated fleet is actually spending.
+  // Beta Ltd is capped low on purpose: within a minute it crosses its cap on
+  // screen, which is the whole point of the panel.
+  // Beta Ltd's cap is set where the simulated fleet crosses it about half a
+  // minute in, so a viewer watches it go from fine to near to stopped rather
+  // than arriving at an absurd percentage that reads as a broken number.
+  const DEMO_CAPS=window.__demoCaps={'Acme Corp':40,'Beta Ltd':9,'Delta Health':60};
+  setInterval(()=>{
+    const by={};
+    for(const a of AG){
+      const s=st[a.id]; if(!s||!a.client) continue;
+      by[a.client]=(by[a.client]||0)+window.__usd(s.tokens||0,a.model);
+    }
+    if(Object.keys(by).length>1) window.__byClient({byClient:by,clientLimits:DEMO_CAPS});
+  }, 1200);
 
   // Export, in the demo. It builds the same file the daemon serves, from the
   // same receipts the tape is showing, and puts it on screen because a
