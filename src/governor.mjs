@@ -434,7 +434,9 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'POST' && path === '/clients') {
     const patch = JSON.parse((await readBody(req)).toString() || '{}');
     CONFIG.clients = { ...(CONFIG.clients || {}), ...(patch.clients || {}) };
-    if (patch.limits) CONFIG.clientLimits = { ...(CONFIG.clientLimits || {}), ...patch.limits };
+    // Replace rather than merge, so clearing a cap in the dashboard actually
+    // clears it instead of leaving the old figure behind.
+    if (patch.limits) CONFIG.clientLimits = patch.limits;
     for (const p of Object.keys(patch.clients || {})) delete state.unmapped[p];
     // Re-attribute the agents already running, so the screen agrees with the
     // mapping immediately instead of at their next action.

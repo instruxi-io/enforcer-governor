@@ -136,6 +136,28 @@
     border-bottom:1px solid var(--lineS);}
   .priced-top .rl{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);}
 
+  /* By client. A row per client, the bar showing its share of the month, and
+     its cap inline so setting one is not a trip to a config file. */
+  .byclient{margin-top:22px;padding-top:18px;border-top:1px solid var(--lineS);}
+  .bc-h{font-family:var(--sans);font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--dim);display:flex;align-items:baseline;gap:8px;margin-bottom:14px;}
+  .bc-h em{font-style:normal;font-weight:400;letter-spacing:.04em;text-transform:none;color:var(--faint);}
+  .bc-total{margin-left:auto;font-family:var(--mono);font-size:13px;font-weight:700;color:var(--data);
+    font-variant-numeric:tabular-nums;letter-spacing:0;text-transform:none;}
+  .bc-rows{display:grid;gap:12px;}
+  .bc-row{display:grid;grid-template-columns:1fr auto;gap:4px 12px;align-items:baseline;}
+  .bc-name{font-size:13px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .bc-name.guess{color:var(--faint);font-style:italic;}
+  .bc-usd{font-family:var(--mono);font-size:14px;font-weight:700;color:var(--data);font-variant-numeric:tabular-nums;}
+  .bc-bar{grid-column:1/-1;height:2px;background:var(--line);position:relative;}
+  .bc-fill{position:absolute;left:0;top:0;height:2px;background:var(--teal);transition:width var(--t-slow);}
+  .bc-row.over .bc-fill{background:var(--deny);} .bc-row.over .bc-usd{color:var(--deny);}
+  .bc-row.near .bc-fill{background:var(--esc);}
+  .bc-cap{grid-column:1/-1;display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;color:var(--faint);}
+  .bc-cap input{font-family:var(--mono);font-size:11px;width:6ch;background:none;border:none;
+    border-bottom:1px solid var(--line);color:var(--ink);padding:1px 0;font-variant-numeric:tabular-nums;}
+  .bc-cap input:focus{outline:none;border-bottom-color:var(--teal);}
+  .bc-note{font-size:11px;line-height:1.5;color:var(--faint);margin-top:14px;}
   .fader{margin-bottom:22px;}
   .fader:last-of-type{margin-bottom:4px;}
   .f-top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:10px;}
@@ -507,6 +529,12 @@
           <input class="f-r" type="range" id="rRetry" min="0" max="30" step="1" value="6" aria-label="Upstream errors per minute before asking">
         </div>
 
+        <div class="byclient" id="byClient" hidden>
+          <div class="bc-h">By client <em>this month</em>
+            <span class="bc-total" id="bcTotal"></span></div>
+          <div class="bc-rows" id="bcRows"></div>
+          <p class="bc-note">Set a monthly cap on any client and it stops on its own when it reaches it. The others carry on.</p>
+        </div>
         <div class="spend-note" id="spendNote"></div>
       </div>
       <div class="con-col">
@@ -973,6 +1001,43 @@
   // Offer to name folders once there are at least two unnamed ones. One is not
   // a client list, it is just where you work.
   let splitOff = false;
+  // A row per client, biggest first, with its share of the month and its cap.
+  // Only drawn when there is more than one, because a single client splitting
+  // into one row is a chart of nothing.
+  let capT=null, capBusy=0;
+  function renderByClient(c){
+    const box=$('byClient'); if(!box) return;
+    const by=(c && c.byClient) || {}, names=Object.keys(by);
+    if(names.length<2){ box.hidden=true; return; }
+    if(Date.now()-capBusy < 2500) return;      // do not redraw a cap being typed
+    const limits=(c && c.clientLimits) || {};
+    const total=names.reduce((t,k)=>t+by[k],0);
+    const max=Math.max(...names.map(k=>by[k]),0.0001);
+    $('bcTotal').textContent=money(total);
+    $('bcRows').innerHTML=names.sort((a,b)=>by[b]-by[a]).map(k=>{
+      const spent=by[k], cap=+limits[k]||0, guess=k[0]==='?';
+      const pct=spent/max*100;                       // always share of the month
+      const cls=cap>0&&spent>=cap ? ' over' : cap>0&&spent>=cap*0.8 ? ' near' : '';
+      const label=guess?k.slice(1):k;
+      return `<div class="bc-row${cls}">
+        <span class="bc-name${guess?' guess':''}" title="${guess?'guessed from the folder name, not confirmed':''}">${label}${guess?' (unconfirmed)':''}</span>
+        <span class="bc-usd">$${spent.toFixed(2)}</span>
+        <div class="bc-bar"><div class="bc-fill" style="width:${pct}%"></div></div>
+        <div class="bc-cap">cap $<input data-client="${k}" value="${cap||''}" placeholder="none" aria-label="Monthly cap for ${label}">
+          <span>a month${cap>0?' \u00b7 '+Math.round(spent/cap*100)+'% used'+(spent>=cap?', stopped':''):''}</span></div>
+      </div>`;
+    }).join('');
+    box.querySelectorAll('.bc-cap input').forEach(i=>{
+      i.oninput=()=>{ capBusy=Date.now(); clearTimeout(capT); capT=setTimeout(()=>{
+        const limits={};
+        box.querySelectorAll('.bc-cap input').forEach(x=>{ const v=+x.value||0; if(v>0) limits[x.dataset.client]=v; });
+        if(LIVE) fetch('/clients',{method:'POST',headers:{'content-type':'application/json'},
+          body:JSON.stringify({clients:{},limits})}).catch(()=>{});
+      },600); };
+    });
+    box.hidden=false;
+  }
+
   function renderSplit(c){
     const box=$('split'); if(!box || splitOff) return;
     const un = c && c.unmapped ? Object.entries(c.unmapped) : [];
@@ -1156,7 +1221,7 @@
       if(typeof c.retryLimit==='number') setFader('rRetry',c.retryLimit);
       if(typeof c.dollars==='number') setFader('rDollars',c.dollars);
       if(typeof c.dailyLimit==='number') setFader('rDay',c.dailyLimit);
-      renderSplit(c);
+      renderSplit(c); renderByClient(c);
       if(typeof c.fleetBurn==='number'){ fleetBurn=c.fleetBurn;
         const fb=$('fleetBurn'); fb.textContent = c.fleetBurn>0 ? money(c.fleetBurn)+'/min' : 'nothing';
         const mb=$('mBurn'); mb.textContent = c.fleetBurn>0 ? money(c.fleetBurn)+'/min' : 'nothing';
