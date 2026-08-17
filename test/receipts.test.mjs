@@ -45,13 +45,18 @@ console.log('receipts survive a restart and fail loudly on edits and deletions o
 {
   const { spawn } = await import('node:child_process');
   const home = mkdtempSync(join(tmpdir(), 'gov-conc-'));
-  const port = 4199;
+  const port = 47311;   // unlikely to collide with anything else on the machine
   const gov = spawn(process.execPath, ['src/governor.mjs', 'start', '--no-open'],
     { env: { ...process.env, HOME: home, GOVERNOR_PORT: String(port) }, stdio: 'ignore' });
   const up = async () => { for (let i = 0; i < 60; i++) {
-    try { await fetch(`http://localhost:${port}/verify`); return true; } catch { await new Promise(r => setTimeout(r, 100)); } } return false; };
+    try {
+      const j = await (await fetch(`http://localhost:${port}/verify`)).json();
+      if (typeof j.ok === 'boolean') return true;          // it is ours, not a squatter
+      return false;
+    } catch { await new Promise(r => setTimeout(r, 100)); }
+  } return false; };
   try {
-    assert(await up(), 'the governor did not come up');
+    assert(await up(), `the governor did not come up on ${port}, or something else is listening there`);
     await Promise.all(Array.from({ length: 40 }, (_, i) => fetch(`http://localhost:${port}/decide`, {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ agent: 'c' + i, deltaTokens: 1000, tool: 'Read', action: 'Read:f' + i, model: 'claude-opus-5' }),

@@ -83,48 +83,79 @@
      all "how much", and because a stepped fader cannot land you on $37.
      Motion budget per the craft rules: 100ms on hover and commit, nothing on
      the thumb itself, which has to track the finger exactly. */
+  /* Owner console.
+     Two columns: the numbers on the left as faders, the on/off decisions on
+     the right. The model sits above everything because it prices it. Every
+     control carries its own explanation behind a ? rather than a paragraph
+     under it -- six standing paragraphs is what made this read as a wall.
+     Motion budget per the craft rules: 100ms, and nothing on the handle,
+     which has to track the finger exactly. */
   .console{margin:40px 0 0;background:var(--panel);border:1px solid var(--line);border-radius:10px;}
-  .con-h{display:flex;align-items:center;gap:14px;padding:15px 18px 13px;border-bottom:1px solid var(--lineS);flex-wrap:wrap;}
-  .con-t{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);font-weight:400;margin:0;}
+  .con-h{display:flex;align-items:center;gap:14px;padding:16px 20px 14px;border-bottom:1px solid var(--lineS);flex-wrap:wrap;}
+  .con-t{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);font-weight:400;margin:0;}
   .con-h .who{margin-left:0;}
   .con-h .sw.master{margin-left:auto;}
-  .con-grid{display:grid;grid-template-columns:1.3fr 1fr;gap:0;}
-  .con-col{padding:16px 18px 18px;min-width:0;}
+  .con-grid{display:grid;grid-template-columns:1.25fr 1fr;gap:0;}
+  .con-col{padding:18px 20px 20px;min-width:0;}
   .con-col+.con-col{border-left:1px solid var(--lineS);}
-  .col-h{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);margin:0 0 14px;}
-  .col-h.sub{margin-top:22px;padding-top:16px;border-top:1px solid var(--lineS);}
+  .col-h{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);margin:0 0 16px;}
+  .col-h.sub{margin-top:30px;padding-top:18px;border-top:1px solid var(--lineS);}
   .col-h em{font-style:normal;letter-spacing:.04em;text-transform:none;color:#3E4854;margin-left:8px;}
 
-  .fader{padding:0 0 15px;margin-bottom:15px;border-bottom:1px solid var(--lineS);}
-  .fader:last-of-type{border-bottom:none;}
-  .f-top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:9px;}
-  .f-k{font-size:12.5px;color:var(--dim);}
-  .f-v{font-family:var(--mono);font-size:17px;color:var(--ink);font-variant-numeric:tabular-nums;
-    transition:color .1s var(--ease,cubic-bezier(.2,0,0,1));}
+  /* The frame for every figure below it, so it reads first. */
+  .priced-top{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:0 0 22px;padding:10px 12px;
+    background:var(--panel2);border:1px solid var(--lineS);}
+  .priced-top .rl{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);}
+
+  .fader{margin-bottom:22px;}
+  .fader:last-of-type{margin-bottom:4px;}
+  .f-top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:10px;}
+  .f-k{position:relative;font-size:13px;color:var(--dim);}
+  .f-v{font-family:var(--mono);font-size:18px;color:var(--ink);font-variant-numeric:tabular-nums;
+    letter-spacing:-.01em;transition:color .1s cubic-bezier(.2,0,0,1);}
   .fader.live .f-v{color:var(--teal);}
   .f-v.off{color:var(--faint);}
-  .f-sub{font-size:10.5px;line-height:1.5;color:var(--faint);margin-top:9px;}
+  .f-sub{font-size:11px;line-height:1.5;color:var(--faint);margin-top:11px;}
   .f-sub b{color:var(--dim);font-weight:400;font-family:var(--mono);font-variant-numeric:tabular-nums;}
 
-  /* The fader itself. A tall thin marker on a hairline track, the way a real
-     desk marks a level, rather than the usual round handle. */
-  .f-r{-webkit-appearance:none;appearance:none;width:100%;height:18px;background:none;cursor:pointer;display:block;outline:none;}
-  .f-r::-webkit-slider-runnable-track{height:3px;border-radius:2px;
-    background:linear-gradient(var(--teal),var(--teal)) 0/var(--fill,0%) 100% no-repeat,var(--line);}
-  .f-r::-moz-range-track{height:3px;border-radius:2px;background:var(--line);}
-  .f-r::-moz-range-progress{height:3px;border-radius:2px;background:var(--teal);}
-  .f-r::-webkit-slider-thumb{-webkit-appearance:none;width:4px;height:18px;border-radius:1px;
-    background:var(--ink);margin-top:-7.5px;box-shadow:0 0 0 0 rgba(87,196,184,0);transition:box-shadow .1s ease;}
-  .f-r::-moz-range-thumb{width:4px;height:18px;border:none;border-radius:1px;background:var(--ink);}
-  .f-r:hover::-webkit-slider-thumb,.f-r:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 4px rgba(87,196,184,.18);}
-  .f-r:focus-visible{outline:1px solid var(--teal);outline-offset:6px;border-radius:2px;}
+  /* Ask, do not tell. The explanation is one tap away instead of standing
+     under every control competing with the number it describes. */
+  .q{width:14px;height:14px;padding:0;margin-left:5px;vertical-align:1px;background:none;cursor:pointer;
+    border:1px solid var(--line);border-radius:50%;color:var(--faint);font-family:var(--mono);font-size:9px;
+    line-height:12px;transition:color .1s ease,border-color .1s ease;}
+  .q:hover,.q:focus-visible{color:var(--teal);border-color:rgba(87,196,184,.5);outline:none;}
+  .qtip{position:absolute;left:0;top:calc(100% + 8px);z-index:9;width:min(300px,72vw);
+    background:#0A0E13;border:1px solid var(--line);padding:11px 13px;
+    font-size:11.5px;line-height:1.55;color:var(--dim);
+    opacity:0;visibility:hidden;transform:translateY(-3px);
+    transition:opacity .1s ease,transform .1s ease,visibility .1s;}
+  .f-k:hover .qtip,.f-k.open .qtip,.q:focus-visible+.qtip,.qtip:hover{opacity:1;visibility:visible;transform:none;}
+  .f-k.open .q{color:var(--teal);border-color:rgba(87,196,184,.5);}
 
-  .swlist{display:flex;flex-direction:column;gap:9px;align-items:flex-start;margin-bottom:14px;}
-  .segrow{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:9px;}
+  /* The fader. A hairline track with notches at each stop, and a handle that
+     reads as a handle: a filled disc inside a ring, not a coloured blob. */
+  .f-r{-webkit-appearance:none;appearance:none;width:100%;height:20px;background:none;cursor:pointer;display:block;outline:none;}
+  .f-r::-webkit-slider-runnable-track{height:2px;
+    background:linear-gradient(var(--teal),var(--teal)) 0/var(--fill,0%) 100% no-repeat,
+      repeating-linear-gradient(90deg,var(--line) 0 1px,transparent 1px var(--tick,12.5%)),var(--lineS);}
+  .f-r::-moz-range-track{height:2px;background:var(--lineS);}
+  .f-r::-moz-range-progress{height:2px;background:var(--teal);}
+  .f-r::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;
+    background:var(--ink);border:3px solid var(--panel);margin-top:-5.5px;
+    box-shadow:0 0 0 1px var(--line);transition:box-shadow .1s ease,background .1s ease;}
+  .f-r::-moz-range-thumb{width:13px;height:13px;border-radius:50%;background:var(--ink);
+    border:3px solid var(--panel);box-shadow:0 0 0 1px var(--line);}
+  .f-r:hover::-webkit-slider-thumb{box-shadow:0 0 0 1px var(--teal),0 0 0 6px rgba(87,196,184,.12);}
+  .f-r:active::-webkit-slider-thumb{background:var(--teal);box-shadow:0 0 0 1px var(--teal),0 0 0 8px rgba(87,196,184,.16);}
+  .f-r:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 1px var(--teal),0 0 0 6px rgba(87,196,184,.22);}
+
+  .swlist{display:flex;flex-direction:column;gap:11px;align-items:flex-start;margin-bottom:18px;}
+  .swrow{display:flex;align-items:center;gap:2px;}
+  .swrow .f-k{position:relative;line-height:1;}
+  .segrow{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:10px;}
   .segrow .seg-lbl{margin:0;}
-  .priced{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px;padding-top:14px;border-top:1px solid var(--lineS);}
   .con-col .caprow{grid-template-columns:1fr;gap:6px;}
-  .con-col .capnote{margin-top:11px;}
+  .con-col .capnote{margin-top:12px;}
   .console .ungov-banner{margin:0;border-top:1px solid var(--lineS);}
   @media(max-width:900px){
     .con-grid{grid-template-columns:1fr;}
@@ -318,10 +349,23 @@
 
     <div class="con-grid">
       <div class="con-col">
-        <div class="col-h">Limits <em>drag to set</em></div>
+        <!-- The model comes first because it is the frame for every figure
+             below it: $20 is four million tokens on one model and sixteen on
+             another. Setting a limit before saying what it is priced in is
+             the wrong order to ask a person to think in. -->
+        <div class="priced-top">
+          <span class="rl">everything below is priced as</span>
+          <select id="modelSel" class="modelsel" aria-label="Model to price the limits against"></select>
+          <span class="autotag on" id="autoTag">auto-detected</span>
+        </div>
+
+        <div class="col-h">Money</div>
 
         <div class="fader">
-          <div class="f-top"><span class="f-k">spend, per agent</span><span class="f-v" id="vDollars">$20</span></div>
+          <div class="f-top"><span class="f-k">spend, per agent
+            <button class="q" type="button" aria-label="What is this?">?</button>
+            <span class="qtip">The most one agent may spend in a session. It asks you at three quarters of this and stops at all of it. Twenty dollars is a normal working day.</span>
+          </span><span class="f-v" id="vDollars">$20</span></div>
           <input class="f-r" type="range" id="rDollars" min="0" max="8" step="1" value="4" aria-label="Spend limit per agent">
           <div class="translate">
             <div class="tr"><div class="v"><em id="trTime">&mdash;</em></div><div class="k">of agent work</div></div>
@@ -332,54 +376,71 @@
         </div>
 
         <div class="fader">
-          <div class="f-top"><span class="f-k">speed, per agent</span><span class="f-v" id="vBurn">$2/min</span></div>
+          <div class="f-top"><span class="f-k">everything together, a day
+            <button class="q" type="button" aria-label="What is this?">?</button>
+            <span class="qtip">A ceiling across every agent at once. A per-agent limit cannot bound a team: seven agents on a twenty dollar limit can spend a hundred and forty.</span>
+          </span><span class="f-v" id="vDay">off</span></div>
+          <input class="f-r" type="range" id="rDay" min="0" max="7" step="1" value="0" aria-label="Total spend limit per day">
+          <div class="f-sub">Spent so far: <b id="fleetSpent">&mdash;</b></div>
+        </div>
+
+        <div class="col-h sub">Speed</div>
+
+        <div class="fader">
+          <div class="f-top"><span class="f-k">speed, per agent
+            <button class="q" type="button" aria-label="What is this?">?</button>
+            <span class="qtip">Dollars a minute, for one agent. Ordinary work runs about ten to twenty five cents a minute, so this only catches a genuine runaway. A daily cap notices once the day is gone; this notices in the first minute.</span>
+          </span><span class="f-v" id="vBurn">$2/min</span></div>
           <input class="f-r" type="range" id="rBurn" min="0" max="7" step="1" value="2" aria-label="Burn rate limit per agent">
-          <div class="f-sub">Ordinary work runs about $0.10 to $0.25 a minute. A daily cap only notices once the day is gone; this notices in the first.</div>
         </div>
 
         <div class="fader">
-          <div class="f-top"><span class="f-k">speed, everything together</span><span class="f-v" id="vFleetBurn">$10/min</span></div>
+          <div class="f-top"><span class="f-k">speed, everything together
+            <button class="q" type="button" aria-label="What is this?">?</button>
+            <span class="qtip">The same measure across the whole fleet. This is the one that catches a session fanning out into dozens of subagents, which is how people lose four figures in an afternoon.</span>
+          </span><span class="f-v" id="vFleetBurn">$10/min</span></div>
           <input class="f-r" type="range" id="rFleetBurn" min="0" max="6" step="1" value="2" aria-label="Burn rate limit across all agents">
           <div class="f-sub">Burning right now: <b id="fleetBurn">nothing</b></div>
         </div>
 
         <div class="fader">
-          <div class="f-top"><span class="f-k">new agents a minute</span><span class="f-v" id="vFanout">8</span></div>
+          <div class="f-top"><span class="f-k">new agents a minute
+            <button class="q" type="button" aria-label="What is this?">?</button>
+            <span class="qtip">A team that starts over an hour is a choice. Eight appearing inside a minute is an orchestrator spawning orchestrators, and that is exponential.</span>
+          </span><span class="f-v" id="vFanout">8</span></div>
           <input class="f-r" type="range" id="rFanout" min="0" max="30" step="1" value="8" aria-label="New agents per minute before asking">
-          <div class="f-sub">A team that starts over an hour is a choice. Eight appearing inside a minute is an orchestrator spawning orchestrators.</div>
         </div>
 
         <div class="fader">
-          <div class="f-top"><span class="f-k">errors before it stops retrying</span><span class="f-v" id="vRetry">6</span></div>
+          <div class="f-top"><span class="f-k">errors before it stops retrying
+            <button class="q" type="button" aria-label="What is this?">?</button>
+            <span class="qtip">A rate-limited call fails cheaply. The retry after it does not. This stops a script that is paying to be told no.</span>
+          </span><span class="f-v" id="vRetry">6</span></div>
           <input class="f-r" type="range" id="rRetry" min="0" max="30" step="1" value="6" aria-label="Upstream errors per minute before asking">
-          <div class="f-sub">A rate-limited call fails cheaply. The retry after it does not.</div>
         </div>
 
-        <div class="fader">
-          <div class="f-top"><span class="f-k">everything together, a day</span><span class="f-v" id="vDay">off</span></div>
-          <input class="f-r" type="range" id="rDay" min="0" max="7" step="1" value="0" aria-label="Total spend limit per day">
-          <div class="f-sub">Spent so far: <b id="fleetSpent">&mdash;</b></div>
-        </div>
-
-        <div class="priced"><span class="rl">priced as</span>
-          <select id="modelSel" class="modelsel" aria-label="Model to price the limit against"></select>
-          <span class="autotag on" id="autoTag">follows your agent</span>
-        </div>
         <div class="spend-note" id="spendNote"></div>
       </div>
-
       <div class="con-col">
-        <div class="col-h">Checks <em>what it does when one trips</em></div>
+        <div class="col-h">Checks</div>
         <div class="swlist">
-          <button class="sw on" id="swBudget"><span class="knob"></span><span>Stop at the limit</span></button>
-          <button class="sw on" id="swLoop"><span class="knob"></span><span>Stop repeat loops</span></button>
-          <button class="sw on" id="swRules"><span class="knob"></span><span>Capability checks</span></button>
-          <button class="sw on" id="swModel"><span class="knob"></span><span>Match model to task</span></button>
+          <div class="swrow"><button class="sw on" id="swBudget"><span class="knob"></span><span>Stop at the limit</span></button>
+            <span class="f-k"><button class="q" type="button" aria-label="What is this?">?</button>
+            <span class="qtip">Enforces the money and speed limits on the left. Turn it off and agents run uncapped, though everything is still recorded.</span></span></div>
+          <div class="swrow"><button class="sw on" id="swLoop"><span class="knob"></span><span>Stop repeat loops</span></button>
+            <span class="f-k"><button class="q" type="button" aria-label="What is this?">?</button>
+            <span class="qtip">Stops an agent repeating the same action over and over, including the alternating kind that a simple streak check never catches.</span></span></div>
+          <div class="swrow"><button class="sw on" id="swRules"><span class="knob"></span><span>Capability checks</span></button>
+            <span class="f-k"><button class="q" type="button" aria-label="What is this?">?</button>
+            <span class="qtip">Judges what an agent may DO, listed below. These fire even on a full budget, because a dangerous command is usually a cheap one.</span></span></div>
+          <div class="swrow"><button class="sw on" id="swModel"><span class="knob"></span><span>Match model to task</span></button>
+            <span class="f-k"><button class="q" type="button" aria-label="What is this?">?</button>
+            <span class="qtip">Reads the task the person typed and says when the model looks wrong for it, in either direction. Advice only in Claude Code, which cannot switch models from a hook.</span></span></div>
         </div>
-        <div class="segrow"><span class="seg-lbl">when it nears the limit</span>
+        <div class="segrow"><span class="seg-lbl">when it nears the limit</span><span class="f-k"><button class="q" type="button" aria-label="What is this?">?</button><span class="qtip">At three quarters of the spend limit, either pause and ask you, or stop the agent outright without asking.</span></span>
           <div class="seg"><button class="seg-b on" id="segEsc">Ask me</button><button class="seg-b dm" id="segDeny">Just stop it</button></div>
         </div>
-        <div class="segrow"><span class="seg-lbl">on a model mismatch</span>
+        <div class="segrow"><span class="seg-lbl">on a model mismatch</span><span class="f-k"><button class="q" type="button" aria-label="What is this?">?</button><span class="qtip">Tell me leaves the choice to you. Switch it rewrites the request to the cheaper model, and only ever downgrades. That works on the API route, where the governor owns the request.</span></span>
           <div class="seg"><button class="seg-b on" id="segSay">Tell me</button><button class="seg-b dm" id="segSwap">Switch it</button></div>
         </div>
 
@@ -725,7 +786,7 @@
     sub.innerHTML=plural(n,'agent')+' working, <b>'+money(fleetSpend)+'</b> spent so far'
       + (fleetBurn>0 ? ', burning <b>'+money(fleetBurn)+' a minute</b>' : '') + '.';
   }
-  let fleetSpend=0, fleetBurn=0;
+  let fleetSpend=0, fleetBurn=0, lastSpend=null;
 
   function bump(v){ if(v==='allow')allow++;else if(v==='deny')deny++;else if(v==='escalate')esc++; $('mAllow').textContent=allow;$('mDeny').textContent=deny;$('mEsc').textContent=esc; }
   function onDecision(d){
@@ -809,6 +870,8 @@
     // Fill the track behind the marker. Firefox has ::-moz-range-progress and
     // needs nothing; WebKit does not, hence the variable.
     r.style.setProperty('--fill', (r.value-r.min)/(r.max-r.min)*100+'%');
+    // Notches on the track, one per stop, so a stepped fader looks stepped.
+    r.style.setProperty('--tick', 100/(r.max-r.min)+'%');
     out.textContent = sc.fmt(v);
     out.classList.toggle('off', !v && id!=='rDollars');
     return v;
@@ -818,6 +881,12 @@
   // been sent, and the fader springs back under your finger.
   const touched = {};
   const recentlyTouched = id => (Date.now() - (touched[id] || 0)) < 2500;
+
+  document.addEventListener('click', e => {
+    const q = e.target.closest('.q');
+    document.querySelectorAll('.f-k.open').forEach(k => { if (!q || k !== q.parentElement) k.classList.remove('open'); });
+    if (q) { e.preventDefault(); q.parentElement.classList.toggle('open'); }
+  });
 
   function commitFader(id, live){
     touched[id] = Date.now();
@@ -880,7 +949,13 @@
         lt.textContent=(rw.measured?'':'~')+human(rw.mins)+' left';
       }
     }
-    fleetTokens=total; fleetSpend=spend;
+    fleetTokens=total;
+    // Dollars per minute from what the fleet actually spent since the last
+    // tick. In live mode the server's figure replaces this a moment later.
+    if(lastSpend!==null){ const perMin=Math.max(0,(spend-lastSpend))*30;
+      if(!LIVE){ fleetBurn=perMin;
+        $('mBurn').textContent = perMin>0 ? money(perMin)+'/min' : 'nothing'; } }
+    lastSpend=spend; fleetSpend=spend;
     if(total>0 && !firstSeen){ firstSeen=Date.now(); baseTokens=total; }
     if(leadModel) noticeModel(leadModel);
     $('mSpent').textContent=money(spend);
