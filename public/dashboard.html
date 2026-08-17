@@ -296,7 +296,11 @@
   .e-copy{flex:none;font-family:var(--mono);font-size:10.5px;font-weight:600;color:var(--ink);background:var(--panel2);border:1px solid var(--line);border-radius:0;padding:5px 11px;cursor:pointer;} .e-copy:hover{border-color:var(--teal);color:var(--teal);}
   .e-foot{font-family:var(--mono);font-size:11px;color:var(--faint);margin-top:4px;}
   .agent{position:relative;background:var(--panel);overflow:hidden;transition:background var(--t-slow);}
-  .agent.warn{border-color:rgba(212,167,44,.5);} .agent.esc{border-color:rgba(212,167,44,.8);box-shadow:0 0 0 1px rgba(212,167,44,.3);} .agent.grounded{border-color:rgba(229,83,75,.5);opacity:.82;} .agent.free{border-color:rgba(229,83,75,.35);}
+  /* State lives with the other state rules further down. These set a
+     border-color on cards that stopped having their own border when the fleet
+     became a shared-hairline grid, and the esc box-shadow here contradicted
+     the one that actually renders. */
+  .agent.grounded{opacity:.82;}
   .a-top{padding:16px 16px 10px;} .a-name{font-family:var(--mono);font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:7px;}
   .a-name .pulse{width:7px;height:7px;border-radius:50%;background:var(--allow);box-shadow:0 0 8px var(--allow);flex:none;} .warn .pulse{background:var(--esc);box-shadow:0 0 8px var(--esc);} .esc .pulse{background:var(--esc);animation:blink .8s infinite;} .grounded .pulse{background:var(--deny);box-shadow:none;} .free .pulse{background:var(--deny);animation:blink .5s infinite;}
   @keyframes blink{50%{opacity:.25;}}
