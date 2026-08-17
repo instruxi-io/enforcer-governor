@@ -103,6 +103,15 @@ function snapshot() {
 // the lines have to land in decision order too. Concurrent appends do not
 // guarantee that: twelve agents deciding at once was enough to interleave the
 // file and break verification of a chain that was perfectly correct in memory.
+// Persist what the human chose, so a restart cannot quietly un-cap them, or
+// quietly re-enable checks they switched off.
+async function saveConfig() {
+  try {
+    await mkdir(DATA_DIR, { recursive: true });
+    await writeFile(SAVED_FILE, JSON.stringify(Object.fromEntries(SAVED_KEYS.map(k => [k, CONFIG[k]])), null, 2));
+  } catch {}
+}
+
 let writeQueue = Promise.resolve();
 function persist(r) {
   const line = JSON.stringify({ ...r.entry, hash: r.hash }) + '\n';
@@ -281,6 +290,11 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'POST' && path === '/release') {
     const { agent } = JSON.parse((await readBody(req)).toString() || '{}');
     const r = release(state, agent || 'default');
+    // This decision goes in the chain like any other, so it has to reach the
+    // FILE like any other. Without this, resuming an agent left a link that
+    // existed in memory and not on disk, and every later line failed to
+    // verify: the tool reported its own record as tampered with.
+    if (r) await persist(r);
     broadcast('decision', r); return json(res, 200, r || { error: 'no such agent' });
   }
   if (req.method === 'POST' && path === '/kill') {
@@ -343,6 +357,24 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { 'content-type': 'text/csv; charset=utf-8',
       'content-disposition': `attachment; filename="${name}"` });
     return res.end(rows.join('\n') + '\n');
+  }
+
+  if (req.method === 'POST' && path === '/uninstall') {
+    const out = [];
+    try {
+      const { uninstall } = await import('./install.mjs');
+      for (const scope of [false, true]) {           // this project, then global
+        const f = uninstall(scope);
+        if (f) out.push(f);
+      }
+    } catch (e) { return json(res, 500, { ok: false, error: e.message }); }
+    // Stop enforcing immediately as well. Removing the hook only takes effect
+    // on the next session, and someone pressing this wants it off NOW.
+    CONFIG.budgetOn = false; CONFIG.loopOn = false; CONFIG.rulesOn = false;
+    for (const a of Object.values(state.agents)) { a.status = 'active'; a.escalated = false; }
+    saveConfig();
+    broadcast('snapshot', snapshot());
+    return json(res, 200, { ok: true, files: out });
   }
 
   if (req.method === 'GET' && path === '/verify') {

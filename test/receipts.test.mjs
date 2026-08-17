@@ -66,3 +66,32 @@ console.log('receipts survive a restart and fail loudly on edits and deletions o
     console.log('the chain holds under concurrent decisions ok');
   } finally { gov.kill(); }
 }
+
+// Every route that records a decision must also write it. Resuming an agent
+// wrote to the in-memory chain and not to the file, so the file's next line
+// hashed against a predecessor that was not there and /verify called the
+// whole record broken. The tool accusing its own receipts is the worst
+// possible failure of the one claim it makes.
+{
+  const { spawn } = await import('node:child_process');
+  const home = mkdtempSync(join(tmpdir(), 'gov-lifecycle-'));
+  const port = 47312;
+  const gov = spawn(process.execPath, ['src/governor.mjs', 'start', '--no-open'],
+    { env: { ...process.env, HOME: home, GOVERNOR_PORT: String(port) }, stdio: 'ignore' });
+  const post = (p, b) => fetch(`http://localhost:${port}${p}`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(b) });
+  try {
+    for (let i = 0; i < 60; i++) {
+      try { const j = await (await fetch(`http://localhost:${port}/verify`)).json(); if (typeof j.ok === 'boolean') break; }
+      catch { await new Promise(r => setTimeout(r, 100)); }
+    }
+    // Walk an agent through every route that records: decide, kill, release, decide.
+    await post('/decide', { agent: 'a', tokens: 100, tool: 'Read', action: 'Read:x', model: 'claude-opus-5' });
+    await post('/kill', { agent: 'a' });
+    await post('/release', { agent: 'a' });
+    await post('/decide', { agent: 'a', tokens: 200, tool: 'Read', action: 'Read:y', model: 'claude-opus-5' });
+    const v = await (await fetch(`http://localhost:${port}/verify`)).json();
+    assert(v.ok, `the chain broke after a normal kill and resume: ${JSON.stringify(v)}`);
+    console.log('the chain survives the whole agent lifecycle ok');
+  } finally { gov.kill(); }
+}

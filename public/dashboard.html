@@ -173,6 +173,16 @@
   .con-col .caprow{grid-template-columns:1fr;gap:6px;}
   .con-col .capnote{margin-top:12px;}
   .console .ungov-banner{margin:0;border-top:1px solid var(--lineS);}
+  .exit{padding:16px;border-top:1px solid var(--lineS);}
+  .exit-t{font-family:var(--sans);font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);}
+  .exit-p{font-size:12.5px;line-height:1.6;color:var(--faint);margin:8px 0 12px;max-width:70ch;}
+  .exitbtn{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--deny);background:none;border:1px solid rgba(255,71,87,.4);padding:8px 14px;cursor:pointer;
+    transition:color var(--t-fast),background var(--t-fast),border-color var(--t-fast);}
+  .exitbtn:hover{color:var(--ink);background:rgba(255,71,87,.14);border-color:var(--deny);}
+  .exitbtn:focus-visible{outline:2px solid var(--deny);outline-offset:2px;}
+  .exitbtn.armed{color:var(--ink);background:rgba(255,71,87,.18);border-color:var(--deny);}
+  .exit-done{font-family:var(--mono);font-size:11.5px;color:var(--allow);margin-left:12px;line-height:1.6;}
   @media(max-width:900px){
     .con-grid{grid-template-columns:1fr;}
     .con-col+.con-col{border-left:none;border-top:1px solid var(--lineS);}
@@ -480,6 +490,15 @@
       </div>
     </div>
     <div class="ungov-banner">CHECKS ARE OFF &middot; your agents can spend without limit, and nothing is being recorded.</div>
+    <!-- The way out. Somebody who installed this and cannot work out how to
+         get rid of it is the worst outcome this tool has, and "read the
+         README" is not an answer to it. -->
+    <div class="exit">
+      <div class="exit-t">Want it gone?</div>
+      <p class="exit-p">This removes Enforcer from your agent's settings and stops every check straight away. Nothing you have already recorded is deleted, and your agents carry on working normally. You can put it back any time with one command.</p>
+      <button class="exitbtn" id="exitBtn">Remove Enforcer</button>
+      <span class="exit-done" id="exitDone"></span>
+    </div>
   </section>
 </div>
 
@@ -861,6 +880,31 @@
   async function killAgent(id){ if(LIVE){ try{ await fetch('/kill',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({agent:id})}); }catch{} } else demoKill(id); }
 
   // ── Switches ──
+  // Two presses, because it edits a settings file, and one line back out so
+  // nobody is left wondering whether it actually worked.
+  const exitBtn=$('exitBtn');
+  if(exitBtn) exitBtn.onclick=async()=>{
+    if(!exitBtn.classList.contains('armed')){
+      exitBtn.classList.add('armed');
+      exitBtn.textContent='Press again to remove it';
+      setTimeout(()=>{ if(exitBtn.classList.contains('armed')){
+        exitBtn.classList.remove('armed'); exitBtn.textContent='Remove Enforcer'; } },6000);
+      return;
+    }
+    exitBtn.disabled=true; exitBtn.textContent='Removing';
+    try{
+      const r=await (await fetch('/uninstall',{method:'POST'})).json();
+      exitBtn.textContent='Removed';
+      $('exitDone').innerHTML = r.ok
+        ? 'Done. Checks are off now. Start a new session in your agent and it will not be watched. '
+          + 'To close this dashboard, press Ctrl+C in the terminal you started it in.'
+        : 'Could not edit the settings file. Run <b>npx enforcer-governor uninstall-hook</b> in your project folder instead.';
+    }catch{
+      exitBtn.disabled=false; exitBtn.textContent='Remove Enforcer';
+      $('exitDone').innerHTML='The governor is not answering. Press Ctrl+C in its terminal, then run <b>npx enforcer-governor uninstall-hook</b>.';
+    }
+  };
+
   function pushConfig(){ if(!LIVE)return; fetch('/config',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({budgetOn:policy.budget,loopOn:policy.loop,softAction:policy.soft,adviseModel:policy.advise,enforceModel:policy.enforceModel})}).catch(()=>{}); }
   function syncSw(){ $('swBudget').classList.toggle('dis',!policy.enforcer); $('swLoop').classList.toggle('dis',!policy.enforcer); document.querySelectorAll('.seg').forEach(e=>e.style.opacity=policy.enforcer?'1':'.4'); document.body.classList.toggle('ungoverned',!policy.enforcer); }
   // Master switch. It MUST reach the server: turning it off only in the browser

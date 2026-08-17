@@ -117,11 +117,24 @@ async function main() {
   const of = limit ? `${spent} of its ${limit} limit` : `${spent} so far`;
   const dash = `http://localhost:${PORT}`;
 
+  // A refusal and a stop are different events and must not read the same. A
+  // capability refusal blocks THIS action and the agent carries on; offering
+  // to "raise the limit" there sends someone to a control that will not help.
+  const capability = !!(r.entry && r.entry.rule);
   if (r.verdict === 'deny') {
+    if (capability) {
+      return emit('deny', `Enforcer refused this action: it is ${r.reason}. `
+        + `The agent is not stopped and can carry on with something else. `
+        + `To allow this kind of action, change the rule at ${dash}`);
+    }
     return emit('deny', `Enforcer stopped this agent: ${r.reason}. It has spent ${of}. `
       + `Raise the limit or resume it at ${dash}`);
   }
   if (r.verdict === 'escalate') {
+    if (capability) {
+      return emit('ask', `Enforcer wants you to confirm: this action would ${r.reason.replace(/^wants to /, '')}. `
+        + `Allow it this once?`);
+    }
     return emit('ask', `Enforcer is checking with you: ${r.reason}. It has spent ${of}. `
       + `Allow it to keep going?`);
   }
