@@ -498,7 +498,7 @@
             <span class="qtip">Judges what an agent may DO, listed below. These fire even on a full budget, because a dangerous command is usually a cheap one.</span></span></div>
           <div class="swrow"><button class="sw on" id="swModel"><span class="knob"></span><span>Match model to task</span></button>
             <span class="f-k"><button class="q" type="button" aria-label="What is this?">?</button>
-            <span class="qtip">Reads the task the person typed and says when the model looks wrong for it, in either direction. Advice only in Claude Code, which cannot switch models from a hook.</span></span></div>
+            <span class="qtip">Reads the task the person typed and says when the model looks wrong for it, in either direction. Where the governor sits in front of a coding agent as a hook it can only advise, because a hook cannot change a model. On the API route it can switch it for you.</span></span></div>
         </div>
         <div class="segrow"><span class="seg-lbl">when it nears the limit</span><span class="f-k"><button class="q" type="button" aria-label="What is this?">?</button><span class="qtip">At three quarters of the spend limit, either pause and ask you, or stop the agent outright without asking.</span></span>
           <div class="seg"><button class="seg-b on" id="segEsc">Ask me</button><button class="seg-b dm" id="segDeny">Just stop it</button></div>
@@ -692,7 +692,7 @@
         ? 'Timing is measured from what your agents are actually burning.'
         : 'Timing is an estimate until an agent runs, then it uses the real rate.')
       + ' Priced at ' + prov + '\u2019s list rates for ' + (m.label || modelKey) + '.'
-      + '<br><b>On a Claude or ChatGPT subscription you are not billed per token</b>, so treat these as equivalent API cost, not a bill.';
+      + '<br><b>On a flat subscription you are not billed per token</b>, so treat these as equivalent API cost, not a bill.';
   }
 
   // Render the rules the SERVER is enforcing, not a hardcoded copy -- if they
@@ -1049,7 +1049,7 @@
     if(!policy.advise){ policy.enforceModel=false; $('segSwap').classList.remove('on'); $('segSay').classList.add('on'); }
     pushConfig(); };
   // "Switch it" only does anything on the proxy path, where we own the request.
-  // A Claude Code hook cannot change the model, so there it stays advice.
+  // A coding-agent hook cannot change the model, so on that route it stays advice.
   $('segSay').onclick=()=>{policy.enforceModel=false;$('segSay').classList.add('on');$('segSwap').classList.remove('on');pushConfig();};
   $('segSwap').onclick=()=>{policy.enforceModel=true;$('segSwap').classList.add('on');$('segSay').classList.remove('on');pushConfig();};
 
@@ -1066,7 +1066,7 @@
       const c=cards[k], t=c.lastTokens||0;
       total+=t; spend+=usdForAgent(t,c.model);
       // Follow the biggest spender, not whoever reported last. With a mixed
-      // Claude/GPT fleet, last-wins makes the picker flip back and forth on
+      // mixed fleet, last-wins makes the picker flip back and forth on
       // screen, which reads as broken.
       if(t>max){ max=t; leadModel=c.model||''; }
       // Refresh each card's time-left from the SAME clock as the header. Left
@@ -1136,17 +1136,18 @@
     es.onerror=()=>{}; // reconnects automatically
     if(!Object.keys(cards).length) $('fleet').innerHTML=`<div class="empty">
       <div class="e-live"><span class="e-dot"></span>Connected. The governor is running and watching.</div>
-      <div class="e-what"><b>What this is.</b> Claude Code spends real money as it works &mdash; every file it reads, every command it runs. Enforcer watches that spend as it happens and stops the agent at a limit you set, so a job that goes wrong costs you a coffee instead of a week's budget. Nothing about how you use Claude Code changes.</div>
-      <div class="e-h">Nothing has happened yet. Three steps:</div>
+      <div class="e-what"><b>What this is.</b> An agent spends real money as it works, every file it reads and every command it runs. Enforcer watches that spend as it happens and stops the agent at a limit you set, so a job that goes wrong costs you a coffee instead of a week's budget. It works the same for Claude, ChatGPT, Gemini, Grok and anything running on your own machine, and nothing about how you work changes.</div>
+      <div class="e-h">Nothing has happened yet. Set a limit, then connect an agent.</div>
       <ol class="e-steps">
-        <li><b>Set your spend limit.</b><span>Scroll down to Spend limit: type a dollar amount or tap a preset. It shows what that buys and roughly how long an agent can work on it. $20 is a normal day.</span></li>
-        <li><b>Open Claude Code in this folder.</b><span>If it is already open, quit it and open it again. It only picks up the governor when it starts.</span></li>
-        <li><b>Ask it to do anything.</b><span>Every action appears here live. At 75% of your limit it stops and asks you. At 100% it stops.</span></li>
+        <li><b>Set your spend limit.</b><span>Scroll down to the console: drag the first fader or type a figure. It shows what that buys and roughly how long an agent can work on it. $20 is a normal day.</span></li>
+        <li><b>Connect an agent, either way.</b><span>Anything with an API: point it at this address instead of the provider, using the line below. A coding agent with hook support, such as Claude Code: run <code>npx enforcer-governor install-hook</code> in your project, then restart it so it picks the governor up.</span></li>
+        <li><b>Give it something to do.</b><span>Every action appears here live. At 75% of your limit it stops and asks you. At 100% it stops.</span></li>
       </ol>
-      <div class="e-alt">Not using Claude Code? Point any agent at the governor instead of the provider:
+      <div class="e-alt">The address to point any agent at:
         <div class="e-cmd"><code>export OPENAI_BASE_URL=${location.origin}/v1</code><button class="e-copy" data-c="export OPENAI_BASE_URL=${location.origin}/v1">Copy</button></div>
+        <div class="e-cmd"><code>export ANTHROPIC_BASE_URL=${location.origin}</code><button class="e-copy" data-c="export ANTHROPIC_BASE_URL=${location.origin}">Copy</button></div>
       </div>
-      <div class="e-foot">To stop governing at any time: <code>npx enforcer-governor uninstall-hook</code></div>
+      <div class="e-foot">Want it gone? Scroll to the bottom of the console and press Remove Enforcer. Nothing is deleted and your agents carry on as normal.</div>
     </div>`;
     document.querySelectorAll('.e-copy').forEach(b=>b.onclick=async()=>{ try{await navigator.clipboard.writeText(b.dataset.c);b.textContent='Copied';}catch{b.textContent='Select it';} setTimeout(()=>b.textContent='Copy',2000); });
     return;

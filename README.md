@@ -2,7 +2,7 @@
 
 [![ci](https://github.com/instruxi-io/enforcer-governor/actions/workflows/ci.yml/badge.svg)](https://github.com/instruxi-io/enforcer-governor/actions/workflows/ci.yml)
 
-**Stop your AI agents from wasting your money. Free, open, runs on your own computer.**
+**Stop your AI agents from wasting your money. Any agent, any provider. Free, open, runs on your own computer.**
 
 AI agents burn tokens, and tokens are money. They get stuck in loops, repeat work, and blow through budgets, and every existing tool just *reports* the damage afterwards. Enforcer Governor is a guard that stands in front of your agents and answers one question before every action:
 
@@ -74,29 +74,21 @@ npx --yes enforcer-governor start
 
 The first run downloads it (a few seconds), then **your dashboard opens in the browser by itself**. Leave this terminal running; it is the guard. The dashboard tells you what to do next. Stop it any time with Ctrl+C, and your agents keep working normally.
 
-### Govern Claude Code
+### Route one: point any agent at it
 
-In a **second** terminal, go into the project you want watched and run:
-
-```bash
-npx --yes enforcer-governor install-hook
-```
-
-Then start a **new** Claude Code session in that project. That is all. From now on, every action Claude Code takes is checked first: over budget and it is stopped, near the limit and it asks you. Add `--global` to the command to watch every project at once.
-
-### Govern any other agent (ChatGPT, Gemini, OpenAI or Anthropic SDKs, custom agents)
-
-Point the agent's API base URL at the governor:
+The general case. Anything that talks to an API, on any provider, in any language.
 
 ```bash
-# OpenAI-based agents
+# OpenAI-shaped agents (also Gemini, Grok, Groq, Together, most local runtimes)
 export OPENAI_BASE_URL=http://localhost:4000/v1
 
-# Anthropic SDK agents
+# Anthropic-shaped agents
 export ANTHROPIC_BASE_URL=http://localhost:4000
 ```
 
-Gemini, Grok, Groq, Together and anything else that speaks the OpenAI chat-completions shape works through the same route -- tell the governor where to forward:
+Every request now passes through the governor. It meters real usage from each response and refuses (HTTP 429) once an agent is over budget or grounded. Tag requests per agent with an `x-enforcer-agent: <name>` header so they show up separately on the dashboard.
+
+For anything that speaks the OpenAI chat-completions shape but lives elsewhere, tell the governor where to forward:
 
 ```bash
 # Gemini
@@ -105,9 +97,22 @@ GOVERNOR_OPENAI_URL=https://generativelanguage.googleapis.com/v1beta/openai/chat
 
 # Grok
 GOVERNOR_OPENAI_URL=https://api.x.ai/v1/chat/completions npx --yes enforcer-governor start
+
+# a local runtime
+GOVERNOR_OPENAI_URL=http://localhost:11434/v1/chat/completions npx --yes enforcer-governor start
 ```
 
-Every request now passes through the governor. It meters real usage from each response and refuses (HTTP 429) once an agent is over budget or grounded. Tag requests per agent with an `x-enforcer-agent: <name>` header so they show up separately on the dashboard.
+### Route two: a coding agent with hook support
+
+Some coding agents let a tool inspect an action **before** it runs. Where that exists it is the stronger route, because a refused action never executes at all rather than being refused at the API, and it catches actions that cost nothing (`rm -rf`, reading a `.env`) which an API-level guard never sees. Claude Code is the one wired today.
+
+In a **second** terminal, go into the project you want watched and run:
+
+```bash
+npx --yes enforcer-governor install-hook
+```
+
+Then start a **new** session in that project. That is all. Add `--global` to watch every project at once. To remove it, press **Remove Enforcer** at the bottom of the dashboard, or run `npx enforcer-governor uninstall-hook`.
 
 > The public ChatGPT website is closed and cannot be governed. Anything built on the OpenAI **API** can.
 
@@ -140,18 +145,18 @@ Under the hood the cap is **cost-weighted effective tokens**, not raw counts. Ca
 
 The weights are per model, because the output multiplier is not a constant: Anthropic prices output at 5x input across its range, OpenAI runs 4x to 8x, and Gemini runs 4x to 8.33x. Cached input differs too. Two Gemini caveats are baked in: the Flash 3.7/3.6 rates are the ones in force through 2026-12-31, and the Pro rates are the sub-200k-prompt tier. `$20` is 4,000,000 effective tokens on Opus 5, 2,000,000 on Fable 5 and 10,000,000 on Sonnet 5. Set `budget` directly instead if you would rather think in tokens.
 
-Prices are the providers' published list rates. **On a Claude, ChatGPT or Gemini subscription you are not billed per token**, so read the dollar figures as equivalent API cost rather than an invoice. When an API key is present in the environment the same work may be billing per token instead of against your plan, which is where the nastiest surprise bills come from, so the dashboard flags that agent rather than leaving you to find out on the invoice.
+Prices are the providers' published list rates. **On a flat subscription you are not billed per token**, so read the dollar figures as equivalent API cost rather than an invoice. When an API key is present in the environment the same work may be billing per token instead of against your plan, which is where the nastiest surprise bills come from, so the dashboard flags that agent rather than leaving you to find out on the invoice.
 
 `softAction` is `"escalate"` (ask a human) or `"deny"` (auto-block at the soft cap). Everything is also flippable live from the dashboard switches.
 
-**Matching the model to the task** is on by default as advice (`adviseModel`). Set `enforceModel: true` and the governor will actually rewrite the request to the cheaper model on the proxy path, where it owns the request. It only ever downgrades: spending more of your money without asking is not its call. On Claude Code it stays advice, because a `PreToolUse` hook cannot change the model, so the suggestion is surfaced to you instead and you switch with `/model`.
+**Matching the model to the task** is on by default as advice (`adviseModel`). Set `enforceModel: true` and the governor will actually rewrite the request to the cheaper model on the proxy path, where it owns the request. It only ever downgrades: spending more of your money without asking is not its call. On the hook route it stays advice, because a hook cannot change the model, so the suggestion is surfaced to you and you switch yourself.
 
 ---
 
 ## How it works
 
 ```
-Claude Code ──hook──┐
+coding agent ─hook─┐
                     ├──► Governor ──► allow / deny / escalate ──► hash-chained receipt
 other agents ─proxy─┘        │
                              └──► dashboard (live gauges + decision tape)
@@ -159,7 +164,7 @@ other agents ─proxy─┘        │
 
 Everything is set from the **owner console** on the dashboard: one panel with a fader for each limit and a switch for each check, so there is one place to answer what these agents may do and what they may spend.
 
-- **Hook** (`PreToolUse`): reads your session transcript, totals the tokens, asks the governor, and translates the verdict into Claude Code's own allow / deny / ask. If the governor is down it fails **open**, so it never blocks your real work.
+- **Hook**: reads the session transcript, totals the tokens, asks the governor, and translates the verdict into the agent's own allow / deny / ask. If the governor is down it fails **open**, so it never blocks your real work.
 - **Proxy**: a passthrough for `/v1/messages` and `/v1/chat/completions` that reads exact usage from responses and refuses when an agent is over its limit. This is the tamper-resistant path, since it runs server-side.
 - **Receipts**: appended to `~/.enforcer-governor/receipts.jsonl`, each line carrying its own hash, folded in from the previous line. `GET /verify` walks the **file** and names the first line that does not add up, so an edit or a deletion anywhere in the history is caught, including in a stretch written before the last restart. Receipts written by versions before 0.11 have no stored hash and are reported as `unverifiable` rather than quietly passed.
 
