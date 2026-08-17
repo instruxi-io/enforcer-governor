@@ -19,9 +19,16 @@ export const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 // therefore derived per model from the prices below.
 export const MODELS = {
   // ── Anthropic ──  cache read 0.1x input, 5-minute cache write 1.25x
+  'claude-fable-5':    { p: 'anthropic', label: 'Fable 5',     in: 10,   out: 50 },
   'claude-opus-5':     { p: 'anthropic', label: 'Opus 5',      in: 5,    out: 25 },
   'claude-opus-4-8':   { p: 'anthropic', label: 'Opus 4.8',    in: 5,    out: 25 },
-  'claude-sonnet-5':   { p: 'anthropic', label: 'Sonnet 5',    in: 3,    out: 15 },
+  'claude-opus-4-7':   { p: 'anthropic', label: 'Opus 4.7',    in: 5,    out: 25 },
+  'claude-opus-4-6':   { p: 'anthropic', label: 'Opus 4.6',    in: 5,    out: 25 },
+  // Sonnet 5 was priced here at $3/$15 on the strength of an announced
+  // increase for 2026-09-01. Anthropic have since confirmed the $2/$10
+  // introductory rate is the standard rate and the increase will not happen,
+  // so every Sonnet 5 figure we showed was 1.5x the real cost.
+  'claude-sonnet-5':   { p: 'anthropic', label: 'Sonnet 5',    in: 2,    out: 10 },
   'claude-sonnet-4-6': { p: 'anthropic', label: 'Sonnet 4.6',  in: 3,    out: 15 },
   'claude-haiku-4-5':  { p: 'anthropic', label: 'Haiku 4.5',   in: 1,    out: 5  },
   // ── OpenAI ──  cached input priced explicitly, no separate cache-write charge

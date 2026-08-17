@@ -316,13 +316,14 @@ console.log('  model advice is conservative ok');
 {
   const st = makeState();
   const a = getAgent(st, 'switcher', DEFAULTS);
+  const rate = m => priceOf(m).in;
   setModel(a, 'claude-opus-5');
-  a.tokens = 2_000_000;                       // $10 at Opus 5's $5/M
-  setModel(a, 'claude-sonnet-5');             // Sonnet 5 is $3/M
-  const usd = (a.tokens / 1e6) * 3;
+  a.tokens = 10 / rate('claude-opus-5') * 1e6;    // exactly $10 at Opus 5 rates
+  setModel(a, 'claude-sonnet-5');
+  const usd = (a.tokens / 1e6) * rate('claude-sonnet-5');
   assert(Math.abs(usd - 10) < 0.01, `switching model changed the spend: $${usd.toFixed(2)}, expected $10`);
   setModel(a, 'claude-opus-5');               // and back again
-  assert(Math.abs((a.tokens / 1e6) * 5 - 10) < 0.02, 'round trip lost the spend');
+  assert(Math.abs((a.tokens / 1e6) * rate('claude-opus-5') - 10) < 0.02, 'round trip lost the spend');
   console.log('switching model preserves the dollars spent ok');
 }
 

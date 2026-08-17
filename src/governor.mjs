@@ -6,7 +6,7 @@ import { readFile, appendFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { makeState, decide, resolve, kill, release, verifyChain, getAgent, setModel, record, rollPeriods, burnRate, spawnRate, sha256, priceOf, weightsFor, modelAdvice, taskShape, MODELS, DEFAULTS, DEFAULT_RULES, tokensForDollars } from './policy.mjs';
+import { makeState, decide, resolve, kill, release, verifyChain, getAgent, setModel, record, rollPeriods, burnRate, spawnRate, sha256, priceOf, dollarsForTokens, weightsFor, modelAdvice, taskShape, MODELS, DEFAULTS, DEFAULT_RULES, tokensForDollars } from './policy.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dir, '..');
@@ -318,6 +318,33 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, snapshot().config);
   }
   if (req.method === 'GET' && path === '/state') return json(res, 200, snapshot());
+  // The record, as a spreadsheet. Every field an audit asks for, one row per
+  // decision, plus the chain verdict in the filename so the file cannot be
+  // passed off as verified when it was not.
+  if (req.method === 'GET' && path === '/receipts.csv') {
+    const w = walkReceipts();
+    const cols = ['ts', 'iso', 'agent', 'operator', 'verdict', 'reason', 'rule', 'tool', 'model', 'tokens', 'usd', 'authority', 'hash'];
+    const esc = v => {
+      const t = v === undefined || v === null ? '' : String(v);
+      return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+    };
+    const rows = [cols.join(',')];
+    if (existsSync(RECEIPTS)) {
+      for (const line of readFileSync(RECEIPTS, 'utf8').split('\n')) {
+        if (!line.trim()) continue;
+        let e; try { e = JSON.parse(line); } catch { continue; }
+        e.iso = new Date(e.ts).toISOString();
+        e.usd = dollarsForTokens(e.tokens || 0, priceOf(e.model, CONFIG.model).in).toFixed(4);
+        rows.push(cols.map(c => esc(e[c])).join(','));
+      }
+    }
+    const stamp = new Date().toISOString().slice(0, 10);
+    const name = `enforcer-receipts-${stamp}-${w.brokeAt ? 'CHAIN-BROKEN' : 'verified'}.csv`;
+    res.writeHead(200, { 'content-type': 'text/csv; charset=utf-8',
+      'content-disposition': `attachment; filename="${name}"` });
+    return res.end(rows.join('\n') + '\n');
+  }
+
   if (req.method === 'GET' && path === '/verify') {
     const w = walkReceipts();
     return json(res, 200, {

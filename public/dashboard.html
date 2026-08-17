@@ -37,6 +37,7 @@
   .status.stopped .st-line{color:var(--deny);}
   .st-sub{color:var(--dim);font-size:14px;line-height:1.55;margin-top:11px;max-width:62ch;}
   .st-sub b{color:var(--ink);font-weight:500;}
+  a.verify{text-decoration:none;display:inline-block;}
   .tape-empty{font-size:12.5px;line-height:1.6;color:var(--faint);padding:16px;max-width:62ch;}
   .tape:not(:empty)+.tape-empty{display:none;}
   .tape:empty{min-height:0;padding:0;border:none;}
@@ -231,6 +232,9 @@
   .a-advice{display:none;margin:10px 16px 2px;font-size:11px;line-height:1.4;color:var(--esc);
     border-left:2px solid rgba(212,167,44,.45);padding-left:8px;}
   .a-advice.show{display:block;}
+  .agent.reconsider .a-task,.agent.reconsider .a-advice,.agent.reconsider .amdl{
+    animation:reconsider .3s ease-out;}
+  @keyframes reconsider{from{opacity:.15;}to{opacity:1;}}
   .perm{font-family:var(--mono);font-size:9.5px;color:var(--faint);margin-left:6px;}
   /* Rate, shown next to the money it is turning into. Amber only when it is
      actually near the mark, so a glance at a calm fleet stays calm. */
@@ -350,6 +354,7 @@
     <div class="tape-top"><span class="lbl">Every decision, receipted</span>
       <span class="legend"><span><i style="background:var(--allow)"></i><b id="mAllow">0</b> allowed</span><span><i style="background:var(--deny)"></i><b id="mDeny">0</b> blocked</span><span><i style="background:var(--esc)"></i><b id="mEsc">0</b> asked</span></span>
       <button class="verify" id="verifyBtn">Check the records</button>
+      <a class="verify" id="csvBtn" href="/receipts.csv" download>Export CSV</a>
     </div>
     <div class="tape" id="tape" aria-live="polite"></div>
     <p class="tape-empty" id="tapeEmpty">Nothing decided yet. Every allow, block and question appears here as it happens, each hash-chained to the one before it.</p>
@@ -502,9 +507,12 @@
   // Mirrors src/policy.mjs. In LIVE mode the server's table replaces this, so
   // the tool only has to be updated in one place.
   let MODELS={
+    'claude-fable-5':{p:'anthropic',label:'Fable 5',in:10,out:50},
     'claude-opus-5':{p:'anthropic',label:'Opus 5',in:5,out:25},
     'claude-opus-4-8':{p:'anthropic',label:'Opus 4.8',in:5,out:25},
-    'claude-sonnet-5':{p:'anthropic',label:'Sonnet 5',in:3,out:15},
+    'claude-opus-4-7':{p:'anthropic',label:'Opus 4.7',in:5,out:25},
+    'claude-opus-4-6':{p:'anthropic',label:'Opus 4.6',in:5,out:25},
+    'claude-sonnet-5':{p:'anthropic',label:'Sonnet 5',in:2,out:10},
     'claude-sonnet-4-6':{p:'anthropic',label:'Sonnet 4.6',in:3,out:15},
     'claude-haiku-4-5':{p:'anthropic',label:'Haiku 4.5',in:1,out:5},
     'gpt-5.6-sol':{p:'openai',label:'GPT-5.6 Sol',in:5,out:30,cin:0.5},
@@ -810,7 +818,11 @@
   function bump(v){ if(v==='allow')allow++;else if(v==='deny')deny++;else if(v==='escalate')esc++; $('mAllow').textContent=allow;$('mDeny').textContent=deny;$('mEsc').textContent=esc; }
   function onDecision(d){
     if(d.verdict==='gap'){ chip('gap',d.agent.id||d.agent,d.reason,null,null); paint(d.agent.id||d.agent,d.agent); return; }
-    const a=d.agent; paint(a.id,{...a,model:d.model,task:d.task,advice:d.advice||null,billing:d.billing||''});
+    // Pass advice through as-is. Coercing a missing key to null told paint to
+    // CLEAR the advice, so the once-a-second decisions wiped a recommendation
+    // a moment after it appeared. The server always sends an explicit null
+    // when it has no opinion, so clearing still happens when it should.
+    const a=d.agent; paint(a.id,{...a,model:d.model,task:d.task,advice:d.advice,billing:d.billing||''});
     chip(d.verdict,a.id,d.reason,d.receipt,d.entry&&d.entry.authority);
     bump(d.verdict);
     if(d.verdict==='escalate') openEsc(a);
@@ -1075,6 +1087,38 @@ window.__runDemo = (paint, onDecision, getPolicy, wire) => {
     paint(a.id,{tokens:s.tokens,budget:s.budget,status:s.status,model:a.model,task:a.task,loopStreak:s.loopStreak||0});
   });
   window.__demoBudget();
+
+  // The model check is the feature people do not know they want, and it was
+  // invisible here because the demo fleet never changed what it was doing.
+  // test-runner-05 now cycles through real work, and the advice follows the
+  // task rather than being pinned to the card: mechanical work on a top model
+  // asks to come down, reasoning work on a light one asks to go up, and
+  // ordinary work gets no opinion at all. That last state matters most: it is
+  // the proof this stays quiet unless it is sure.
+  const CYCLE=[
+    { task:"run the full suite and fix whatever fails", model:'claude-opus',
+      advice:{cheaper:true,  label:'Sonnet 5', why:'this looks like mechanical work, and Opus 5 costs 2.5x Sonnet 5'} },
+    { task:"work out why the payment webhook drops events under load", model:'claude-haiku',
+      advice:{cheaper:false, label:'Sonnet 5', why:'this looks like reasoning work, and Haiku 4.5 is a lighter model than Sonnet 5'} },
+    { task:"add the changelog entry for this release", model:'claude-sonnet',
+      advice:null },
+  ];
+  let cyc=0;
+  const advised=st['test-runner-05'];
+  setInterval(()=>{
+    if(!advised) return;
+    cyc=(cyc+1)%CYCLE.length;
+    const c=CYCLE[cyc];
+    advised.task=c.task; advised.model=c.model;
+    // The demo block does not share scope with the card registry, so find the
+    // element by the agent id it prints.
+    const el=[...document.querySelectorAll('.agent')].find(e=>e.querySelector('.aid')?.textContent==='test-runner-05');
+    if(el){ el.classList.add('reconsider'); setTimeout(()=>el.classList.remove('reconsider'),300); }
+    paint('test-runner-05',{tokens:advised.tokens,budget:advised.budget,status:advised.status,
+      model:c.model,task:c.task,loopStreak:advised.loopStreak||0,advice:c.advice});
+  }, 5200);
+  paint('test-runner-05',{tokens:0,budget:advised.budget,status:'active',
+    model:CYCLE[0].model,task:CYCLE[0].task,loopStreak:0,advice:CYCLE[0].advice});
   async function rcpt(a,verb,rule,authority){ const e={ts:Date.now(),agent:a.id,verb,rule,tokens:Math.round(a.tokens)}; if(authority)e.authority=authority; const j=JSON.stringify(e); const h=await sha(prev+j); chain.push({j,h}); prev=h; return {verdict:verb,reason:rule,receipt:'rcpt_'+h.slice(0,12),agent:{id:a.id,tokens:Math.round(a.tokens),budget:a.budget,status:a.status,loopStreak:a.loopStreak||0},model:a.model,task:a.task,entry:e}; }
   function actionFor(a){ if(a.plan==='loop'&&a.tokens>a.budget*.32)return 'GET /page?id=42'; if(a.plan==='loop')return pick(['GET /list','parse','GET /page?id='+Math.floor(rand(1,40))]); return pick(STEADY); }
   async function step(a){
