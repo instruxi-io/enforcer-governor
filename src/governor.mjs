@@ -6,7 +6,7 @@ import { readFile, appendFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { handoffRequest, resumeWith, HANDOFF_OPTS, RESUME_OPTS } from './handoff.mjs';
+import { handoffRequest, resumeWith, postJSON, HANDOFF_OPTS, RESUME_OPTS } from './handoff.mjs';
 import { makeState, decide, resolve, kill, release, verifyChain, getAgent, setModel, record, rollPeriods, burnRate, spawnRate, clientFor, sha256, priceOf, dollarsForTokens, weightsFor, modelAdvice, taskShape, MODELS, DEFAULTS, DEFAULT_RULES, tokensForDollars } from './policy.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
@@ -96,6 +96,7 @@ function snapshot() {
     fanoutLimit: CONFIG.fanoutLimit, retryLimit: CONFIG.retryLimit, spawnRate: spawnRate(state),
     spent: { day: state.periods.day.usd, week: state.periods.week.usd, month: state.periods.month.usd },
     clientLimits: CONFIG.clientLimits, byClient: state.clients ? state.clients.month.by : {},
+    rerouteOn: CONFIG.rerouteOn, fallbackModel: CONFIG.fallbackModel,
     clients: CONFIG.clients, unmapped: state.unmapped || {},
   } };
 }
@@ -206,31 +207,31 @@ function extractUsage(body, path) {
 // Repeated compaction degrades a session, so this fires once per agent. A
 // second breach after a reroute is a real stop.
 async function reroute(agent, body, pre, res, path) {
+  const why = m => { console.log(`  reroute skipped: ${m}`); return false; };
   const known = getAgent(state, agent, CONFIG);
-  if (known.handoffs) return false;
-  let j; try { j = JSON.parse(body.toString()); } catch { return false; }
-  if (!Array.isArray(j.messages) || !j.messages.length) return false;
+  if (known.handoffs) return why('this agent has already been handed over once');
+  let j; try { j = JSON.parse(body.toString()); } catch { return why('the request body is not JSON'); }
+  if (!Array.isArray(j.messages) || !j.messages.length) return why('the request carries no messages');
   known.handoffs = 1;
   try {
     // 1. The brief, written by the model that did the reasoning. Bounded, since
     //    this is money spent by an agent that has already run out.
-    const hb = await fetch(UPSTREAMS[path], {
-      method: 'POST', headers: { 'content-type': 'application/json', ...CONFIG.fallbackHeaders },
-      body: JSON.stringify({ ...j, messages: handoffRequest(j.messages), ...HANDOFF_OPTS, stream: false }),
-    });
-    const hj = await hb.json();
+    if (!UPSTREAMS[path]) return why(`no upstream configured for ${path}`);
+    const hb = await postJSON(UPSTREAMS[path],
+      { ...j, messages: handoffRequest(j.messages), ...HANDOFF_OPTS, stream: false },
+      CONFIG.fallbackHeaders);
+    let hj; try { hj = JSON.parse(hb.text); } catch { return why(`the outgoing model returned ${hb.status}, not JSON`); }
     const brief = (hj.choices?.[0]?.message?.content || hj.content?.[0]?.text || '').trim();
     // An empty brief is worse than no reroute: the fallback would start from
     // nothing and look like it had lost the task. Fail back to the refusal.
-    if (brief.length < 80) { known.handoffs = 0; return false; }
+    if (brief.length < 80) { known.handoffs = 0; return why(`the outgoing model returned a ${brief.length}-character brief, too short to hand over`); }
 
     // 2. The work, on the fallback, from the brief alone.
-    const out = await fetch(CONFIG.fallbackUrl, {
-      method: 'POST', headers: { 'content-type': 'application/json', ...CONFIG.fallbackHeaders },
-      body: JSON.stringify({ ...j, model: CONFIG.fallbackModel || j.model,
-        messages: resumeWith(brief, j.messages), ...RESUME_OPTS, stream: false }),
-    });
-    const text = await out.text();
+    const out = await postJSON(CONFIG.fallbackUrl,
+      { ...j, model: CONFIG.fallbackModel || j.model,
+        messages: resumeWith(brief, j.messages), ...RESUME_OPTS, stream: false },
+      CONFIG.fallbackHeaders);
+    const text = out.text;
 
     const r = record(state, known, 'allow',
       `out of budget, so it was handed to ${CONFIG.fallbackModel || 'the fallback model'} with a ${brief.length}-character brief`,
@@ -243,11 +244,16 @@ async function reroute(agent, body, pre, res, path) {
       'x-enforcer-handoff-chars': String(brief.length) });
     res.end(text);
     return true;
-  } catch { known.handoffs = 0; return false; }
+  } catch (e) { known.handoffs = 0; return why(`${e.message}${e.cause ? ' (' + e.cause.message + ')' : ''}`); }
 }
 
 async function handleProxy(req, res, path) {
   const agent = req.headers['x-enforcer-agent'] || 'proxy-agent';
+  // On the API route there is no working directory to derive a client from,
+  // so one header names it. This read was lost in an edit and every proxy
+  // request crashed on the undefined variable for five releases, because
+  // nothing tested this path.
+  const client = req.headers['x-enforcer-client'] || '';
   // Pre-check: if this agent is already grounded/over budget, refuse before spending.
   const pre = decide(state, { agent, client, deltaTokens: 0, action: 'proxy:' + path }, CONFIG);
   let body = await readBody(req);

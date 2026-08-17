@@ -158,6 +158,34 @@ Prices are the providers' published list rates. **On a flat subscription you are
 
 ---
 
+## When the budget runs out, finish somewhere cheaper
+
+`reroute` is the fourth verb, and it is off unless you ask for it. When an agent hits its limit the choice is normally stop or keep paying. This adds a third: hand the job to a cheaper or local model and carry on.
+
+```json
+{
+  "rerouteOn": true,
+  "fallbackUrl": "http://127.0.0.1:1234/v1/chat/completions",
+  "fallbackModel": "qwen/qwen3.6-27b"
+}
+```
+
+It is **not** a context transfer. Repointing a provider mid-session leaves the new one with nothing, and resending a long transcript is the expensive move because the prompt cache is per provider. Instead the outgoing model writes a short structured brief, and the incoming model starts from that: small enough for any window including a local one, with nothing large to re-read.
+
+Two rules come with it. The brief is written by the **outgoing** model, because it did the reasoning. And the cut lands on a user turn, so an assistant tool call is never separated from its tool result. It fires once per agent, because repeated compaction degrades a session as recursive summaries distort earlier reasoning.
+
+Measured against a local Qwen 3.6 27B on the same task, scored on a fixed checklist written before the runs:
+
+| given | score |
+|---|---|
+| the full transcript | 6/7 |
+| **the brief alone** | **7/7** |
+| nothing | 0/7 |
+
+Three things worth knowing before you turn it on. A local model is slow, so this waits: eight minutes for the run above, which is the price of free tokens. `max_tokens` counts reasoning on a reasoning model, so a brief asked for with a small budget can come back empty. And a brief under 80 characters is refused rather than handed over, because a fallback starting from nothing looks exactly like one that lost the task.
+
+---
+
 ## Working for more than one client
 
 An agency running five projects needs spend split by client, and the honest problem with that is labelling: nobody tags every session reliably, and the one they forget is the one they cannot bill.

@@ -95,3 +95,51 @@ console.log('receipts survive a restart and fail loudly on edits and deletions o
     console.log('the chain survives the whole agent lifecycle ok');
   } finally { gov.kill(); }
 }
+
+// The proxy path had no test at all, and an undefined variable crashed every
+// request through it for five releases. This walks a real request through a
+// real governor to a real upstream, which is the only way that class of bug
+// gets caught.
+{
+  const { spawn } = await import('node:child_process');
+  const { createServer } = await import('node:http');
+  const home = mkdtempSync(join(tmpdir(), 'gov-proxy-'));
+  const upstreamPort = 47320, port = 47321;
+
+  let seen = null;
+  const upstream = createServer((req, res) => {
+    let b = ''; req.on('data', d => b += d); req.on('end', () => {
+      seen = JSON.parse(b || '{}');
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ id: 'x', model: seen.model,
+        choices: [{ message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 1000, completion_tokens: 100, total_tokens: 1100 } }));
+    });
+  });
+  await new Promise(r => upstream.listen(upstreamPort, r));
+
+  const gov = spawn(process.execPath, ['src/governor.mjs', 'start', '--no-open'], {
+    env: { ...process.env, HOME: home, GOVERNOR_PORT: String(port),
+           GOVERNOR_OPENAI_URL: `http://localhost:${upstreamPort}/v1/chat/completions` },
+    stdio: 'ignore' });
+  try {
+    for (let i = 0; i < 60; i++) {
+      try { const j = await (await fetch(`http://localhost:${port}/verify`)).json(); if (typeof j.ok === 'boolean') break; }
+      catch { await new Promise(r => setTimeout(r, 100)); }
+    }
+    const r = await fetch(`http://localhost:${port}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-enforcer-agent': 'p1', 'x-enforcer-client': 'Acme Corp' },
+      body: JSON.stringify({ model: 'claude-opus-5', messages: [{ role: 'user', content: 'hello' }] }),
+    });
+    assert(r.status === 200, `a normal proxy request must succeed, got ${r.status}`);
+    assert(r.headers.get('x-enforcer-verdict') === 'allow', 'the verdict belongs on the response');
+    assert(seen && seen.model === 'claude-opus-5', 'the request must reach the upstream unchanged');
+
+    const st = await (await fetch(`http://localhost:${port}/state`)).json();
+    const a = st.agents.find(x => x.id === 'p1');
+    assert(a && a.tokens > 0, 'usage from the response must be metered onto the agent');
+    assert(st.config.byClient['Acme Corp'] > 0, 'the client header must attribute the spend');
+    console.log('a request through the proxy is metered, attributed and receipted ok');
+  } finally { gov.kill(); upstream.close(); }
+}

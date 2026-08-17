@@ -1,3 +1,6 @@
+import http from 'node:http';
+import https from 'node:https';
+
 // Handing a task to a different model.
 //
 // The naive move is to repoint the base URL and resend the conversation. That
@@ -27,6 +30,37 @@
 // content was an empty string. The brief is a summarisation job and does not
 // need extended thinking, so ask for it off and leave real headroom. These are
 // passed to whatever provider is answering; ones it does not know are ignored.
+// A local model is slow, and fetch will not wait for it. Node's fetch gives up
+// on a response whose headers have not arrived in time, and a runtime like LM
+// Studio holds the connection open until the whole completion is generated:
+// measured here, a Qwen 27B at roughly 14 tokens a second answering at length
+// blew straight through it and the reroute fell back to a plain refusal with
+// "Headers Timeout Error".
+//
+// undici is not importable to raise the limit, so the two reroute calls go
+// through node:http instead, which waits as long as the work takes. Slowness
+// is the normal case on this path, not the exception.
+export function postJSON(url, body, headers = {}) {
+  return new Promise((resolve, reject) => {
+    const u = new URL(url);
+    const lib = u.protocol === 'https:' ? https : http;
+    const payload = Buffer.from(JSON.stringify(body));
+    const req = lib.request({
+      hostname: u.hostname, port: u.port || (u.protocol === 'https:' ? 443 : 80),
+      path: u.pathname + u.search, method: 'POST',
+      headers: { 'content-type': 'application/json', 'content-length': payload.length, ...headers },
+    }, res => {
+      let out = '';
+      res.setEncoding('utf8');
+      res.on('data', d => out += d);
+      res.on('end', () => resolve({ status: res.statusCode, text: out }));
+    });
+    req.on('error', reject);
+    req.write(payload);
+    req.end();
+  });
+}
+
 export const HANDOFF_OPTS = {
   max_tokens: 3000,
   temperature: 0.2,
