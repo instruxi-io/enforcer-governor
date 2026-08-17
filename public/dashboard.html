@@ -37,7 +37,11 @@
   .status.stopped .st-line{color:var(--deny);}
   .st-sub{color:var(--dim);font-size:14px;line-height:1.55;margin-top:11px;max-width:62ch;}
   .st-sub b{color:var(--ink);font-weight:500;}
-  a.verify{text-decoration:none;display:inline-block;}
+  /* :not([hidden]) matters. Setting display on an element beats the browser's
+     own [hidden] rule, so this was showing the download link permanently and
+     the demo page carried two Export CSV buttons, one of them dead. */
+  a.verify:not([hidden]){text-decoration:none;display:inline-block;}
+  [hidden]{display:none !important;}
   .csvout{border-top:1px solid var(--line);}
   .csv-h{display:flex;align-items:center;gap:12px;padding:11px 16px;background:var(--panel2);
     font-family:var(--mono);font-size:11px;color:var(--dim);border-bottom:1px solid var(--lineS);}
