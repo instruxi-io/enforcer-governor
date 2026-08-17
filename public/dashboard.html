@@ -361,7 +361,7 @@
     <div class="tape-top"><span class="lbl">Every decision, receipted</span>
       <span class="legend"><span><i style="background:var(--allow)"></i><b id="mAllow">0</b> allowed</span><span><i style="background:var(--deny)"></i><b id="mDeny">0</b> blocked</span><span><i style="background:var(--esc)"></i><b id="mEsc">0</b> asked</span></span>
       <button class="verify" id="verifyBtn">Check the records</button>
-      <a class="verify" id="csvBtn" href="/receipts.csv" download>Export CSV</a>
+      <a class="verify" id="csvBtn" href="/receipts.csv" download hidden>Export CSV</a>
     </div>
     <div class="tape" id="tape" aria-live="polite"></div>
     <p class="tape-empty" id="tapeEmpty">Nothing decided yet. Every allow, block and question appears here as it happens, each hash-chained to the one before it.</p>
@@ -507,6 +507,8 @@
   let BURN=2;   // per-agent dollars a minute, mirrored from the server
   $('modeTag').textContent = LIVE?'LIVE · governing your agents':'DEMO · simulated fleet';
   if (LIVE) $('modeTag').classList.add('live');
+  // Only offer the export where there is a governor to export from.
+  if (LIVE) $('csvBtn').hidden = false;
   $('fleetHint').textContent = LIVE?'agents appear as your tools run · kill any of them':'watch scraper-07 loop · approve research-swarm-03 when it asks';
 
   // ── Money ────────────────────────────────────────────────────────────────
