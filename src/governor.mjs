@@ -7,7 +7,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { handoffRequest, resumeWith, HANDOFF_OPTS, RESUME_OPTS } from './handoff.mjs';
-import { makeState, decide, resolve, kill, release, verifyChain, getAgent, setModel, record, rollPeriods, burnRate, spawnRate, sha256, priceOf, dollarsForTokens, weightsFor, modelAdvice, taskShape, MODELS, DEFAULTS, DEFAULT_RULES, tokensForDollars } from './policy.mjs';
+import { makeState, decide, resolve, kill, release, verifyChain, getAgent, setModel, record, rollPeriods, burnRate, spawnRate, clientFor, sha256, priceOf, dollarsForTokens, weightsFor, modelAdvice, taskShape, MODELS, DEFAULTS, DEFAULT_RULES, tokensForDollars } from './policy.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dir, '..');
@@ -96,6 +96,7 @@ function snapshot() {
     fanoutLimit: CONFIG.fanoutLimit, retryLimit: CONFIG.retryLimit, spawnRate: spawnRate(state),
     spent: { day: state.periods.day.usd, week: state.periods.week.usd, month: state.periods.month.usd },
     clientLimits: CONFIG.clientLimits, byClient: state.clients ? state.clients.month.by : {},
+    clients: CONFIG.clients, unmapped: state.unmapped || {},
   } };
 }
 
@@ -426,6 +427,23 @@ const server = http.createServer(async (req, res) => {
     saveConfig();
     broadcast('snapshot', snapshot());
     return json(res, 200, { ok: true, files: out });
+  }
+
+  // Name the folders. Sent from the dashboard once the tool has noticed work
+  // happening in more than one place, with the guesses already filled in.
+  if (req.method === 'POST' && path === '/clients') {
+    const patch = JSON.parse((await readBody(req)).toString() || '{}');
+    CONFIG.clients = { ...(CONFIG.clients || {}), ...(patch.clients || {}) };
+    if (patch.limits) CONFIG.clientLimits = { ...(CONFIG.clientLimits || {}), ...patch.limits };
+    for (const p of Object.keys(patch.clients || {})) delete state.unmapped[p];
+    // Re-attribute the agents already running, so the screen agrees with the
+    // mapping immediately instead of at their next action.
+    for (const a of Object.values(state.agents)) {
+      if (a.cwd) { const n = clientFor(a.cwd, CONFIG.clients); if (n) a.client = n; }
+    }
+    await saveConfig();
+    broadcast('config', snapshot().config);
+    return json(res, 200, { ok: true, clients: CONFIG.clients });
   }
 
   if (req.method === 'GET' && path === '/verify') {

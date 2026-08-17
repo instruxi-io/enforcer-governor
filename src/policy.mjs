@@ -337,6 +337,8 @@ export function makeState() {
     // Dollars per client, per period. Keyed the same way the fleet totals are,
     // so a new day resets them without a scheduler.
     clients: { day: { k: '', by: {} }, week: { k: '', by: {} }, month: { k: '', by: {} } },
+    // Folders seen that nobody has mapped yet: path -> the name we guessed.
+    unmapped: {},
   };
 }
 
@@ -434,10 +436,16 @@ export function decide(state, ev, config = {}) {
   if (ev.task) a.task = ev.task;
   if (ev.model) setModel(a, ev.model);
   a.tool = ev.tool || String(ev.action || '').split(':')[0] || a.tool;
+  if (ev.cwd) a.cwd = ev.cwd;
   // An explicit client always wins over a derived one, so a header or a config
   // entry can correct a directory that guessed wrong.
   const named = ev.client || clientFor(ev.cwd, cfg.clients);
   if (named) a.client = named;
+  // A leading ? means it was guessed. Keep the folder next to the guess so the
+  // dashboard can offer to name it rather than making someone find the path.
+  if (named && named[0] === '?' && ev.cwd && state.unmapped) {
+    state.unmapped[ev.cwd] = named.slice(1);
+  }
   // Whether this session is drawing on a subscription or on API credit. The
   // nastiest surprise bills are people who believed they were on a flat plan
   // while an API key quietly moved them onto per-token billing.
