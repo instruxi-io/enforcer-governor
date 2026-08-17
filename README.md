@@ -96,12 +96,15 @@ export OPENAI_BASE_URL=http://localhost:4000/v1
 export ANTHROPIC_BASE_URL=http://localhost:4000
 ```
 
-Gemini, Groq, Together and anything else that speaks the OpenAI chat-completions shape works through the same route -- tell the governor where to forward:
+Gemini, Grok, Groq, Together and anything else that speaks the OpenAI chat-completions shape works through the same route -- tell the governor where to forward:
 
 ```bash
 # Gemini
 GOVERNOR_OPENAI_URL=https://generativelanguage.googleapis.com/v1beta/openai/chat/completions \
   npx --yes enforcer-governor start
+
+# Grok
+GOVERNOR_OPENAI_URL=https://api.x.ai/v1/chat/completions npx --yes enforcer-governor start
 ```
 
 Every request now passes through the governor. It meters real usage from each response and refuses (HTTP 429) once an agent is over budget or grounded. Tag requests per agent with an `x-enforcer-agent: <name>` header so they show up separately on the dashboard.
@@ -131,7 +134,7 @@ Drop a `governor.config.json` in the directory you run it from:
 
 **Set the limit in dollars.** `dollars` is the spend cap per agent per session; `model` is which model's prices convert it into a token budget. The dashboard shows you what that buys before anything runs: how many tokens, and roughly how long an agent can work on it. Change it there at any time; agents already running pick up the new limit immediately, and one that was stopped for hitting the old limit is released.
 
-**Claude, ChatGPT and Gemini are all supported, and the model is detected for you.** Every agent reports which model answered, so the governor prices each one at its own rate and the dashboard's picker follows whatever it sees. `$20` means $20 whether that agent is on Opus 5, GPT-5 mini or Gemini 2.5 Pro. Pick a model by hand and your choice sticks.
+**Claude, ChatGPT, Gemini and Grok are all supported, and the model is detected for you.** Every agent reports which model answered, so the governor prices each one at its own rate and the dashboard's picker follows whatever it sees. `$20` means $20 whether that agent is on Opus 5, GPT-5 mini or Gemini 2.5 Pro. Pick a model by hand and your choice sticks.
 
 Under the hood the cap is **cost-weighted effective tokens**, not raw counts. Cached sessions re-read their whole context every turn, so raw sums explode into the billions while costing very little. The governor weights by price instead, so one effective token is one input-token of cost at that model's price and `dollars` converts with a single multiply.
 
