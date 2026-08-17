@@ -310,9 +310,13 @@
   .a-task.idle{color:var(--faint);font-style:italic;}
   /* Model-vs-task mismatch. Advisory, so it reads as a note and never as an
      alarm: a wrong downgrade costs more in bad work than it saves in tokens. */
-  .a-advice{display:none;margin:10px 16px 2px;font-size:11px;line-height:1.4;color:var(--esc);
-    border-left:2px solid rgba(212,167,44,.45);padding-left:8px;}
+  .a-advice{display:none;margin:10px 16px 2px;font-size:11px;line-height:1.45;color:var(--dim);
+    border-left:2px solid var(--teal);padding-left:9px;}
   .a-advice.show{display:block;}
+  /* Says which kind of thing it is, so it is never read as a limit warning. */
+  .a-advice .tag{display:block;font-family:var(--sans);font-size:9px;font-weight:600;
+    letter-spacing:.1em;text-transform:uppercase;color:var(--teal);margin-bottom:3px;}
+  .a-advice b{color:var(--ink);font-weight:600;}
   .agent.reconsider .a-task,.agent.reconsider .a-advice,.agent.reconsider .amdl{
     animation:reconsider .3s ease-out;}
   @keyframes reconsider{from{opacity:.15;}to{opacity:1;}}
@@ -353,7 +357,9 @@
   .fill{position:absolute;left:0;top:0;height:3px;width:0;border-radius:0;background:var(--teal);
     transition:width .4s cubic-bezier(.2,0,0,1);}
   .warn .fill,.esc .fill{background:var(--esc);} .grounded .fill,.free .fill{background:var(--deny);}
-  .agent.esc{background:rgba(255,184,0,.06);} .agent.warn{background:rgba(255,184,0,.04);}
+  .agent.warn{background:rgba(255,184,0,.035);}
+  .agent.esc{background:rgba(255,184,0,.09);box-shadow:inset 3px 0 0 var(--esc);}
+  .agent.grounded,.agent.free{box-shadow:inset 3px 0 0 var(--deny);}
   .agent.grounded,.agent.free{background:rgba(255,71,87,.07);}
   /* Where it stops to ask you, marked on the track it will travel along. */
   .softmark{position:absolute;top:-3px;width:1px;height:9px;background:rgba(229,83,75,.55);}
@@ -877,8 +883,9 @@
     // Advice arrives on decisions and disappears when the mismatch is gone.
     if(advice!==undefined){
       const adv=c.el.querySelector('.a-advice');
-      if(advice){ adv.innerHTML=(advice.cheaper?'A cheaper model would do':'This needs a stronger model')
-        +': <b>'+advice.label+'</b>. '+advice.why+'.'; adv.classList.add('show'); }
+      if(advice){ adv.innerHTML='<span class="tag">Model suggestion</span>'
+        +(advice.cheaper?'A cheaper model would do: ':'This needs a stronger model: ')
+        +'<b>'+advice.label+'</b>. '+advice.why+'.'; adv.classList.add('show'); }
       else adv.classList.remove('show');
     }
     const pct=Math.min(100,tokens/c.budget*100);
