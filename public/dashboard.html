@@ -38,6 +38,15 @@
   .st-sub{color:var(--dim);font-size:14px;line-height:1.55;margin-top:11px;max-width:62ch;}
   .st-sub b{color:var(--ink);font-weight:500;}
   a.verify{text-decoration:none;display:inline-block;}
+  .csvout{border-top:1px solid var(--line);}
+  .csv-h{display:flex;align-items:center;gap:12px;padding:11px 16px;background:var(--panel2);
+    font-family:var(--mono);font-size:11px;color:var(--dim);border-bottom:1px solid var(--lineS);}
+  .csv-x{margin-left:auto;font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;
+    background:none;border:1px solid var(--line);color:var(--faint);padding:4px 9px;cursor:pointer;}
+  .csv-x:hover{color:var(--ink);border-color:var(--teal);}
+  .csvout pre{margin:0;padding:14px 16px;overflow-x:auto;font-family:var(--mono);font-size:11px;
+    line-height:1.75;color:var(--dim);white-space:pre;}
+  .csv-note{padding:0 16px 14px;font-size:11.5px;color:var(--faint);}
   .tape-empty{font-size:12.5px;line-height:1.6;color:var(--faint);padding:16px;max-width:62ch;}
   .tape:not(:empty)+.tape-empty{display:none;}
   .tape:empty{min-height:0;padding:0;border:none;}
@@ -372,8 +381,18 @@
       <span class="legend"><span><i style="background:var(--allow)"></i><b id="mAllow">0</b> allowed</span><span><i style="background:var(--deny)"></i><b id="mDeny">0</b> blocked</span><span><i style="background:var(--esc)"></i><b id="mEsc">0</b> asked</span></span>
       <button class="verify" id="verifyBtn">Check the records</button>
       <a class="verify" id="csvBtn" href="/receipts.csv" download hidden>Export CSV</a>
+      <button class="verify" id="csvDemo" hidden>Export CSV</button>
     </div>
     <div class="tape" id="tape" aria-live="polite"></div>
+    <!-- In the demo the file cannot be handed over, and a dead download button
+         teaches nobody anything. Showing the rows does: you can read the
+         columns an auditor asks for without leaving the page. -->
+    <div class="csvout" id="csvOut" hidden>
+      <div class="csv-h"><span id="csvName">receipts.csv</span>
+        <button class="csv-x" id="csvClose">close</button></div>
+      <pre id="csvBody"></pre>
+      <p class="csv-note">This is the real export, built from the decisions above. Running it yourself, this button saves the file.</p>
+    </div>
     <p class="tape-empty" id="tapeEmpty">Nothing decided yet. Every allow, block and question appears here as it happens, each hash-chained to the one before it.</p>
   </div>
   <!-- The owner's desk. One place to answer every question about what these
@@ -527,7 +546,9 @@
   $('modeTag').textContent = LIVE?'LIVE · governing your agents':'DEMO · simulated fleet';
   if (LIVE) $('modeTag').classList.add('live');
   // Only offer the export where there is a governor to export from.
-  if (LIVE) $('csvBtn').hidden = false;
+  // Live saves the file. The demo cannot hand you a file, so it shows you the
+  // file instead, which answers the same question: what do I actually get?
+  if (LIVE) $('csvBtn').hidden = false; else $('csvDemo').hidden = false;
   $('fleetHint').textContent = LIVE?'agents appear as your tools run · kill any of them':'watch scraper-07 loop · approve research-swarm-03 when it asks';
 
   // ── Money ────────────────────────────────────────────────────────────────
@@ -905,6 +926,21 @@
     }
   };
 
+  // Build the export exactly as the server does, from whatever is on screen.
+  window.__csvFrom = rows => {
+    const cols=['ts','iso','agent','operator','verdict','reason','rule','tool','model','tokens','usd','authority','hash'];
+    const esc=v=>{ const t=v==null?'':String(v); return /[",\n]/.test(t)?'"'+t.replace(/"/g,'""')+'"':t; };
+    const out=[cols.join(',')];
+    for(const r of rows){
+      const e={...r.entry, hash:r.hash};
+      e.iso=new Date(e.ts).toISOString();
+      e.usd=(usdForAgent(e.tokens||0, e.model)).toFixed(4);
+      out.push(cols.map(c=>esc(e[c])).join(','));
+    }
+    return out.join('\n');
+  };
+  const csvClose=$('csvClose'); if(csvClose) csvClose.onclick=()=>{ $('csvOut').hidden=true; };
+
   function pushConfig(){ if(!LIVE)return; fetch('/config',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({budgetOn:policy.budget,loopOn:policy.loop,softAction:policy.soft,adviseModel:policy.advise,enforceModel:policy.enforceModel})}).catch(()=>{}); }
   function syncSw(){ $('swBudget').classList.toggle('dis',!policy.enforcer); $('swLoop').classList.toggle('dis',!policy.enforcer); document.querySelectorAll('.seg').forEach(e=>e.style.opacity=policy.enforcer?'1':'.4'); document.body.classList.toggle('ungoverned',!policy.enforcer); }
   // Master switch. It MUST reach the server: turning it off only in the browser
@@ -1146,6 +1182,25 @@ window.__runDemo = (paint, onDecision, getPolicy, wire) => {
   });
   window.__demoBudget();
 
+  // Export, in the demo. It builds the same file the daemon serves, from the
+  // same receipts the tape is showing, and puts it on screen because a
+  // download from a demo page is either blocked or lands somewhere you then
+  // have to go and find.
+  const csvDemo=document.getElementById('csvDemo');
+  if(csvDemo) csvDemo.onclick=()=>{
+    const rows=chain.slice(-40).map(l=>({entry:JSON.parse(l.j), hash:l.h}));
+    const out=document.getElementById('csvOut');
+    if(!rows.length){
+      document.getElementById('csvBody').textContent='No decisions yet. Give the fleet a few seconds and try again.';
+    } else {
+      document.getElementById('csvBody').textContent=window.__csvFrom(rows);
+      document.getElementById('csvName').textContent =
+        'enforcer-receipts-' + new Date().toISOString().slice(0,10) + '-verified.csv  \u00b7  ' + rows.length + ' of ' + chain.length + ' records';
+    }
+    out.hidden=false;
+    out.scrollIntoView({block:'nearest',behavior:'smooth'});
+  };
+
   // The model check is the feature people do not know they want, and it was
   // invisible here because the demo fleet never changed what it was doing.
   // test-runner-05 now cycles through real work, and the advice follows the
@@ -1177,11 +1232,14 @@ window.__runDemo = (paint, onDecision, getPolicy, wire) => {
   }, 5200);
   paint('test-runner-05',{tokens:0,budget:advised.budget,status:'active',
     model:CYCLE[0].model,task:CYCLE[0].task,loopStreak:0,advice:CYCLE[0].advice});
-  async function rcpt(a,verb,rule,authority){ const e={ts:Date.now(),agent:a.id,verb,rule,tokens:Math.round(a.tokens)}; if(authority)e.authority=authority; const j=JSON.stringify(e); const h=await sha(prev+j); chain.push({j,h}); prev=h; return {verdict:verb,reason:rule,receipt:'rcpt_'+h.slice(0,12),agent:{id:a.id,tokens:Math.round(a.tokens),budget:a.budget,status:a.status,loopStreak:a.loopStreak||0},model:a.model,task:a.task,entry:e}; }
+  async function rcpt(a,verb,rule,authority){ const e={ts:Date.now(),agent:a.id,operator:'you@yourcompany.com',verdict:verb,reason:rule,tool:(a.lastTool||'Task'),model:a.model,tokens:Math.round(a.tokens)}; if(authority)e.authority=authority; const j=JSON.stringify(e); const h=await sha(prev+j); chain.push({j,h}); prev=h; return {verdict:verb,reason:rule,receipt:'rcpt_'+h.slice(0,12),agent:{id:a.id,tokens:Math.round(a.tokens),budget:a.budget,status:a.status,loopStreak:a.loopStreak||0},model:a.model,task:a.task,entry:e}; }
   function actionFor(a){ if(a.plan==='loop'&&a.tokens>a.budget*.32)return 'GET /page?id=42'; if(a.plan==='loop')return pick(['GET /list','parse','GET /page?id='+Math.floor(rand(1,40))]); return pick(STEADY); }
   async function step(a){
     const P=getPolicy(); if(a.status==='grounded'||a.status==='paused')return;
     const act=actionFor(a), cost=rand(a.burn[0],a.burn[1])*(a.burnScale||1); a.tokens+=cost;
+    // Name the tool from the action, so the exported file shows the spread a
+    // real one does rather than the same word on every row.
+    a.lastTool = ({read:'Read',edit:'Edit',write:'Write',run:'Bash',grep:'Grep',call:'Task',parse:'Task'})[act.split(/[\s:]/)[0].toLowerCase()] || 'Bash';
     if(!P.enforcer){ a.status='free'; onDecision({verdict:'gap',reason:'executed with no policy check',agent:{id:a.id,tokens:a.tokens,budget:a.budget,status:'free'}}); return; }
     if(a.status==='free')a.status='active';
     a.recent.push(act); if(a.recent.length>6)a.recent.shift(); let streak=1; for(let i=a.recent.length-2;i>=0;i--){if(a.recent[i]===act)streak++;else break;} a.loopStreak=streak;
