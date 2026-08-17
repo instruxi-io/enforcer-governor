@@ -37,7 +37,7 @@
   .status.stopped .st-line{color:var(--deny);}
   .st-sub{color:var(--dim);font-size:14px;line-height:1.55;margin-top:11px;max-width:62ch;}
   .st-sub b{color:var(--ink);font-weight:500;}
-  .tape-empty{font-size:12.5px;line-height:1.6;color:var(--faint);padding:22px 18px 24px;max-width:62ch;}
+  .tape-empty{font-size:12.5px;line-height:1.6;color:var(--faint);padding:16px;max-width:62ch;}
   .tape:not(:empty)+.tape-empty{display:none;}
   .tape:empty{min-height:0;padding:0;border:none;}
   .legend b{color:var(--ink);font-weight:500;font-variant-numeric:tabular-nums;}
@@ -79,9 +79,10 @@
      panel, because that is the order the checks run in. */
   .caps{margin:14px 0 0;background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:16px 18px 14px;}
   .caps .ctrl-h em{font-style:normal;text-transform:none;letter-spacing:0;color:var(--faint);margin-left:10px;font-size:10.5px;}
-  .caprow{display:grid;grid-template-columns:repeat(auto-fit,minmax(232px,1fr));gap:8px;}
-  .cap{display:flex;align-items:center;gap:9px;background:#0A0E13;border:1px solid var(--lineS);
-    border-left-width:2px;padding:9px 11px;font-size:12.5px;color:var(--dim);}
+  .caprow{display:block;}
+  .cap{display:flex;align-items:center;gap:9px;padding:9px 0 9px 11px;font-size:12.5px;color:var(--dim);
+    border-left:2px solid transparent;border-bottom:1px solid var(--lineS);}
+  .cap:last-child{border-bottom:none;}
   .cap.deny{border-left-color:var(--deny);} .cap.ask{border-left-color:var(--esc);}
   .cap b{font-weight:500;color:var(--ink);font-size:12.5px;}
   .cap .verdict{margin-left:auto;font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;flex:none;}
@@ -105,20 +106,20 @@
      Motion budget per the craft rules: 100ms, and nothing on the handle,
      which has to track the finger exactly. */
   .console{margin:40px 0 0;background:var(--panel);border:1px solid var(--line);border-radius:4px;}
-  .con-h{display:flex;align-items:center;gap:14px;padding:16px 20px 14px;border-bottom:1px solid var(--lineS);flex-wrap:wrap;}
+  .con-h{display:flex;align-items:center;gap:14px;padding:16px;border-bottom:1px solid var(--lineS);flex-wrap:wrap;}
   .con-t{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);font-weight:400;margin:0;}
   .con-h .who{margin-left:0;}
   .con-h .sw.master{margin-left:auto;}
   .con-grid{display:grid;grid-template-columns:1.25fr 1fr;gap:0;}
-  .con-col{padding:18px 20px 20px;min-width:0;}
+  .con-col{padding:16px;min-width:0;}
   .con-col+.con-col{border-left:1px solid var(--lineS);}
   .col-h{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);margin:0 0 16px;}
   .col-h.sub{margin-top:30px;padding-top:18px;border-top:1px solid var(--lineS);}
   .col-h em{font-style:normal;letter-spacing:.04em;text-transform:none;color:#3E4854;margin-left:8px;}
 
   /* The frame for every figure below it, so it reads first. */
-  .priced-top{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:0 0 22px;padding:10px 12px;
-    background:var(--panel2);border:1px solid var(--lineS);}
+  .priced-top{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:0 0 20px;padding:0 0 14px;
+    border-bottom:1px solid var(--lineS);}
   .priced-top .rl{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);}
 
   .fader{margin-bottom:22px;}
@@ -203,7 +204,7 @@
   .fleet-h{display:flex;align-items:baseline;gap:12px;margin:8px 0 12px;flex-wrap:wrap;}
   .fleet-h .lbl{flex:none;white-space:nowrap;}
   @media(max-width:620px){.fleet-h .hint{display:none;}} .fleet-h .lbl{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);} .fleet-h .hint{font-family:var(--mono);font-size:11px;color:var(--faint);margin-left:auto;}
-  .fleet{display:grid;grid-template-columns:repeat(auto-fit,minmax(258px,1fr));gap:8px;}
+  .fleet{display:grid;grid-template-columns:repeat(auto-fit,minmax(258px,1fr));gap:4px;}
   .empty{grid-column:1/-1;background:var(--panel);border:1px dashed var(--line);border-radius:4px;padding:22px 24px;}
   .e-h{font-size:15px;color:var(--ink);font-weight:600;margin-bottom:14px;}
   .e-step{margin-bottom:14px;} .e-step b{display:block;font-size:13px;color:var(--teal);margin-bottom:2px;} .e-step span{font-size:12.5px;color:var(--dim);display:block;margin-bottom:7px;}
@@ -211,22 +212,22 @@
   .e-cmd code{font-family:var(--mono);font-size:12px;color:var(--ink);overflow-x:auto;white-space:nowrap;flex:1;}
   .e-copy{flex:none;font-family:var(--mono);font-size:10.5px;font-weight:600;color:var(--ink);background:var(--panel2);border:1px solid var(--line);border-radius:4px;padding:5px 11px;cursor:pointer;} .e-copy:hover{border-color:var(--teal);color:var(--teal);}
   .e-foot{font-family:var(--mono);font-size:11px;color:var(--faint);margin-top:4px;}
-  .agent{position:relative;background:var(--panel);border:1px solid var(--lineS);border-radius:4px;overflow:hidden;transition:border-color .3s;}
+  .agent{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:4px;overflow:hidden;transition:border-color var(--t-slow);}
   .agent.warn{border-color:rgba(212,167,44,.5);} .agent.esc{border-color:rgba(212,167,44,.8);box-shadow:0 0 0 1px rgba(212,167,44,.3);} .agent.grounded{border-color:rgba(229,83,75,.5);opacity:.82;} .agent.free{border-color:rgba(229,83,75,.35);}
-  .a-top{padding:12px 13px 8px;} .a-name{font-family:var(--mono);font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:7px;}
+  .a-top{padding:16px 16px 10px;} .a-name{font-family:var(--mono);font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:7px;}
   .a-name .pulse{width:7px;height:7px;border-radius:50%;background:var(--allow);box-shadow:0 0 8px var(--allow);flex:none;} .warn .pulse{background:var(--esc);box-shadow:0 0 8px var(--esc);} .esc .pulse{background:var(--esc);animation:blink .8s infinite;} .grounded .pulse{background:var(--deny);box-shadow:none;} .free .pulse{background:var(--deny);animation:blink .5s infinite;}
   @keyframes blink{50%{opacity:.25;}}
   .a-model{font-family:var(--mono);font-size:10px;color:var(--faint);margin-top:3px;}
   /* An agent's identity is the job it was given, not its session id. Lead with
      the task the human typed and demote the machine identifiers. */
-  .a-head{display:flex;align-items:flex-start;gap:8px;}
+  .a-head{display:flex;align-items:flex-start;}
   .a-head .pulse{margin-top:5px;}
   .a-task{font-family:var(--serif);font-size:13.5px;line-height:1.34;color:var(--ink);
     display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:2.68em;}
   .a-task.idle{color:var(--faint);font-style:italic;}
   /* Model-vs-task mismatch. Advisory, so it reads as a note and never as an
      alarm: a wrong downgrade costs more in bad work than it saves in tokens. */
-  .a-advice{display:none;margin:10px 0 2px;font-size:11px;line-height:1.4;color:var(--esc);
+  .a-advice{display:none;margin:10px 16px 2px;font-size:11px;line-height:1.4;color:var(--esc);
     border-left:2px solid rgba(212,167,44,.45);padding-left:8px;}
   .a-advice.show{display:block;}
   .perm{font-family:var(--mono);font-size:9.5px;color:var(--faint);margin-left:6px;}
@@ -244,13 +245,13 @@
   .a-meta{font-family:var(--mono);font-size:9.5px;color:var(--faint);margin-top:6px;letter-spacing:.04em;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   /* Burn trace: what this agent has been spending, moment to moment. */
-  .sparklbl{display:block;margin:9px 11px 4px;font-family:var(--mono);font-size:8px;
+  .sparklbl{display:block;margin:9px 16px 4px;font-family:var(--mono);font-size:8px;
     letter-spacing:.12em;text-transform:uppercase;color:var(--faint);}
   /* An empty chart frame says less than no chart. It appears once there is a
      shape to read. */
   .sparklbl,.sparkwrap{display:none;}
   .has-spark .sparklbl,.has-spark .sparkwrap{display:block;}
-  .sparkwrap{position:relative;height:28px;margin:0 11px;background:#080B10;
+  .sparkwrap{position:relative;height:28px;margin:0 16px;background:#080B10;
     border:1px solid var(--lineS);border-radius:4px;overflow:hidden;}
   .spark{position:absolute;inset:0;width:100%;height:100%;}
   .spark rect{fill:var(--teal);opacity:.8;}
@@ -261,7 +262,7 @@
   .agent.burning .fill{animation:breathe 2.4s cubic-bezier(.2,0,0,1) infinite;}
   @keyframes breathe{50%{filter:brightness(1.2);}}
   .a-left{font-family:var(--mono);font-size:10px;color:var(--faint);white-space:nowrap;}
-  .gauge{position:relative;margin:12px 11px 0;padding-bottom:20px;}
+  .gauge{position:relative;margin:12px 16px 0;padding-bottom:20px;}
   .meter{position:relative;height:3px;border-radius:2px;background:var(--line);margin-top:9px;overflow:visible;}
   .fill{position:absolute;left:0;top:0;height:3px;width:0;border-radius:2px;background:var(--teal);
     transition:width .4s cubic-bezier(.2,0,0,1);}
@@ -277,12 +278,12 @@
   .warn .gtok,.esc .gtok{color:var(--esc);} .grounded .gtok{color:var(--deny);}
   .gpct{display:block;margin-top:5px;font-family:var(--mono);font-size:10px;letter-spacing:.04em;color:var(--faint);}
   .loopbadge{position:absolute;top:6px;right:6px;font-family:var(--mono);font-size:9.5px;font-weight:600;color:var(--deny);background:rgba(229,83,75,.14);border:1px solid rgba(229,83,75,.5);border-radius:4px;padding:1px 5px;z-index:3;opacity:0;} .loopbadge.show{opacity:1;}
-  .a-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 12px 11px;font-family:var(--mono);font-size:10.5px;color:var(--dim);} .a-status{display:flex;align-items:center;gap:5px;} .st-dot{width:6px;height:6px;border-radius:50%;background:var(--allow);flex:none;} .warn .st-dot{background:var(--esc);}.esc .st-dot{background:var(--esc);}.grounded .st-dot,.free .st-dot{background:var(--deny);}
+  .a-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 16px 14px;font-family:var(--mono);font-size:10.5px;color:var(--dim);} .a-status{display:flex;align-items:center;gap:5px;} .st-dot{width:6px;height:6px;border-radius:50%;background:var(--allow);flex:none;} .warn .st-dot{background:var(--esc);}.esc .st-dot{background:var(--esc);}.grounded .st-dot,.free .st-dot{background:var(--deny);}
   .kill{font-family:var(--mono);font-size:10px;color:var(--faint);background:none;border:1px solid var(--line);border-radius:4px;padding:3px 8px;cursor:pointer;flex:none;} .kill:hover{border-color:var(--deny);color:var(--deny);} .kill:disabled{opacity:.35;cursor:default;}
   .tape-wrap{margin:38px 0 0;background:var(--panel);border:1px solid var(--line);border-radius:4px;overflow:hidden;}
   .tape-top{display:flex;align-items:center;gap:14px;padding:11px 15px;border-bottom:1px solid var(--line);background:var(--panel2);font-family:var(--mono);font-size:11px;} .tape-top .lbl{letter-spacing:.16em;text-transform:uppercase;color:var(--faint);} .tape-top .legend{display:flex;gap:14px;margin-left:auto;color:var(--dim);} .tape-top .legend i{width:8px;height:8px;border-radius:2px;display:inline-block;margin-right:5px;vertical-align:middle;}
   .verify{font-family:var(--mono);font-size:10.5px;color:var(--dim);background:none;border:1px solid var(--line);border-radius:4px;padding:5px 11px;cursor:pointer;} .verify:hover{border-color:var(--teal);color:var(--teal);}
-  .tape{display:flex;gap:8px;padding:14px 15px;overflow-x:auto;min-height:82px;} .chip{flex:none;width:176px;border:1px solid var(--lineS);border-left-width:2px;padding:8px 10px;background:#0A0E13;font-family:var(--mono);animation:sl .35s ease backwards;} @keyframes sl{from{opacity:0;transform:translateX(-10px);}}
+  .tape{display:flex;gap:4px;padding:16px;overflow-x:auto;min-height:82px;} .chip{flex:none;width:176px;border:1px solid var(--lineS);border-left-width:2px;padding:8px 10px;background:#0A0E13;font-family:var(--mono);animation:sl .35s ease backwards;} @keyframes sl{from{opacity:0;transform:translateX(-10px);}}
   .chip.allow{border-left-color:var(--allow);}.chip.deny{border-left-color:var(--deny);}.chip.escalate{border-left-color:var(--esc);}.chip.gap{border-left-color:var(--faint);border-style:dashed;}
   .chip .verb{font-size:10px;font-weight:600;letter-spacing:.08em;} .chip.allow .verb{color:var(--allow);}.chip.deny .verb{color:var(--deny);}.chip.escalate .verb{color:var(--esc);}.chip.gap .verb{color:var(--faint);}
   .chip .who{font-size:11px;color:var(--ink);margin:3px 0 2px;} .chip .rule{font-size:10px;color:var(--faint);} .chip .hash{font-size:9.5px;color:var(--teal);margin-top:5px;word-break:break-all;opacity:.85;} .chip .auth{font-size:9.5px;color:var(--esc);margin-top:3px;} .chip .nohash{font-size:9.5px;color:var(--deny);margin-top:5px;}
@@ -350,7 +351,6 @@
     <div class="tape" id="tape" aria-live="polite"></div>
     <p class="tape-empty" id="tapeEmpty">Nothing decided yet. Every allow, block and question appears here as it happens, each hash-chained to the one before it.</p>
   </div>
-</div>
   <!-- The owner's desk. One place to answer every question about what these
        agents may do and what they may spend, instead of three panels that each
        answered part of it. The faders are stepped: they land on $20, never on
@@ -466,6 +466,7 @@
     </div>
     <div class="ungov-banner">CHECKS ARE OFF &middot; your agents can spend without limit, and nothing is being recorded.</div>
   </section>
+</div>
 
   <!-- Kept as the source of truth the faders write into, so every existing
        control path stays exactly as it was and only the surface changed. -->
@@ -698,7 +699,7 @@
     }
     const el=document.createElement('div'); el.className='agent'+(wasEmpty?' arriving':'');
     el.innerHTML=`<div class="a-top">
-        <div class="a-head"><span class="pulse"></span><span class="a-task idle">waiting for a task</span></div>
+        <div class="a-head"><span class="a-task idle">waiting for a task</span></div>
         <div class="a-meta"><span class="aid">${id}</span><span class="amdl"></span><span class="bill">API BILLING</span></div>
       </div>
       <div class="gauge"><div class="gtok">$0</div><div class="gpct">0%</div><div class="loopbadge">REPEAT</div>
