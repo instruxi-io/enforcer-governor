@@ -100,7 +100,12 @@ GOVERNOR_OPENAI_URL=https://api.x.ai/v1/chat/completions npx --yes enforcer-gove
 
 # a local runtime
 GOVERNOR_OPENAI_URL=http://localhost:11434/v1/chat/completions npx --yes enforcer-governor start
+
+# OpenRouter, which puts 400+ models behind one endpoint
+GOVERNOR_OPENAI_URL=https://openrouter.ai/api/v1/chat/completions npx --yes enforcer-governor start
 ```
+
+OpenRouter is worth calling out because it solves a different problem and the two compose. It picks a model per turn and bills you for it; it is a marketplace, and a marketplace has no reason to ship a hard stop. The governor sits in front of it and supplies what it does not: a limit that actually stops an agent, a check on what the agent may DO rather than what it may spend, and a receipt for every decision.
 
 ### Route two: a coding agent with hook support
 
