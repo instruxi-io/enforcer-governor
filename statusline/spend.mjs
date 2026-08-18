@@ -2,6 +2,12 @@
 // Ambient spend, always in the chrome. This is the one piece of this plugin a
 // developer benefits from rather than tolerates: the governor stops being a
 // dashboard you have to open and becomes a number you glance at.
+//
+// Nothing in this repo wires it up, and that is not an oversight: a plugin
+// cannot declare a status line. `statusLine` is not a plugin.json field, and a
+// plugin's settings.json honours only `agent` and `subagentStatusLine`. So this
+// is wired by hand, by the person installing -- see Install in the README.
+// If that ever changes, plugin.json is where it goes.
 import { readFileSync } from 'node:fs';
 import { loadState, loadConfig } from '../src/store.mjs';
 import { DEFAULTS, priceOf, dollarsForTokens } from '../src/policy.mjs';
