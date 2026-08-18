@@ -1,35 +1,13 @@
 {
   "name": "enforcer-governor",
-  "version": "0.28.0",
-  "description": "Real-time token-spend control for AI agents. Allow, deny, or escalate every agent action, with hash-chained receipts. Free to run on your own agents, self-hosted.",
+  "version": "2.0.0",
+  "description": "A Claude Code plugin that decides whether an agent action is allowed before it runs, and keeps a tamper-evident record of every decision.",
   "type": "module",
-  "bin": {
-    "enforcer-governor": "src/cli.mjs"
-  },
   "scripts": {
-    "start": "node src/governor.mjs",
-    "install-hook": "node src/cli.mjs install-hook",
-    "test": "node test/policy.test.mjs && node test/receipts.test.mjs"
+    "test": "node test/policy.test.mjs && node test/plugin.test.mjs"
   },
-  "files": [
-    "src",
-    "public",
-    "README.md",
-    "LICENSE",
-    "TRADEMARKS.md"
-  ],
-  "keywords": [
-    "ai-agents",
-    "token-budget",
-    "llm-cost",
-    "claude-code",
-    "governance",
-    "guardrails",
-    "openai",
-    "anthropic"
-  ],
+  "files": [".claude-plugin", "hooks", "commands", "statusline", "src", "settings.json", "LICENSE", "TRADEMARKS.md"],
+  "keywords": ["claude-code", "plugin", "governance", "guardrails", "token-budget", "llm-cost", "audit"],
   "license": "FSL-1.1-ALv2",
-  "engines": {
-    "node": ">=18"
-  }
+  "engines": { "node": ">=18" }
 }

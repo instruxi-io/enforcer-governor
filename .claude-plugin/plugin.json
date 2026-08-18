@@ -1,0 +1,24 @@
+{
+  "name": "enforcer-governor",
+  "displayName": "Enforcer Governor",
+  "description": "Decides whether an agent action is allowed before it runs, and keeps a tamper-evident record of every decision.",
+  "version": "2.0.0",
+  "author": {
+    "name": "Instruxi",
+    "url": "https://instruxi.io"
+  },
+  "homepage": "https://instruxi.io",
+  "repository": "https://github.com/instruxi-io/enforcer-governor",
+  "license": "FSL-1.1-ALv2",
+  "keywords": [
+    "governance",
+    "guardrails",
+    "token-budget",
+    "llm-cost",
+    "audit"
+  ],
+  "statusLine": {
+    "type": "command",
+    "command": "node \"${CLAUDE_PLUGIN_ROOT}/statusline/spend.mjs\""
+  }
+}

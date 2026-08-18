@@ -1,7 +1,7 @@
 name: ci
 on:
   push:
-    branches: [main]
+    branches: [main, v2]
   pull_request:
 
 jobs:
@@ -12,16 +12,19 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: policy engine self-test
+      - name: policy engine + plugin self-test
         run: npm test
-      - name: daemon smoke test
+      - name: manifests are valid JSON
         run: |
-          GOVERNOR_PORT=4123 GOVERNOR_BUDGET=50000 node src/governor.mjs &
-          sleep 2
-          # allow under budget
-          test "$(curl -s -X POST localhost:4123/decide -d '{"agent":"ci","tokens":100,"action":"a"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["verdict"])')" = "allow"
-          # deny over budget
-          test "$(curl -s -X POST localhost:4123/decide -d '{"agent":"ci","tokens":60000,"action":"b"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["verdict"])')" = "deny"
-          # chain verifies
-          test "$(curl -s localhost:4123/verify | python3 -c 'import sys,json;print(json.load(sys.stdin)["ok"])')" = "True"
-          echo "daemon smoke: all green"
+          node -e 'JSON.parse(require("fs").readFileSync(".claude-plugin/plugin.json"))'
+          node -e 'JSON.parse(require("fs").readFileSync("hooks/hooks.json"))'
+          node -e 'JSON.parse(require("fs").readFileSync("settings.json"))'
+      - name: every hook answers on stdout and exits 0
+        run: |
+          set -e
+          export GOVERNOR_HOME=$(mktemp -d)
+          for h in pre-tool-use post-tool-use session; do
+            echo '{"session_id":"ci","tool_name":"Read","tool_input":{"file_path":"/tmp/a"},"cwd":"/tmp"}' \
+              | node hooks/$h.mjs | node -e 'JSON.parse(require("fs").readFileSync(0));'
+          done
+          node src/report.mjs verify

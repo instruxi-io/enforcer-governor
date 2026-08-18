@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(curl:*|*sh)",
+      "Bash(wget:*|*sh)"
+    ],
+    "ask": [
+      "Bash(rm -rf:*)",
+      "Bash(rm -fr:*)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git filter-branch:*)",
+      "Bash(npm publish:*)",
+      "Bash(vercel:* --prod)",
+      "Bash(kubectl apply:*)",
+      "Bash(kubectl delete:*)",
+      "Bash(terraform apply:*)",
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Read(**/id_rsa)",
+      "Read(**/*.pem)",
+      "Read(**/credentials.json)",
+      "Read(**/.aws/**)",
+      "Read(**/.ssh/**)"
+    ]
+  }
+}
