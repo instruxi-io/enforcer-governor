@@ -1,7 +1,7 @@
 // One runnable check for the brain. `node test/policy.test.mjs`.
 // No framework: asserts that fail throw and exit non-zero.
 import assert from 'node:assert/strict';
-import { makeState, decide, resolve, kill, verifyChain, addSpend, setModel, getAgent, DEFAULTS, burnRate, spawnRate } from '../src/policy.mjs';
+import { makeState, decide, resolve, kill, release, verifyChain, addSpend, setModel, getAgent, DEFAULTS, burnRate, spawnRate } from '../src/policy.mjs';
 
 let pass = 0;
 const ok = (label, fn) => { fn(); pass++; console.log('  ok  ' + label); };
@@ -504,4 +504,83 @@ console.log('  model advice is conservative ok');
   const other = decide(st, { agent: 'a1', tokens: 1_000_000, action: 'Read:x', model: 'claude-opus-5', cwd: '/w/acme' }, cfg);
   assert(other.verdict === 'allow', 'one client hitting its cap must not stop the others');
   console.log('a per-client cap stops that client alone ok');
+}
+
+// ── Getting out of being stopped ────────────────────────────────────────────
+// Grounding used to latch for every reason, and the check ran before the budget
+// comparison. So an agent stopped at a $5 limit stayed stopped after the limit
+// was raised to $20, and the only ways out edited state.json by hand -- which
+// breaks the receipt chain -- or turned the governor off entirely.
+{
+  const state = makeState();
+  const cfg = { ...DEFAULTS, dollars: 5, budget: 1000000 };
+  const ev = { agent: 'a1', action: 'Bash:ls', tool: 'Bash', model: 'claude-opus-5', cwd: '/tmp' };
+
+  const a = getAgent(state, 'a1', cfg);
+  a.budget = 1000000;
+  decide(state, { ...ev, tokens: 1000001 }, cfg);
+  assert(a.status === 'grounded', 'an agent over its limit is stopped');
+  assert(a.groundedBy === 'limit', `the reason must be recorded, got ${a.groundedBy}`);
+
+  // Raise the limit: the agent must carry on, with no hand-editing of state.
+  const bigger = { ...cfg, dollars: 20 };
+  a.budget = 4000000;
+  const after = decide(state, { ...ev, tokens: 1000001 }, bigger);
+  assert(after.verdict === 'allow', `raising the limit must free the agent, got ${after.verdict}`);
+  assert(a.status === 'active', 'and clear the stopped status');
+  assert(a.groundedBy === undefined, 'and clear the recorded reason');
+  console.log('raising the limit frees an agent stopped for spending ok');
+}
+
+// A loop is not re-derivable: an agent that happens not to repeat itself on this
+// one call is still the agent you stopped. So it latches, and raising the limit
+// must not free it -- only a human saying so.
+{
+  const state = makeState();
+  const cfg = { ...DEFAULTS, dollars: 20 };
+  const same = { agent: 'l1', action: 'Bash:same', tool: 'Bash', model: 'claude-opus-5', tokens: 10, cwd: '/tmp' };
+  for (let i = 0; i < 5; i++) decide(state, same, cfg);
+  const a = state.agents['l1'];
+  assert(a.status === 'grounded', 'a repeated action is stopped as a loop');
+  assert(a.groundedBy === 'loop', `the reason must be loop, got ${a.groundedBy}`);
+
+  const rich = decide(state, { ...same, action: 'Bash:different' }, { ...cfg, dollars: 999 });
+  assert(rich.verdict === 'deny', 'raising the limit must NOT free a looping agent');
+  assert(/enforcer-governor:resume/.test(rich.reason), `the way out must be named, got: ${rich.reason}`);
+
+  // release() is the way out, and it has to actually be reachable.
+  const freed = release(state, 'l1');
+  assert(freed.verdict === 'allow', 'release must free it');
+  assert(a.status === 'active' && a.groundedBy === undefined, 'release must clear status and reason');
+  assert(decide(state, { ...same, action: 'Bash:new' }, cfg).verdict === 'allow', 'and it runs again after');
+  console.log('a loop stays latched until a human resumes it ok');
+}
+
+// A human stopping an agent must also latch: kill() means stop, and a raised
+// limit is not consent to carry on.
+{
+  const state = makeState();
+  const cfg = { ...DEFAULTS, dollars: 20 };
+  const ev = { agent: 'k1', action: 'Bash:ls', tool: 'Bash', model: 'claude-opus-5', tokens: 10, cwd: '/tmp' };
+  decide(state, ev, cfg);
+  kill(state, 'k1');
+  const a = state.agents['k1'];
+  assert(a.groundedBy === 'human', `kill must record human authority, got ${a.groundedBy}`);
+  const still = decide(state, ev, { ...cfg, dollars: 999 });
+  assert(still.verdict === 'deny', 'a raised limit is not consent to resume');
+  assert(/resume/.test(still.reason), 'and the way out is named');
+  console.log('an agent a human stopped stays stopped until a human resumes it ok');
+}
+
+// An old state file recorded no reason. Treat that as re-derivable so upgrading
+// unsticks anyone already stuck, rather than stranding them on the old dead end.
+{
+  const state = makeState();
+  const cfg = { ...DEFAULTS, dollars: 20 };
+  const ev = { agent: 'old', action: 'Bash:ls', tool: 'Bash', model: 'claude-opus-5', tokens: 10, cwd: '/tmp' };
+  decide(state, ev, cfg);
+  const a = state.agents['old'];
+  a.status = 'grounded'; delete a.groundedBy;       // what a pre-upgrade file looks like
+  assert(decide(state, ev, cfg).verdict === 'allow', 'upgrading must unstick an agent stopped with no recorded reason');
+  console.log('an agent stopped before reasons were recorded is freed on upgrade ok');
 }

@@ -57,6 +57,19 @@ That path is where a marketplace added from GitHub lands. If you installed from 
 | `/enforcer-governor:status` | spend per agent, limits, current burn, state of the record |
 | `/enforcer-governor:verify` | check the chain, name the first broken line |
 | `/enforcer-governor:limit <dollars>` | set the per-agent limit |
+| `/enforcer-governor:resume [agent]` | run a stopped agent again, with room to finish |
+
+### Getting out of the way
+
+An agent stopped for **spending** is freed by raising the limit — `/enforcer-governor:limit 40` — and carries on from where it stopped. An agent stopped for **looping**, or one you stopped yourself, needs `/enforcer-governor:resume`, because a raised limit is not consent to carry on doing the same thing.
+
+To switch the governor off without uninstalling it, put any of these in `~/.enforcer-governor/config.json`:
+
+```json
+{"budgetOn": false, "loopOn": false, "rulesOn": false}
+```
+
+`budgetOn` covers the spend and rate checks, `loopOn` the loop check, `rulesOn` the capability rules. All three off is fully inert. Do not delete `state.json` to unstick something: it holds the head of the receipt chain, so the next receipt hashes against nothing and `verify` correctly reports the record as broken.
 
 ## How it works
 

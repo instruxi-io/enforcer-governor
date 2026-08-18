@@ -459,13 +459,31 @@ export function decide(state, ev, config = {}) {
     return record(state, a, 'allow', 'checks are switched off', a.tokens, 'human');
   }
 
-  // A grounded agent stays grounded until released. Say how to get out of it,
-  // because a dead end with no instructions is how people abandon the tool.
-  if (a.status === 'grounded') {
+  // A grounded agent stays grounded -- but only for the reasons that cannot be
+  // re-derived from the current config.
+  //
+  // This used to latch for every reason, which built a dead end: an agent
+  // stopped at a $5 limit stayed stopped after the limit was raised to $20,
+  // because this check ran BEFORE the budget comparison and never looked at it
+  // again. The only ways out were editing state.json by hand, which breaks the
+  // receipt chain, or turning the checks off entirely.
+  //
+  // So the spend reasons do not latch. If the agent is still over its limit the
+  // check below grounds it again on this very call; if the human raised the
+  // limit, it simply carries on. Nothing is lost by re-deriving them, and the
+  // dead end goes away. What DOES latch is a human saying stop, and a loop --
+  // a looping agent that happens not to repeat itself this once is still the
+  // agent you stopped. An old state file with no reason recorded is treated as
+  // re-derivable, so upgrading unsticks anyone already stuck.
+  const LATCHED = a.groundedBy === 'human' || a.groundedBy === 'loop';
+  if (a.status === 'grounded' && LATCHED) {
     return record(state, a, 'deny',
-      'this agent is stopped. Resume it in the dashboard, or turn the checks off there',
+      a.groundedBy === 'loop'
+        ? 'it was stopped for looping. Resume it with /enforcer-governor:resume'
+        : 'you stopped this agent. Resume it with /enforcer-governor:resume',
       a.tokens);
   }
+  if (a.status === 'grounded') { a.status = 'active'; a.groundedBy = undefined; }
 
   // Capability first. "You may not do this" outranks "you have budget left",
   // and a cheap command can still be the destructive one.
@@ -508,7 +526,7 @@ export function decide(state, ev, config = {}) {
     for (const [name] of PERIODS) {
       const cap = caps[name], spent = state.periods[name].usd;
       if (cap > 0 && spent >= cap) {
-        a.status = 'grounded';
+        a.status = 'grounded'; a.groundedBy = name;
         return record(state, a, 'deny',
           `your agents have spent $${spent.toFixed(2)} ${word[name]}, which is your $${cap} limit`,
           a.tokens);
@@ -527,7 +545,7 @@ export function decide(state, ev, config = {}) {
   a.loopStreak = repeats;
 
   if (cfg.loopOn && repeats >= cfg.loopLimit) {
-    a.status = 'grounded';
+    a.status = 'grounded'; a.groundedBy = 'loop';
     return record(state, a, 'deny',
       `it repeated the same action ${repeats} times in its last ${a.recent.length} - that is a loop`, a.tokens);
   }
@@ -579,7 +597,7 @@ export function decide(state, ev, config = {}) {
     const cap = (cfg.clientLimits || {})[a.client];
     const spent = state.clients.month.by[a.client] || 0;
     if (cap > 0 && spent >= cap) {
-      a.status = 'grounded';
+      a.status = 'grounded'; a.groundedBy = 'client';
       return record(state, a, 'deny',
         `work for ${a.client} has cost $${spent.toFixed(2)} this month, which is its $${cap} limit`,
         a.tokens);
@@ -587,7 +605,7 @@ export function decide(state, ev, config = {}) {
   }
 
   if (cfg.budgetOn && a.tokens >= a.budget) {
-    a.status = 'grounded';
+    a.status = 'grounded'; a.groundedBy = 'limit';
     return record(state, a, 'deny', 'it reached your spend limit', a.tokens);
   }
   if (cfg.budgetOn && !a.escalated && a.tokens >= a.budget * a.soft) {
@@ -596,7 +614,7 @@ export function decide(state, ev, config = {}) {
       a.status = 'paused';
       return record(state, a, 'escalate', `it has used ${Math.round(a.soft * 100)}% of your spend limit`, a.tokens);
     }
-    a.status = 'grounded';
+    a.status = 'grounded'; a.groundedBy = 'soft';
     return record(state, a, 'deny', 'it passed the warn-me mark, and you set that to stop it', a.tokens);
   }
   const r = record(state, a, 'allow', 'inside the limit, doing new work', a.tokens);
@@ -619,11 +637,12 @@ export function resolve(state, agentId, approve, config = {}) {
     a.budget = Math.round(a.budget * 1.5); // grant +50% and let it finish
     a.budgetRaised = true; // a human overrode the cap; stop recomputing it
     a.status = 'active';
+    a.groundedBy = undefined;
     a.escalated = false;
     a.burnFlagged = a.retryFlagged = state.fanoutFlagged = false;
   return record(state, a, 'allow', 'you approved it, limit raised by half', a.tokens, 'human');
   }
-  a.status = 'grounded';
+  a.status = 'grounded'; a.groundedBy = 'human';
   return record(state, a, 'deny', 'you said no', a.tokens, 'human');
 }
 
@@ -634,6 +653,7 @@ export function release(state, agentId, extra = 1.5) {
   a.budget = Math.round(Math.max(a.budget, a.tokens) * extra);
   a.budgetRaised = true; // a human overrode the cap; stop recomputing it
   a.status = 'active';
+  a.groundedBy = undefined;
   a.escalated = false;
   a.loopStreak = 0;
   a.burnFlagged = a.retryFlagged = state.fanoutFlagged = false;
@@ -643,7 +663,7 @@ export function release(state, agentId, extra = 1.5) {
 export function kill(state, agentId) {
   const a = state.agents[agentId];
   if (!a) return null;
-  a.status = 'grounded';
+  a.status = 'grounded'; a.groundedBy = 'human';
   return record(state, a, 'deny', 'you stopped it', a.tokens, 'human');
 }
 
