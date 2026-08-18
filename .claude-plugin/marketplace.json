@@ -1,0 +1,17 @@
+{
+  "name": "instruxi",
+  "description": "Instruxi's Claude Code plugins.",
+  "owner": {
+    "name": "Instruxi",
+    "url": "https://instruxi.io"
+  },
+  "plugins": [
+    {
+      "name": "enforcer-governor",
+      "source": "./",
+      "description": "Decides whether an agent action is allowed before it runs, and keeps a tamper-evident record of every decision.",
+      "category": "governance",
+      "tags": ["governance", "guardrails", "token-budget", "llm-cost", "audit"]
+    }
+  ]
+}

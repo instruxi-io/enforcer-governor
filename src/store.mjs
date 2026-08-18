@@ -40,10 +40,15 @@ function acquire() {
   const deadline = Date.now() + WAIT_MS;
   for (;;) {
     try { closeSync(openSync(LOCK, 'wx')); return true; } catch {}
+    // The deadline is checked before anything below can `continue` past it. If
+    // the directory itself is unreachable both the open AND the stat throw, and
+    // a `continue` that skipped this check spun here forever -- wedging every
+    // tool call in the session instead of failing open, which is the opposite
+    // of what this whole file promises.
+    if (Date.now() > deadline) return false;
     try {
       if (Date.now() - statSync(LOCK).mtimeMs > STALE_MS) { unlinkSync(LOCK); continue; }
-    } catch { continue; }               // vanished between the two calls: retry
-    if (Date.now() > deadline) return false;
+    } catch {}                          // vanished between the two calls: retry after a beat
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 15);  // sync sleep
   }
 }

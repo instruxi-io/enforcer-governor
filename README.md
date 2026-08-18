@@ -16,30 +16,47 @@ Every decision is appended to a hash-chained record. Edit or delete a single lin
 
 ```
 /plugin marketplace add instruxi-io/enforcer-governor
-/plugin install enforcer-governor
+/plugin install enforcer-governor@instruxi
 ```
 
-That is the whole install. Hooks, capability rules, slash commands and the status line arrive with it. `/plugin disable enforcer-governor` removes it just as cleanly.
+That brings the enforcement: the hooks, the capability rules, and the three slash commands. `/plugin disable enforcer-governor` removes them just as cleanly. Nothing is written to your settings and there is no daemon to start.
+
+Two pieces cannot arrive that way, because Claude Code does not let a plugin ship either one: a plugin's `settings.json` honours only the `agent` and `subagentStatusLine` keys, and everything else is ignored without a word. Both are a single paste into your own `~/.claude/settings.json`, and the governor enforces correctly without either.
+
+**The status line**, which is the only always-on surface — the number you glance at instead of opening something:
+
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "node $HOME/.claude/plugins/marketplaces/instruxi/statusline/spend.mjs"
+  }
+}
+```
+
+That path is where a marketplace added from GitHub lands. If you installed from a local checkout it is your own directory instead; `claude plugin marketplace list --json` prints the exact `installLocation`.
+
+**The permission rules**, which are belt to the hooks' braces. Copy the `permissions` block from this repo's [`settings.json`](settings.json) into yours. The plugin cannot install it, so without this paste the hooks are doing the work alone — see [How it works](#how-it-works) for exactly what that costs you, which is less than it sounds.
 
 ## What you get
 
-**A number in your status line.** `· $3.40/$20` — live spend against the limit, always visible, no dashboard to open. It changes colour once, when something needs you.
+**A number in your status line.** `· $3.40/$20` — live spend against the limit, always visible, no dashboard to open. It changes colour once, when something needs you. This is the one piece that needs the paste in [Install](#install).
 
-**Capability rules that ship with the plugin.** Piping a URL into a shell is refused outright. Deleting a tree, rewriting git history, reading credentials, publishing or deploying: those stop and ask. These are capability decisions, not spend ones, so they fire on a full budget — and they ship as native permission rules as well as hook checks, so the hard ones hold even if the plugin's own state is unreadable.
+**Capability rules that ship with the plugin.** Piping a URL into a shell is refused outright. Deleting a tree, rewriting git history, reading credentials, publishing or deploying: those stop and ask. These are capability decisions, not spend ones, so they fire on a full budget — and they are checked without reading any state at all, so they hold even when the governor cannot read its own files. Deleting the state directory turns off the spend limit; it does not turn off the rules.
 
-**A spend limit that means dollars.** `/governor:limit 40` sets $40 per agent. Claude prices each model at its own rate, so $40 is $40 whether the agent is on Opus 5 or Haiku 4.5. Under the hood the cap is cost-weighted effective tokens, because cached sessions re-read their whole context every turn and raw token counts explode while costing very little.
+**A spend limit that means dollars.** `/enforcer-governor:limit 40` sets $40 per agent. Claude prices each model at its own rate, so $40 is $40 whether the agent is on Opus 5 or Haiku 4.5. Under the hood the cap is cost-weighted effective tokens, because cached sessions re-read their whole context every turn and raw token counts explode while costing very little.
 
 **Rate limits, not just totals.** The incidents that cost real money are rate incidents. Dollars per minute, new agents per minute, and errors per minute are each watched and each *ask* rather than block — and ask once, so an overnight run waits for you instead of dying or nagging.
 
-**A record an audit can read.** `/governor:verify` walks the file and names the first line that does not add up. Every receipt carries who the agent acted for, what it tried, which model answered, and which rule decided.
+**A record an audit can read.** `/enforcer-governor:verify` walks the file and names the first line that does not add up. Every receipt carries who the agent acted for, what it tried, which model answered, and which rule decided.
 
 ## Commands
 
 | | |
 |---|---|
-| `/governor:status` | spend per agent, limits, current burn, state of the record |
-| `/governor:verify` | check the chain, name the first broken line |
-| `/governor:limit <dollars>` | set the per-agent limit |
+| `/enforcer-governor:status` | spend per agent, limits, current burn, state of the record |
+| `/enforcer-governor:verify` | check the chain, name the first broken line |
+| `/enforcer-governor:limit <dollars>` | set the per-agent limit |
 
 ## How it works
 
@@ -50,7 +67,9 @@ tool call ─► PreToolUse hook ─► capability rules ─► spend + rate che
                           allow / deny / ask  ─►  hash-chained receipt
 ```
 
-No daemon, no port, nothing listening. State lives in `~/.enforcer-governor/` behind a lock, so parallel tool calls land in the record in the order they were decided. If any of that is unreadable the hook allows the action and says so — a governor that blocks real work because its own state file was missing has failed at something more important than enforcing.
+No daemon, no port, nothing listening. State lives in `~/.enforcer-governor/` behind a lock, so parallel tool calls land in the record in the order they were decided.
+
+The two kinds of check fail in opposite directions, deliberately. **Spend fails open**: if the state is unreadable the hook allows the action and says in the reason line that it did not check, because a governor that blocks real work over a missing file of its own has failed at something more important than enforcing. **Capability fails closed**, because it can afford to — the rules are patterns matched against the action text and need no state, so an unreadable state directory does not reach them. A refusal decided that way is still written to the record, deliberately without a hash: there is no readable chain tail to hash against, and `verify` counts an unhashed line as unverifiable rather than as a break. Recording nothing would hide a real refusal, and forging a link would cry tampering on an honest file.
 
 The transcript is read forward from where the last call stopped, so the cost of checking does not grow with the length of your session.
 

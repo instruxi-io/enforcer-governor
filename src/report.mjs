@@ -12,14 +12,14 @@ const usd = (t, m) => '$' + dollarsForTokens(t, priceOf(m, cfg.model).in).toFixe
 if (cmd === 'verify') {
   const v = verify();
   if (!v.receipts) console.log('No decisions recorded yet.');
-  else if (v.ok) console.log(`All ${v.receipts} records check out.${v.unverifiable ? ` (${v.unverifiable} written before hashes were stored, reported as unverifiable.)` : ''}`);
+  else if (v.ok) console.log(`All ${v.receipts} records check out.${v.unverifiable ? ` (${v.unverifiable} carry no hash and could not be chain-checked: either written before hashes were stored, or decided while the governor could not read its own chain.)` : ''}`);
   else console.log(`The record does NOT check out. Line ${v.brokeAt} of ${v.receipts} does not match the one before it.\nFile: ${RECEIPTS}`);
   process.exit(0);
 }
 
 if (cmd === 'limit') {
   const d = Number(arg);
-  if (!Number.isFinite(d) || d <= 0) { console.log('Give a dollar amount, e.g. /governor:limit 40'); process.exit(0); }
+  if (!Number.isFinite(d) || d <= 0) { console.log('Give a dollar amount, e.g. /enforcer-governor:limit 40'); process.exit(0); }
   saveConfig({ ...loadConfig(), dollars: d });
   console.log(`Spend limit is now $${d} per agent, at ${priceOf(cfg.model).label} rates. Agents already running pick this up on their next action.`);
   process.exit(0);

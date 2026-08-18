@@ -2,7 +2,7 @@
 // The decision. Runs before every tool call: reads what the agent is about to
 // do, asks the policy, and answers in Claude Code's own permission vocabulary.
 import { input, emit, allow, matchText, agentOf, billing } from './lib.mjs';
-import { decide, getAgent, setModel, DEFAULTS, priceOf, tokensForDollars } from '../src/policy.mjs';
+import { decide, getAgent, setModel, matchRule, DEFAULTS, DEFAULT_RULES, priceOf, tokensForDollars } from '../src/policy.mjs';
 import { readUsage } from '../src/usage.mjs';
 import { withLock, loadState, saveState, loadConfig, writeReceipt } from '../src/store.mjs';
 
@@ -38,10 +38,41 @@ const held = withLock(() => {
   return { out, model: a.model };
 });
 
-// No lock, unreadable state, anything at all: allow. Enforcement that breaks
-// the user's real work has failed at something more important than enforcing.
+// No lock, unreadable state, anything at all: the SPEND checks fail open.
+// Enforcement that breaks the user's real work has failed at something more
+// important than enforcing.
+//
+// The capability checks do not fail open, because they do not have to. They are
+// regex over the action text and need no state at all, so a governor whose own
+// bookkeeping is broken can still refuse to pipe the internet into a shell.
+// Failing open here was the one direction a guard must never fail in: it made
+// "delete the state file" a way to turn every rule off.
 if (!held.ok || !held.value) {
-  allow(EVENT, 'Enforcer could not read its own state, so this was not checked. Nothing is blocked.');
+  const blind = 'Enforcer could not read its own state, so spend was not checked';
+  const cfg = { ...DEFAULTS, ...loadConfig() };   // reads defensively, never throws
+  const hit = cfg.rulesOn === false ? null
+    : matchRule(cfg.rules || DEFAULT_RULES, { action: matchText(ev.tool_name, ev.tool_input), tool: ev.tool_name });
+
+  if (hit) {
+    // Best-effort receipt, deliberately UNHASHED: there is no readable chain
+    // tail to hash against, and verify() counts a line with no hash as
+    // unverifiable rather than as a break. Recording nothing would hide a real
+    // refusal; forging a link would cry tampering on an honest file.
+    writeReceipt({
+      ts: new Date().toISOString(), agent: agentOf(ev),
+      verdict: hit.action === 'deny' ? 'deny' : 'escalate',
+      reason: hit.name, tool: ev.tool_name || '', rule: hit.name, chained: false,
+    }, undefined);
+
+    if (hit.action === 'deny') {
+      emit(EVENT, { permissionDecision: 'deny', permissionDecisionReason:
+        `Enforcer refused this action: it is not allowed to ${hit.name}. ${blind}, but this rule does not need it. The agent is not stopped and can carry on with something else.` });
+    }
+    emit(EVENT, { permissionDecision: 'ask', permissionDecisionReason:
+      `Enforcer wants you to confirm: this action would ${hit.name}. ${blind}, but this rule does not need it. Allow it this once?` });
+  }
+
+  allow(EVENT, `${blind}. Nothing is blocked.`);
 }
 const { out: res, model: priced } = held.value;
 r = res;
@@ -62,7 +93,7 @@ const capability = !!(r.entry && r.entry.rule);
 if (r.verdict === 'deny') {
   emit(EVENT, { permissionDecision: 'deny', permissionDecisionReason: capability
     ? `Enforcer refused this action: it is ${r.reason}. The agent is not stopped and can carry on with something else.`
-    : `Enforcer stopped this agent: ${r.reason}. It has spent ${of}. Raise the limit with /governor limit.` });
+    : `Enforcer stopped this agent: ${r.reason}. It has spent ${of}. Raise the limit with /enforcer-governor:limit.` });
 }
 
 if (r.verdict === 'escalate') {
