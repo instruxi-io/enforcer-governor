@@ -342,7 +342,7 @@ export function makeState() {
   };
 }
 
-const BURN_WINDOW = 60000;   // one minute, so the sum IS dollars per minute
+export const BURN_WINDOW = 60000;   // one minute, so the sum IS dollars per minute
 
 // Dollars per minute, for one agent or for everything at once. Needs a few
 // samples across a few seconds before it will answer, because one big charge

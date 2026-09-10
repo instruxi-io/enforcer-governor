@@ -40,12 +40,26 @@ export function gate(ev, cfg = {}, deps = {}) {
   const cap = capability(rules, ev);
   if (cap && cap.action !== 'allow') return cap;
 
+  // Spend and loop off does NOT mean capability off — hence this sitting below
+  // the call above rather than at the top of the function, which is where v2
+  // had it. There it returned early on `budgetOn === false && loopOn === false`
+  // and took the capability rules down with it, whatever `rulesOn` said. The
+  // README has always described three independent switches ("rulesOn the
+  // capability rules ... all three off is fully inert"), so the code and the
+  // documented contract disagreed, and the code was the wrong one: turning off
+  // spend tracking silently gave up `curl | sh` and `rm -rf` as well. Nothing
+  // in the suite pinned it, which is why it survived.
   if (cfg.budgetOn === false && cfg.loopOn === false) {
-    return Verdict.allow('checks are switched off', { source: ECONOMICS, checked: [CAPABILITY, ECONOMICS] });
+    return Verdict.allow('spend and loop checks are switched off',
+      { source: ECONOMICS, checked: [CAPABILITY, ECONOMICS] });
   }
 
+  // withState hands back a `reading` alongside the state: what this session has
+  // cost so far. It is passed IN rather than computed here on purpose — that is
+  // the seam where the harness's own total_cost_usd replaces our arithmetic
+  // without a single check in economics.mjs knowing the difference.
   const held = typeof deps.withState === 'function'
-    ? deps.withState((state) => deps.economics(state, ev, cfg))
+    ? deps.withState((state, reading) => deps.economics(state, { ...ev, ...(reading || {}) }, cfg))
     : { ok: false };
 
   // The blind path. Capability already had its say above and found nothing, so

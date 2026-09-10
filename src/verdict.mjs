@@ -48,16 +48,27 @@ export class Verdict {
   get blocks() { return this.action === DENY; }
   get needsHuman() { return this.action === ASK; }
 
-  /** The receipt body. The chain hashes this, so field order must stay stable. */
-  entry({ ts = new Date().toISOString(), agent, tool = '', model = '', tokens = 0, operator = '', client = '' } = {}) {
+  /**
+   * The receipt body. The chain hashes this, so field order must stay stable.
+   * `chained` is the caller's to state: only the writer knows whether it managed
+   * to hash this line onto a readable head. It is a different fact from
+   * `unchecked` - a capability refusal decided while the state was healthy is
+   * chained but never reaches economics, and conflating the two would label a
+   * perfectly good receipt as degraded.
+   */
+  entry({ ts = new Date().toISOString(), agent, tool = '', model = '', tokens = 0,
+          operator = '', client = '', chained = true } = {}) {
     return {
       ts, agent, verdict: this.action, reason: this.reason, source: this.source,
       rule: this.rule || undefined,
       rewrote: this.input ? true : undefined,
       tool, model, tokens, operator: operator || undefined, client: client || undefined,
-      // Absent when every layer ran. Present — and loud — when one did not, so
-      // a reader can tell an allow that was checked from one that was assumed.
-      unchecked: this.checked.includes(ECONOMICS) ? undefined : true,
+      // Present only on the degraded path: an answer given without reading the
+      // books at all, so a reader can tell an allow that was checked from one
+      // that was assumed. A capability refusal is not degraded and never
+      // carries it, even though economics did not run.
+      unchecked: (this.source === ECONOMICS && !this.checked.includes(ECONOMICS)) || undefined,
+      chained: chained ? undefined : false,
     };
   }
 
