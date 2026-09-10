@@ -4,17 +4,17 @@
   "description": "A Claude Code plugin that decides whether an agent action is allowed before it runs, and keeps a tamper-evident record of every decision.",
   "type": "module",
   "scripts": {
-    "test": "node test/policy.test.mjs && node test/gate.test.mjs && node test/meter.test.mjs && node test/plugin.test.mjs"
+    "test": "node test/policy.test.mjs && node test/gate.test.mjs && node test/meter.test.mjs && node test/brief.test.mjs && node test/plugin.test.mjs"
   },
   "files": [
     ".claude-plugin",
-    "hooks",
-    "commands",
-    "statusline",
-    "src",
-    "settings.json",
     "LICENSE",
-    "TRADEMARKS.md"
+    "TRADEMARKS.md",
+    "commands",
+    "hooks",
+    "settings.json",
+    "src",
+    "statusline"
   ],
   "keywords": [
     "claude-code",
