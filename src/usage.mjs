@@ -18,6 +18,10 @@ const cursorFile = id => join(DIR, `cursor-${String(id).replace(/[^\w-]/g, '')}.
 // set would grow with the session, which is the thing this file exists to stop.
 const SEEN_MAX = 400;
 
+// A web search or fetch is billed per request (~$10 per 1000). Expressed as
+// effective input-tokens so it can join the same sum: $0.01 at $5/MTok input.
+const SERVER_TOOL_EFF = 2000;
+
 export function readUsage(sessionId, transcriptPath) {
   const out = { tokens: 0, model: '', task: '' };
   if (!transcriptPath) return out;
@@ -65,9 +69,27 @@ export function readUsage(sessionId, transcriptPath) {
       // Price each message at the model that ANSWERED it. A session that
       // switched models part-way is a mix, and pricing the whole transcript at
       // whatever is current mis-states it by the ratio between the two.
+      // Cache writes are not one price. A 5-minute TTL costs 1.25x input, a
+      // 1-hour TTL costs 2x, and usage.cache_creation carries the split. v2
+      // weighted every write at 1.25x, so any session on the 1-hour TTL was
+      // metered low -- measured at 10.7% under on a real session whose 85,623
+      // cache-creation tokens were ALL ephemeral_1h. Fall back to the flat
+      // figure only when the breakdown is absent.
+      const cc = u.cache_creation || {};
+      const h1 = cc.ephemeral_1h_input_tokens || 0;
+      const m5 = cc.ephemeral_5m_input_tokens || 0;
+      const write = (h1 || m5)
+        ? 2 * h1 + 1.25 * m5
+        : 1.25 * (u.cache_creation_input_tokens || 0);
+      // Server tools bill per request, not per token, and never entered v2's
+      // sum at all. Priced against input rate so the weighting stays in one
+      // unit; the figure is small but it is not zero on a research-heavy run.
+      const st = u.server_tool_use || {};
+      const calls = (st.web_search_requests || 0) + (st.web_fetch_requests || 0);
       const eff = (u.input_tokens || 0) + 5 * (u.output_tokens || 0)
-                + 1.25 * (u.cache_creation_input_tokens || 0)
-                + 0.1  * (u.cache_read_input_tokens || 0);
+                + write
+                + 0.1 * (u.cache_read_input_tokens || 0)
+                + calls * SERVER_TOOL_EFF;
       cur.usd += eff * priceOf(m?.message?.model || cur.model).in / 1e6;
     }
     cur.seen = [...seen].slice(-SEEN_MAX);

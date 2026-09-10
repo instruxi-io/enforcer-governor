@@ -57,12 +57,13 @@ export class Verdict {
    * perfectly good receipt as degraded.
    */
   entry({ ts = new Date().toISOString(), agent, tool = '', model = '', tokens = 0,
-          operator = '', client = '', chained = true } = {}) {
+          operator = '', client = '', chained = true, meter = undefined } = {}) {
     return {
       ts, agent, verdict: this.action, reason: this.reason, source: this.source,
       rule: this.rule || undefined,
       rewrote: this.input ? true : undefined,
       tool, model, tokens, operator: operator || undefined, client: client || undefined,
+      meter: meter || undefined,
       // Present only on the degraded path: an answer given without reading the
       // books at all, so a reader can tell an allow that was checked from one
       // that was assumed. A capability refusal is not degraded and never

@@ -12,7 +12,7 @@ import { input, emit, matchText, agentOf, billing } from './lib.mjs';
 import { gate } from '../src/gate.mjs';
 import { evaluate as economics } from '../src/economics.mjs';
 import { DEFAULTS, priceOf, tokensForDollars, getAgent, setModel } from '../src/policy.mjs';
-import { readUsage } from '../src/usage.mjs';
+import { read as meter } from '../src/meter.mjs';
 import { withLock, loadState, saveState, loadConfig, writeReceipt } from '../src/store.mjs';
 import { sha256 } from '../src/policy.mjs';
 
@@ -37,7 +37,7 @@ let priced = cfg.model, spent = 0, budget = 0;
 // verifying — which is exactly what happens with 40 concurrent tool calls.
 const held = withLock(() => {
   const state = loadState();
-  const reading = readUsage(ev.session_id, ev.transcript_path);
+  const reading = meter(ev.session_id, ev.transcript_path, cfg);
   // Price the agent at its OWN model before judging it: "$20 per agent" has to
   // mean $20 whether it is on Opus or Haiku, and a flat token cap would quietly
   // give one of them a quarter of the other's money.
@@ -51,8 +51,11 @@ const held = withLock(() => {
   });
 
   priced = a.model; spent = a.tokens; budget = a.budget;
+  // The receipt says where the money figure came from. "How did you know what
+  // this cost" deserves an answer, not an assumption.
   const entry = v.entry({ agent, tool: ev.tool_name || '', model: a.model || '',
-    tokens: Math.round(a.tokens), operator: a.operator || '', client: a.client || '' });
+    tokens: Math.round(a.tokens), operator: a.operator || '', client: a.client || '',
+    meter: reading.source });
   const hash = sha256(state.prevHash + JSON.stringify(entry));
   state.prevHash = hash;
   writeReceipt(entry, hash);
