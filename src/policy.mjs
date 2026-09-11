@@ -670,7 +670,15 @@ export function kill(state, agentId) {
 // Append a hash-chained receipt. Each hash folds in the previous one, so any
 // later edit or deletion breaks the chain and verifyChain() catches it.
 export function record(state, a, verdict, reason, tokens, authority, operator, extra) {
-  const entry = { ts: Date.now(), agent: a.id, verdict, reason, tokens: Math.round(tokens) };
+  // ISO, not epoch milliseconds. The record is read by people and by log
+  // pipelines, and both do better with a self-describing, sortable, timezone-
+  // bearing string than with a bare integer. v3's verdict.entry() already
+  // wrote ISO, so leaving this as Date.now() put TWO formats in one record —
+  // which broke the collector's timestamp parser and, worse, made the evidence
+  // chain internally inconsistent. Lines already written keep their own format
+  // and still verify: each hash covers the bytes that were hashed, so this is
+  // a format transition, not a chain break.
+  const entry = { ts: new Date().toISOString(), agent: a.id, verdict, reason, tokens: Math.round(tokens) };
   // An auditor asks four things of an agent action: who it acted for, what it
   // tried to do, which policy answered, and on what. A prose reason answers
   // none of them in a form you can query, so the facts are recorded as fields

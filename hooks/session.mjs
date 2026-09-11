@@ -18,7 +18,7 @@ if (EVENT === 'SessionEnd') {
     const a = state.agents[agent];
     if (!a && !tokens) return;
     const usd = dollarsForTokens(tokens, priceOf(model).in);
-    const entry = { ts: Date.now(), agent, verdict: 'summary',
+    const entry = { ts: new Date().toISOString(), agent, verdict: 'summary',
       reason: `session ended after $${usd.toFixed(2)}`, tokens: Math.round(tokens),
       ...(model ? { model } : {}), ...(a?.client ? { client: a.client } : {}),
       ...(a?.operator ? { operator: a.operator } : {}) };

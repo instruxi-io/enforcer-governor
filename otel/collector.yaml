@@ -1,0 +1,128 @@
+# OpenTelemetry collector for a governed fleet.
+#
+# Two receivers, because the fleet view needs two things that come from
+# different places and neither one is enough alone:
+#
+#   otlp     — what Claude Code emits about itself: cost, tokens, tool calls,
+#              subagent spawns, errors. Anthropic's instrumentation, not ours.
+#   filelog  — what the governor DECIDED. Claude Code's metrics know nothing
+#              about verdicts, so a dashboard fed only by OTLP shows spend and
+#              tool counts while the entire reason this product exists stays
+#              invisible: nothing about what was refused, which rule fired, or
+#              which agent was stopped.
+#
+# The second one needs no code in the plugin and adds no latency to any hook,
+# because the governor already writes exactly what a collector wants to read —
+# one structured JSON line per decision, appended, never rewritten. The receipt
+# file IS the telemetry export.
+#
+# Run:  otelcol-contrib --config otel/collector.yaml
+#       (filelog and kafka live in the contrib distribution, not core)
+
+receivers:
+  # ── what Claude Code says about itself ────────────────────────────────────
+  # Enabled per machine with:
+  #   CLAUDE_CODE_ENABLE_TELEMETRY=1
+  #   OTEL_METRICS_EXPORTER=otlp
+  #   OTEL_EXPORTER_OTLP_ENDPOINT=http://<collector>:4317
+  # Fleet-wide that is a managed-settings decision, not a plugin one: a
+  # SessionStart hook cannot set environment variables for the process that is
+  # already running.
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  # ── what the governor decided ─────────────────────────────────────────────
+  filelog/receipts:
+    include: [ "${env:HOME}/.enforcer-governor/receipts.jsonl" ]
+    # The record is append-only and must never be consumed or rotated by the
+    # collector: it is the local half of the evidence chain and the governor's
+    # own verify() reads it. Tail it, never own it.
+    start_at: beginning
+    include_file_name: false
+    operators:
+      - type: json_parser
+        # A malformed line must not stop the pipeline. The governor writes an
+        # unhashed receipt when it decided blind, and that line still matters.
+        on_error: send_quiet
+        timestamp:
+          parse_from: attributes.ts
+          layout_type: gotime
+          layout: '2006-01-02T15:04:05.000Z07:00'
+      - type: severity_parser
+        parse_from: attributes.verdict
+        on_error: send_quiet
+        mapping:
+          error: deny        # something was refused
+          warn:  ask         # something needs a human
+          info:  [allow, rewrite, summary]
+
+processors:
+  # Batching is correct for telemetry and would be wrong for the evidence
+  # chain. These receipts are a COPY for observability; the authoritative ones
+  # ship to the control plane over gRPC with synchronous validation. If this
+  # pipeline drops a line, the record is still intact on disk and on the
+  # server — which is exactly why receipts may not depend on this path.
+  batch:
+    timeout: 10s
+    send_batch_size: 512
+
+  # Who and where, so the fleet view can group by something other than a
+  # session id. The governor already derives the client from the working
+  # directory, so attribution arrives without anyone labelling a session.
+  attributes/identify:
+    actions:
+      - key: service.name
+        value: enforcer-governor
+        action: upsert
+      - key: governed.source
+        from_attribute: source
+        action: insert
+      - { key: governed.rule,   from_attribute: rule,   action: insert }
+      - key: governed.client
+        from_attribute: client
+        action: insert
+
+  # Drop the reason string from telemetry. It is prose written for a person
+  # being interrupted, it is the longest field in the record, and it says
+  # nothing a dashboard can group by that `verdict` and `rule` do not.
+  attributes/trim:
+    actions:
+      - key: reason
+        action: delete
+
+exporters:
+  # The designed path: Kafka you already run, then a consumer into Postgres.
+  # Telemetry is high-volume and drop-tolerant, which is what Kafka is for —
+  # unlike receipts, which need synchronous chain validation and go direct.
+  kafka/telemetry:
+    brokers: [ "${env:KAFKA_BROKERS}" ]
+    topic: enforcer.governor.telemetry
+    encoding: otlp_json
+    producer:
+      compression: snappy
+
+  # For getting started before Kafka is wired, and for proving the pipeline.
+  debug:
+    verbosity: normal
+
+service:
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [kafka/telemetry]
+    logs/claude:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [kafka/telemetry]
+    logs/verdicts:
+      receivers: [filelog/receipts]
+      processors: [attributes/identify, attributes/trim, batch]
+      exporters: [kafka/telemetry, debug]
+  telemetry:
+    logs:
+      level: warn
