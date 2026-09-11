@@ -7,6 +7,7 @@ Agents get stuck in loops, repeat work, and pipe the internet into a shell. Ever
 > **May this agent do this, right now?**
 
 - **allow** — in budget and on task, carry on
+- **rewrite** — run it, in a form the policy accepts
 - **deny** — over budget, looping, or not permitted at all
 - **ask** — pause and check with you
 
@@ -40,11 +41,17 @@ That path is where a marketplace added from GitHub lands. If you installed from 
 
 ## What you get
 
-**A number in your status line.** `· $3.40/$20` — live spend against the limit, always visible, no dashboard to open. It changes colour once, when something needs you. This is the one piece that needs the paste in [Install](#install).
+**A number in your status line, which is also where the money figure comes from.** `· $3.40/$20` — live spend against the limit, always visible, no dashboard to open. It changes colour once, when something needs you.
+
+It has a second job. Claude Code hands its own `total_cost_usd` to the status line and **only** to the status line — the hooks never see it. That figure can be computed at an organisation's contracted rates, so it beats anything a third-party price table can know. The status line records it and the gate reads it back on the next tool call. Without the paste in [Install](#install) the governor still enforces; it just meters from the transcript instead, and every receipt says which of the two answered.
 
 **Capability rules that ship with the plugin.** Piping a URL into a shell is refused outright. Deleting a tree, rewriting git history, reading credentials, publishing or deploying: those stop and ask. These are capability decisions, not spend ones, so they fire on a full budget — and they are checked without reading any state at all, so they hold even when the governor cannot read its own files. Deleting the state directory turns off the spend limit; it does not turn off the rules.
 
-**A spend limit that means dollars.** `/enforcer-governor:limit 40` sets $40 per agent. Claude prices each model at its own rate, so $40 is $40 whether the agent is on Opus 5 or Haiku 4.5. Under the hood the cap is cost-weighted effective tokens, because cached sessions re-read their whole context every turn and raw token counts explode while costing very little.
+**A spend limit that means dollars.** `/enforcer-governor:limit 40` sets $40 per agent. Claude prices each model at its own rate, so $40 is $40 whether the agent is on Opus 5 or Haiku 4.5. Where the harness figure is unavailable the cap falls back to cost-weighted effective tokens, because cached sessions re-read their whole context every turn and raw token counts explode while costing very little.
+
+**A word to the agent, not just to you.** An agent that learns it is near the limit can land what it has instead of opening a new front. At roughly two thirds of the budget it is told once — one sentence, at the turn boundary, where it can still change its plan — and then the governor goes quiet until the situation changes. Warning at the limit itself is too late: the turn is already committed. Every word costs, because it joins the cached prefix and is billed on every later turn, which is why it is one sentence and why it is said once.
+
+**A safer command instead of a refused one.** Some actions have a form that keeps the intent and drops the footgun. `git push --force` becomes `git push --force-with-lease`, which refuses only when someone else has pushed since your last fetch — the case that loses work. The rewrite is announced and recorded; a governor that edits commands silently would be an invisible actor in your transcript.
 
 **Rate limits, not just totals.** The incidents that cost real money are rate incidents. Dollars per minute, new agents per minute, and errors per minute are each watched and each *ask* rather than block — and ask once, so an overnight run waits for you instead of dying or nagging.
 
@@ -69,20 +76,27 @@ To switch the governor off without uninstalling it, put any of these in `~/.enfo
 {"budgetOn": false, "loopOn": false, "rulesOn": false}
 ```
 
-`budgetOn` covers the spend and rate checks, `loopOn` the loop check, `rulesOn` the capability rules. All three off is fully inert. Do not delete `state.json` to unstick something: it holds the head of the receipt chain, so the next receipt hashes against nothing and `verify` correctly reports the record as broken.
+`budgetOn` covers the spend and rate checks, `loopOn` the loop check, `rulesOn` the capability rules. The three are independent: turning spend tracking off leaves `curl | sh` and `rm -rf` still guarded. All three off is fully inert. Do not delete `state.json` to unstick something: it holds the head of the receipt chain, so the next receipt hashes against nothing and `verify` correctly reports the record as broken.
 
 ## How it works
 
 ```
-tool call ─► PreToolUse hook ─► capability rules ─► spend + rate checks
-                                       │
-                                       ▼
-                          allow / deny / ask  ─►  hash-chained receipt
+prompt  ─► UserPromptSubmit ─► a word to the agent, if the situation changed
+
+                         ┌─ capability rules ─── no state, FAILS CLOSED
+tool call ─► PreToolUse ─┤
+                         └─ spend + rate ─────── needs state, FAILS OPEN
+                                   │
+                                   ▼
+             allow / deny / ask / rewrite  ─►  hash-chained receipt
+
+result  ─► PostToolUse ─► what actually happened (errors feed the retry check)
+subagent─► SubagentStart ─► fan-out, counted rather than inferred
 ```
 
-No daemon, no port, nothing listening. State lives in `~/.enforcer-governor/` behind a lock, so parallel tool calls land in the record in the order they were decided.
+Seven hooks, no daemon, no port, nothing listening. State lives in `~/.enforcer-governor/` behind a lock, so parallel tool calls land in the record in the order they were decided.
 
-The two kinds of check fail in opposite directions, deliberately. **Spend fails open**: if the state is unreadable the hook allows the action and says in the reason line that it did not check, because a governor that blocks real work over a missing file of its own has failed at something more important than enforcing. **Capability fails closed**, because it can afford to — the rules are patterns matched against the action text and need no state, so an unreadable state directory does not reach them. A refusal decided that way is still written to the record, deliberately without a hash: there is no readable chain tail to hash against, and `verify` counts an unhashed line as unverifiable rather than as a break. Recording nothing would hide a real refusal, and forging a link would cry tampering on an honest file.
+That split is the architecture, and the two halves fail in opposite directions on purpose. **Spend fails open**: if the state is unreadable the hook allows the action and says in the reason line that it did not check, because a governor that blocks real work over a missing file of its own has failed at something more important than enforcing. **Capability fails closed**, because it can afford to — the rules are patterns matched against the action text and need no state, so an unreadable state directory does not reach them. A refusal decided that way is still written to the record, deliberately without a hash: there is no readable chain tail to hash against, and `verify` counts an unhashed line as unverifiable rather than as a break. Recording nothing would hide a real refusal, and forging a link would cry tampering on an honest file.
 
 The transcript is read forward from where the last call stopped, so the cost of checking does not grow with the length of your session.
 
