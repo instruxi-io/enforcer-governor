@@ -3,6 +3,7 @@
 // by a person mid-session, so money first and jargon never.
 import { loadState, loadConfig, saveConfig, saveState, verify, withLock, writeReceipt, RECEIPTS } from './store.mjs';
 import { DEFAULTS, priceOf, dollarsForTokens, burnRate, release } from './policy.mjs';
+import { SETTINGS, GROUPS, RETIRED, validate, parseValue } from './settings.mjs';
 
 const [, , cmd, arg] = process.argv;
 const cfg = { ...DEFAULTS, ...loadConfig() };
@@ -14,6 +15,61 @@ if (cmd === 'verify') {
   if (!v.receipts) console.log('No decisions recorded yet.');
   else if (v.ok) console.log(`All ${v.receipts} records check out.${v.unverifiable ? ` (${v.unverifiable} carry no hash and could not be chain-checked: either written before hashes were stored, or decided while the governor could not read its own chain.)` : ''}`);
   else console.log(`The record does NOT check out. Line ${v.brokeAt} of ${v.receipts} does not match the one before it.\nFile: ${RECEIPTS}`);
+  process.exit(0);
+}
+
+// Everything the v1 console could turn, as text. Grouped, because the order
+// these are read in is not the order they are stored in, and showing 18 flat
+// keys is the wall the console's "?" affordances existed to avoid.
+if (cmd === 'config') {
+  const live = loadConfig();
+  const width = Math.max(...Object.keys(SETTINGS).map(k => k.length));
+  for (const g of GROUPS) {
+    const keys = Object.keys(SETTINGS).filter(k => SETTINGS[k].group === g);
+    if (!keys.length) continue;
+    console.log(`\n${g.toUpperCase()}`);
+    for (const k of keys) {
+      const spec = SETTINGS[k];
+      const val = cfg[k];
+      // Mark what has been changed. On a page of defaults the two or three
+      // someone actually set are the only interesting rows.
+      const set = Object.prototype.hasOwnProperty.call(live, k) && live[k] !== DEFAULTS[k];
+      const shown = spec.type === 'boolean' ? (val ? 'on' : 'off')
+                  : spec.unit === '$' ? `$${val}`
+                  : String(val);
+      console.log(`  ${k.padEnd(width)}  ${shown.padEnd(12)}${set ? '*' : ' '} ${spec.describe}`);
+      if (arg === '--why' && spec.hint) console.log(`  ${' '.repeat(width)}  ${' '.repeat(13)}${spec.hint}`);
+    }
+  }
+  console.log('\n  * changed from the default.  /enforcer-governor:config --why explains each one.');
+  console.log('  Change one with /enforcer-governor:set <name> <value>.');
+  const dead = Object.keys(RETIRED).filter(k => k in live);
+  if (dead.length) {
+    console.log(`\n  Your config still carries ${dead.length} retired setting(s) that do nothing:`);
+    for (const k of dead) console.log(`    ${k} — ${RETIRED[k]}`);
+  }
+  process.exit(0);
+}
+
+if (cmd === 'set') {
+  const [key, ...rest] = (arg || '').split(/\s+/);
+  const raw = rest.join(' ');
+  if (!key || raw === '') {
+    console.log('Usage: /enforcer-governor:set <name> <value>   —  /enforcer-governor:config lists them.');
+    process.exit(0);
+  }
+  const err = validate(key, raw);
+  // Refuse rather than absorb. These values are compared against spend on every
+  // tool call and the failure is silent: a soft mark of 75 instead of 0.75 means
+  // the warn never fires and nothing tells you.
+  if (err) { console.log(`Not changed — ${err}`); process.exit(0); }
+  const value = parseValue(SETTINGS[key], raw);
+  const before = cfg[key];
+  saveConfig({ ...loadConfig(), [key]: value });
+  const show = v => SETTINGS[key].type === 'boolean' ? (v ? 'on' : 'off') : String(v);
+  console.log(`${key}: ${show(before)} -> ${show(value)}   ${SETTINGS[key].describe}`);
+  if (SETTINGS[key].hint) console.log(`  ${SETTINGS[key].hint}`);
+  console.log('Agents already running pick this up on their next action.');
   process.exit(0);
 }
 

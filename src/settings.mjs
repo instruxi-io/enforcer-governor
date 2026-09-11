@@ -1,0 +1,115 @@
+// The knobs, described.
+//
+// v3 inherited 26 settings and exactly one way to change any of them:
+// /enforcer-governor:limit, which sets the per-agent cap. The other 25 — daily
+// and monthly ceilings, per-client caps, burn and fan-out thresholds, whether
+// the soft mark asks or stops — are real, enforced, and reachable only by
+// hand-editing JSON. That is not a missing feature, it is a regression: v1's
+// console existed to turn exactly these dials, and every control carried its
+// own explanation behind a "?" because six standing paragraphs read as a wall.
+// v2 deleted the console and replaced it with nothing.
+//
+// So this file is the console's content without its pixels: what each setting
+// is, in what unit, what it does, and what a sane value looks like. It is used
+// three ways — to render /config, to validate /set, and as the only place a
+// new setting has to be described.
+//
+// Validation is not decoration here. These values are compared against spend
+// on every tool call, and the failure that matters is silent: a soft mark of
+// 75 instead of 0.75 means the warn never fires, and nothing tells you.
+
+export const GROUPS = ['limits', 'rates', 'checks', 'attribution', 'identity'];
+
+const num = (min, max) => (v) => {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return `not a number: ${v}`;
+  if (n < min || n > max) return `must be between ${min} and ${max}`;
+  return null;
+};
+const bool = () => (v) =>
+  ['true', 'false', 'on', 'off', 'yes', 'no', '1', '0'].includes(String(v).toLowerCase())
+    ? null : `expected true or false, got ${v}`;
+const oneOf = (...ok) => (v) => ok.includes(String(v)) ? null : `expected one of ${ok.join(', ')}`;
+
+export const parseValue = (spec, raw) => {
+  if (spec.type === 'boolean') return ['true', 'on', 'yes', '1'].includes(String(raw).toLowerCase());
+  if (spec.type === 'number') return Number(raw);
+  return String(raw);
+};
+
+export const SETTINGS = {
+  // ── limits ────────────────────────────────────────────────────────────────
+  dollars: { group: 'limits', type: 'number', unit: '$', check: num(0.01, 100000),
+    describe: 'Spend cap per agent. The one number to get right.',
+    hint: 'A long session runs $20-$80, so a cap that binds sits above that, not at it.' },
+  soft: { group: 'limits', type: 'number', unit: 'fraction', check: num(0.05, 1),
+    describe: 'Fraction of the cap where the governor speaks up.',
+    hint: 'A FRACTION, not a percent: 0.75, never 75.' },
+  softAction: { group: 'limits', type: 'string', check: oneOf('escalate', 'deny'),
+    describe: 'At the soft mark: ask a human (escalate) or stop the agent (deny).',
+    hint: 'escalate for interactive work, deny for anything unattended.' },
+  dailyLimit: { group: 'limits', type: 'number', unit: '$/day', check: num(0, 1e6),
+    describe: 'Total across every agent, per day. 0 is off.',
+    hint: 'This is the one that bounds a team; the per-agent cap only bounds one session.' },
+  weeklyLimit: { group: 'limits', type: 'number', unit: '$/week', check: num(0, 1e6),
+    describe: 'Total across every agent, per week. 0 is off.' },
+  monthlyLimit: { group: 'limits', type: 'number', unit: '$/month', check: num(0, 1e6),
+    describe: 'Total across every agent, per month. 0 is off.' },
+
+  // ── rates ─────────────────────────────────────────────────────────────────
+  burnLimit: { group: 'rates', type: 'number', unit: '$/min', check: num(0, 1000),
+    describe: 'Per agent. Asks rather than blocks. 0 is off.',
+    hint: 'Ordinary work runs $0.10-$0.25 a minute, so the default sits ~8x above it.' },
+  fleetBurnLimit: { group: 'rates', type: 'number', unit: '$/min', check: num(0, 1000),
+    describe: 'Across every agent at once. 0 is off.' },
+  fanoutLimit: { group: 'rates', type: 'number', unit: 'agents/min', check: num(0, 1000),
+    describe: 'New agents started in a minute before asking. 0 is off.',
+    hint: 'About the SHAPE of the arrival: an orchestrator spawning spawners is exponential.' },
+  retryLimit: { group: 'rates', type: 'number', unit: 'errors/min', check: num(0, 1000),
+    describe: 'Upstream errors in a minute before asking. 0 is off.',
+    hint: 'A rate-limited call fails cheaply; the retry after it is what costs.' },
+  loopLimit: { group: 'rates', type: 'number', unit: 'repeats', check: num(2, 100),
+    describe: 'Identical actions in the recent window that count as a loop.' },
+  loopWindow: { group: 'rates', type: 'number', unit: 'actions', check: num(2, 500),
+    describe: 'How many recent actions are remembered when looking for a loop.' },
+
+  // ── checks ────────────────────────────────────────────────────────────────
+  budgetOn: { group: 'checks', type: 'boolean', check: bool(),
+    describe: 'The spend and rate checks.' },
+  loopOn: { group: 'checks', type: 'boolean', check: bool(),
+    describe: 'The loop check.' },
+  rulesOn: { group: 'checks', type: 'boolean', check: bool(),
+    describe: 'The capability rules — what an agent may DO.',
+    hint: 'Independent of the others: spend off still leaves curl|sh and rm -rf guarded.' },
+  adviseModel: { group: 'checks', type: 'boolean', check: bool(),
+    describe: 'Say when the model and the task look mismatched. Never changes a verdict.' },
+
+  // ── attribution ───────────────────────────────────────────────────────────
+  model: { group: 'attribution', type: 'string',
+    describe: 'Which model prices dollars into tokens when the harness figure is unavailable.' },
+
+  // ── identity ──────────────────────────────────────────────────────────────
+  operator: { group: 'identity', type: 'string',
+    describe: 'The person an agent acts for. Stamped on every receipt.',
+    hint: 'A receipt that cannot say who is evidence of nothing.' },
+};
+
+/** Settings that exist in DEFAULTS but are no longer wired to anything. */
+export const RETIRED = {
+  rerouteOn: 'reroute needed the v1 proxy, which v3 does not have',
+  fallbackUrl: 'see rerouteOn',
+  fallbackModel: 'see rerouteOn',
+  fallbackHeaders: 'see rerouteOn',
+  enforceModel: 'only ever worked on the proxy; never applied to Claude Code',
+};
+
+/** @returns {string|null} an error message, or null when the value is good. */
+export function validate(key, raw) {
+  const spec = SETTINGS[key];
+  if (!spec) {
+    if (RETIRED[key]) return `${key} was retired: ${RETIRED[key]}`;
+    const near = Object.keys(SETTINGS).filter(k => k.toLowerCase().includes(String(key).toLowerCase()));
+    return `no setting called ${key}` + (near.length ? `. Did you mean ${near.join(' or ')}?` : '');
+  }
+  return spec.check ? spec.check(raw) : null;
+}

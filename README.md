@@ -65,6 +65,8 @@ It has a second job. Claude Code hands its own `total_cost_usd` to the status li
 | `/enforcer-governor:verify` | check the chain, name the first broken line |
 | `/enforcer-governor:limit <dollars>` | set the per-agent limit |
 | `/enforcer-governor:resume [agent]` | run a stopped agent again, with room to finish |
+| `/enforcer-governor:config [--why]` | every setting, what it does, and which you have changed |
+| `/enforcer-governor:set <name> <value>` | change one, with validation |
 
 ### Getting out of the way
 
