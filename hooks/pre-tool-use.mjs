@@ -95,8 +95,12 @@ if (verdict.action === 'ask') {
 // silently editing what the agent asked for would make the governor an
 // invisible actor in the transcript, and the receipt records it too.
 if (verdict.action === 'rewrite') {
+  // defer, carrying the rewrite. The governor's opinion is "run THIS form
+  // instead", not "run it unchecked" — the user's own rules should still see
+  // the rewritten command. Granting here would let a rewrite walk past a deny
+  // rule that the original would have hit, which is the opposite of safer.
   emit(EVENT, {
-    permissionDecision: 'allow',
+    permissionDecision: 'defer',
     permissionDecisionReason: `Enforcer: ${of}`,
     updatedInput: verdict.input,
     systemMessage: `Enforcer rewrote this command — ${verdict.reason}.`,
@@ -104,9 +108,25 @@ if (verdict.action === 'rewrite') {
 }
 
 if (verdict.advice) {
-  emit(EVENT, { permissionDecision: 'allow', permissionDecisionReason: `Enforcer: ${of}`,
+  // Advice is not a verdict. It never changes the decision, so it must not
+  // become one by arriving as an affirmative allow.
+  emit(EVENT, { permissionDecision: 'defer', permissionDecisionReason: `Enforcer: ${of}`,
     systemMessage: `Enforcer: ${verdict.advice.why}. Consider /model ${verdict.advice.suggest}.` });
 }
 
-emit(EVENT, { permissionDecision: 'allow',
+// DEFER, not allow. The distinction is the difference between composing with
+// the user's own permission rules and quietly overriding them.
+//
+// `allow` from a PreToolUse hook is an affirmative grant that short-circuits
+// what follows — that is why `defer` exists as a separate decision at all,
+// and why settings rules take only allow/deny/ask while hooks take four. So a
+// governor answering `allow` to every ordinary call was suppressing the deny
+// rules and prompts the user configured in /permissions, on every call it
+// permitted. For a tool whose own README calls that block "belt to the hooks'
+// braces", cutting the braces was exactly the wrong failure.
+//
+// `defer` says what is actually true here: the governor has no objection, and
+// nothing about that should stop Claude Code asking its own questions. The
+// spend figure still rides along, so the reason line is unchanged.
+emit(EVENT, { permissionDecision: 'defer',
   permissionDecisionReason: verdict.checked.includes('economics') ? `Enforcer: ${of}` : verdict.reason });

@@ -15,8 +15,14 @@ export function emit(eventName, out) {
 
 // Fail OPEN, always. A governor that blocks real work because its own state
 // file was unreadable has done more damage than the spend it was guarding.
+//
+// Open means DEFER, not allow. Failing open should return the user to the
+// behaviour they would have had without this tool installed — their own
+// /permissions rules, their own prompts. `allow` is an affirmative grant that
+// short-circuits those, so a governor that could not read its own state would
+// have been silently widening access at the exact moment it knew least.
 export const allow = (event, reason) =>
-  emit(event, { permissionDecision: 'allow', permissionDecisionReason: reason });
+  emit(event, { permissionDecision: 'defer', permissionDecisionReason: reason });
 
 // ── What the capability rules get to see ────────────────────────────────────
 // Whatever this leaves out is unenforced. v1 truncated to 200 characters,
