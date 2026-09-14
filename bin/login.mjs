@@ -142,7 +142,7 @@ async function main(argv) {
   if (cmd === 'status') {
     const doc = readCredentials();
     if (!doc) { out('Not signed in to Enforcer. Run /enforcer-governor:login.'); return; }
-    const how = enforcerKey() ? 'an API key' : 'a browser sign-in';
+    const how = process.env.ENFORCER_API_KEY ? 'the ENFORCER_API_KEY environment variable' : enforcerKey() ? 'an API key' : 'a browser sign-in';
     const me = await whoAmI(base).catch(() => ({ error: 'unreachable' }));
     if (!me || me.error) { out(`Signed in with ${how}, but Enforcer did not accept it (${me?.error || 'no credential'}). Run /enforcer-governor:login again.`); return; }
     out(`Signed in to ${base} with ${how} as ${who(me)} (${me.role?.slug || 'unknown role'}, tenant ${me.tenant?.name || me.tenant?.id || '?'}).`);
@@ -163,8 +163,10 @@ async function main(argv) {
   if (cmd === 'api-key') {
     const key = (arg || process.env.ENFORCER_API_KEY || '').trim();
     if (!/^[a-z0-9]+_[A-Za-z0-9_-]{20,}$/.test(key)) { out('Usage: login api-key <env3_…>  (or set ENFORCER_API_KEY)'); process.exitCode = 2; return; }
+    // Likewise a key replaces a browser sign-in: one credential, one identity.
     const doc = readCredentials() || { enforcer: {} };
-    saveCredentials({ ...doc, enforcer: { ...doc.enforcer, base_url: base, api_key: key, saved_at: new Date().toISOString() } });
+    const { oauth: _oauth, ...kept } = doc.enforcer;
+    saveCredentials({ ...doc, enforcer: { ...kept, base_url: base, api_key: key, saved_at: new Date().toISOString() } });
     const me = await whoAmI(base).catch(() => null);
     out(me && !me.error
       ? `Saved. Signed in as ${who(me)}. The governor and the Enforcer MCP server now both use this key.`
@@ -181,8 +183,12 @@ async function main(argv) {
       out(url);
       openBrowser(url);
     } });
+    // The sign-in REPLACES any saved API key. authHeaders prefers a key when
+    // both exist, so keeping it would leave both tools acting as the key's
+    // account while this command reported the person who just signed in.
     const doc = readCredentials() || { enforcer: {} };
-    saveCredentials({ ...doc, enforcer: { ...doc.enforcer, base_url: base, oauth } });
+    const { api_key: _key, saved_at: _at, ...kept } = doc.enforcer;
+    saveCredentials({ ...doc, enforcer: { ...kept, base_url: base, oauth } });
     const me = await whoAmI(base).catch(() => null);
     out(me && !me.error ? `Signed in as ${who(me)}.` : 'Signed in.');
     out('The governor and the Enforcer MCP server share this sign-in.');

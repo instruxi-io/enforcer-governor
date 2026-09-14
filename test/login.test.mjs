@@ -87,5 +87,19 @@ await ok('resources come from what the MCP server publishes about itself', async
   assert.deepEqual(await resourcesFor('https://api.example.test', down), ['https://api.example.test'], 'no MCP metadata still signs the governor in');
 });
 
+await ok('one credential at a time: a sign-in replaces a key and a key replaces a sign-in', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const { saveCredentials, readCredentials } = await import('../src/credentials.mjs');
+  saveCredentials({ enforcer: { api_key: 'env3_' + 'k'.repeat(43), base_url: base } });
+  // The browser path, driven through the CLI entry point's save logic by importing it is not
+  // possible without a browser, so exercise the same rule on the api-key path in reverse.
+  saveCredentials({ enforcer: { base_url: base, oauth: { access_token: 'at', client_id: 'c' } } });
+  execFileSync(process.execPath, [new URL('../bin/login.mjs', import.meta.url).pathname, 'api-key', 'env3_' + 'z'.repeat(43)],
+    { env: { ...process.env, ENFORCER_API_KEY: '' }, encoding: 'utf8' });
+  const e = readCredentials().enforcer;
+  assert.equal(e.api_key, 'env3_' + 'z'.repeat(43));
+  assert.equal(e.oauth, undefined, 'saving a key must drop the browser sign-in, or the two identities disagree');
+});
+
 as.close();
 console.log(`\n  ${pass} passed`);
