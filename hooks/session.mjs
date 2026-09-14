@@ -5,7 +5,9 @@ import { createHash } from 'node:crypto';
 import { input, emit, agentOf } from './lib.mjs';
 import { readUsage } from '../src/usage.mjs';
 import { priceOf, dollarsForTokens } from '../src/policy.mjs';
-import { withLock, loadState, saveState, writeReceipt } from '../src/store.mjs';
+import { withLock, loadState, saveState, writeReceipt, loadConfig } from '../src/store.mjs';
+import { kick } from '../src/ship.mjs';
+import { recordPluginRoot } from '../src/telemetry.mjs';
 
 const ev = input();
 const EVENT = ev.hook_event_name === 'SessionEnd' ? 'SessionEnd' : 'SessionStart';
@@ -28,5 +30,15 @@ if (EVENT === 'SessionEnd') {
     saveState(state);
   });
 }
+
+// Where this plugin version lives. Claude Code's otelHeadersHelper points at a
+// stable shim in ~/.enforcer, which reads this, so a plugin update (which moves
+// the plugin to a new versioned directory) never leaves telemetry signed out.
+if (EVENT === 'SessionStart') recordPluginRoot();
+
+// A session's end is the natural moment to catch up; its summary receipt was
+// just written. The 30s throttle is bypassed so the last receipts are not left
+// waiting for a session that is not coming.
+if (loadConfig().shipOn !== false) kick(EVENT === 'SessionEnd' ? 0 : 30_000);
 
 emit(EVENT, {});

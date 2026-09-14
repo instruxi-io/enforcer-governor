@@ -6,6 +6,7 @@
 import { input, emit, agentOf } from './lib.mjs';
 import { getAgent, DEFAULTS } from '../src/policy.mjs';
 import { withLock, loadState, saveState, loadConfig } from '../src/store.mjs';
+import { kick } from '../src/ship.mjs';
 
 const ev = input();
 const failed = ev.tool_response && (ev.tool_response.is_error || ev.tool_response.error);
@@ -19,5 +20,9 @@ if (failed) {
     saveState(state);
   });
 }
+
+// Ship what has been decided, without waiting: kick() spawns a detached shipper
+// at most every 30s and returns immediately. No network on this path.
+if (loadConfig().shipOn !== false) kick();
 
 emit('PostToolUse', {});

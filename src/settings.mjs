@@ -90,6 +90,9 @@ export const SETTINGS = {
   policyTtlSec: { group: 'checks', type: 'number', unit: 's', check: num(0, 3600),
     describe: 'How long a policy answer is reused for the same kind of action. 0 asks every time.',
     hint: 'A new policy version takes effect within this long on each machine.' },
+  shipOn: { group: 'checks', type: 'boolean', check: bool(),
+    describe: "Send this machine's receipts to your organisation's Enforcer control plane.",
+    hint: 'In the background, with your Enforcer sign-in. Receipts stay in the local file either way.' },
   adviseModel: { group: 'checks', type: 'boolean', check: bool(),
     describe: 'Say when the model and the task look mismatched. Never changes a verdict.' },
 
@@ -101,6 +104,8 @@ export const SETTINGS = {
   centralUrl: { group: 'identity', type: 'string',
     describe: 'Enforcer origin to sign in to and ask. The saved credential can override it.',
     hint: 'https://api.instruxi.dev unless your organisation runs its own.' },
+  ingestUrl: { group: 'identity', type: 'string',
+    describe: 'Control-plane origin receipts and telemetry are sent to. Empty uses centralUrl.' },
   operator: { group: 'identity', type: 'string',
     describe: 'The person an agent acts for. Stamped on every receipt.',
     hint: 'A receipt that cannot say who is evidence of nothing.' },
