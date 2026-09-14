@@ -81,6 +81,15 @@ export const SETTINGS = {
   rulesOn: { group: 'checks', type: 'boolean', check: bool(),
     describe: 'The capability rules — what an agent may DO.',
     hint: 'Independent of the others: spend off still leaves curl|sh and rm -rf guarded.' },
+  policyOn: { group: 'checks', type: 'boolean', check: bool(),
+    describe: "Ask your organisation's Enforcer policy about actions a rule matched.",
+    hint: 'Only matched actions are asked, so ordinary tool calls never wait on the network. Signed out, it does nothing.' },
+  policyTimeoutMs: { group: 'checks', type: 'number', unit: 'ms', check: num(100, 10000),
+    describe: 'How long to wait for the policy before the local rule decides alone.',
+    hint: 'The local rule is at least as strict, so a timeout never lets anything through.' },
+  policyTtlSec: { group: 'checks', type: 'number', unit: 's', check: num(0, 3600),
+    describe: 'How long a policy answer is reused for the same kind of action. 0 asks every time.',
+    hint: 'A new policy version takes effect within this long on each machine.' },
   adviseModel: { group: 'checks', type: 'boolean', check: bool(),
     describe: 'Say when the model and the task look mismatched. Never changes a verdict.' },
 
@@ -89,6 +98,9 @@ export const SETTINGS = {
     describe: 'Which model prices dollars into tokens when the harness figure is unavailable.' },
 
   // ── identity ──────────────────────────────────────────────────────────────
+  centralUrl: { group: 'identity', type: 'string',
+    describe: 'Enforcer origin to sign in to and ask. The saved credential can override it.',
+    hint: 'https://api.instruxi.dev unless your organisation runs its own.' },
   operator: { group: 'identity', type: 'string',
     describe: 'The person an agent acts for. Stamped on every receipt.',
     hint: 'A receipt that cannot say who is evidence of nothing.' },

@@ -10,6 +10,8 @@
 // by a person mid-work at the moment they are interrupted.
 import { input, emit, matchText, agentOf, billing } from './lib.mjs';
 import { gate } from '../src/gate.mjs';
+import { matchRule, DEFAULT_RULES } from '../src/capability.mjs';
+import { consult } from '../src/central.mjs';
 import { evaluate as economics } from '../src/economics.mjs';
 import { DEFAULTS, priceOf, tokensForDollars, getAgent, setModel } from '../src/policy.mjs';
 import { read as meter } from '../src/meter.mjs';
@@ -28,6 +30,14 @@ const event = {
   cwd: ev.cwd,
   billing: billing(),
 };
+
+// Ask the tenant's policy BEFORE taking the lock, and only when a local rule
+// matched. The network must never sit inside the lock — forty parallel tool
+// calls would queue behind one slow round trip — and an unmatched call has
+// nothing to ask about, so it pays nothing.
+const rules = cfg.rulesOn === false ? [] : (cfg.rules || DEFAULT_RULES);
+const matched = matchRule(rules, event);
+const central = matched ? await consult(matched, cfg) : null;
 
 let priced = cfg.model, spent = 0, budget = 0;
 
@@ -48,6 +58,7 @@ const held = withLock(() => {
   const v = gate(event, cfg, {
     withState: (fn) => ({ ok: true, value: fn(state, reading) }),
     economics,
+    central,
   });
 
   priced = a.model; spent = a.tokens; budget = a.budget;
@@ -68,7 +79,7 @@ const held = withLock(() => {
 // hash: there is no readable chain tail to hash against, and verify() counts an
 // unhashed line as unverifiable rather than as a break. Recording nothing would
 // hide a real refusal; forging a link would cry tampering on an honest file.
-const verdict = held.ok && held.value ? held.value : gate(event, cfg, {});
+const verdict = held.ok && held.value ? held.value : gate(event, cfg, { central });
 if (!held.ok || !held.value) writeReceipt(verdict.entry({ agent, tool: ev.tool_name || '', chained: false }), undefined);
 
 // ── wording ─────────────────────────────────────────────────────────────────
@@ -78,6 +89,18 @@ if (!held.ok || !held.value) writeReceipt(verdict.entry({ agent, tool: ev.tool_n
 const perM = priceOf(priced || '').in;
 const usd = t => '$' + ((t / 1e6) * perM).toFixed(2);
 const of = budget ? `${usd(spent)} of its ${usd(budget)} limit` : `${usd(spent)} so far`;
+
+// A tenant decision quotes the tenant. Its reason is a sentence someone in the
+// organisation wrote for exactly this moment, so it is shown as written rather
+// than squeezed into "it is <reason>".
+if (verdict.action === 'deny' && verdict.source === 'policy') {
+  emit(EVENT, { permissionDecision: 'deny',
+    permissionDecisionReason: `Your organisation's Enforcer policy refused this action: ${verdict.reason}. The agent is not stopped and can carry on with something else.` });
+}
+if (verdict.action === 'ask' && verdict.source === 'policy') {
+  emit(EVENT, { permissionDecision: 'ask',
+    permissionDecisionReason: `Your organisation's Enforcer policy wants you to confirm this action: ${verdict.reason}. Allow it this once?` });
+}
 
 if (verdict.action === 'deny') {
   emit(EVENT, { permissionDecision: 'deny', permissionDecisionReason: verdict.stopsAgent

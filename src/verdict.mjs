@@ -26,11 +26,15 @@ export const ASK = 'ask';
 export const REWRITE = 'rewrite';
 
 export const CAPABILITY = 'capability';
+// The tenant's own policy, decided by Enforcer. Like a capability refusal it
+// refuses an ACTION, never the agent — it is a capability decision made
+// centrally instead of by a local pattern.
+export const POLICY = 'policy';
 export const ECONOMICS = 'economics';
 export const OPERATOR = 'operator';
 
 export class Verdict {
-  constructor({ action, reason, source, rule = null, input = null, checked = [], advice = null }) {
+  constructor({ action, reason, source, rule = null, input = null, checked = [], advice = null, policy = null }) {
     this.action = action;
     this.reason = reason;
     this.source = source;
@@ -38,13 +42,16 @@ export class Verdict {
     this.input = input;
     this.checked = checked;
     this.advice = advice;
+    // What the tenant's policy said, when it was asked: allow | deny | ask |
+    // silent | unreachable. Null when no rule matched, so nobody was asked.
+    this.policy = policy;
     Object.freeze(this);
   }
 
   /** Did a capability rule produce this? Callers used to infer it from entry.rule. */
-  get isCapability() { return this.source === CAPABILITY; }
+  get isCapability() { return this.source === CAPABILITY || this.source === POLICY; }
   /** A capability refusal blocks THIS action; the agent is free to do something else. */
-  get stopsAgent() { return this.action === DENY && this.source !== CAPABILITY; }
+  get stopsAgent() { return this.action === DENY && !this.isCapability; }
   get blocks() { return this.action === DENY; }
   get needsHuman() { return this.action === ASK; }
 
@@ -70,6 +77,8 @@ export class Verdict {
       // carries it, even though economics did not run.
       unchecked: (this.source === ECONOMICS && !this.checked.includes(ECONOMICS)) || undefined,
       chained: chained ? undefined : false,
+      // Appended last so every earlier field keeps its position in the hash.
+      policy: this.policy || undefined,
     };
   }
 

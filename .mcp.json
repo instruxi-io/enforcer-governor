@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "enforcer": {
+      "type": "http",
+      "url": "https://api.instruxi.dev/mcp",
+      "headersHelper": "node \"${CLAUDE_PLUGIN_ROOT}/bin/enforcer-headers.mjs\""
+    }
+  }
+}
