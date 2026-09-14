@@ -43,7 +43,12 @@ function openBrowser(url) {
  * `resource` is the RFC 8707 audience the token is for; `onUrl` receives the
  * authorization URL (printed and opened by the CLI, captured by the tests).
  */
-export async function browserSignIn({ base, resource, scope = 'enforcer:read', fetchImpl = fetch, onUrl, timeoutMs = 5 * 60_000 }) {
+export async function browserSignIn({ base, resource, resources, scope = 'enforcer:read', fetchImpl = fetch, onUrl, timeoutMs = 5 * 60_000 }) {
+  // RFC 8707 lets one token name several resources. Asking for Enforcer's API
+  // AND its MCP server is what makes this one sign-in serve both the governor
+  // (which calls the API) and the MCP server (which serves tools): each server
+  // accepts a token that names it.
+  const wanted = [...new Set((resources || (resource ? [resource] : [])).filter(Boolean))];
   const meta = await discover(base, fetchImpl);
   const { verifier, challenge } = pkce();
   const state = b64url(randomBytes(16));
@@ -80,14 +85,15 @@ export async function browserSignIn({ base, resource, scope = 'enforcer:read', f
 
     const url = new URL(meta.authorization_endpoint);
     for (const [k, v] of Object.entries({ response_type: 'code', client_id: client.client_id, redirect_uri: redirectUri,
-      code_challenge: challenge, code_challenge_method: 'S256', scope, state, ...(resource ? { resource } : {}) })) {
+      code_challenge: challenge, code_challenge_method: 'S256', scope, state })) {
       url.searchParams.set(k, v);
     }
+    for (const r of wanted) url.searchParams.append('resource', r);
     onUrl?.(url.toString());
 
     const code = await codeP;
     const body = new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: redirectUri,
-      client_id: client.client_id, code_verifier: verifier, ...(resource ? { resource } : {}) });
+      client_id: client.client_id, code_verifier: verifier });
     const tr = await fetchImpl(meta.token_endpoint, { method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body, signal: AbortSignal.timeout(10_000) });
     const tok = await tr.json();
@@ -95,13 +101,28 @@ export async function browserSignIn({ base, resource, scope = 'enforcer:read', f
     return {
       access_token: tok.access_token, refresh_token: tok.refresh_token || null,
       expires_at: new Date(Date.now() + (Number(tok.expires_in) || 900) * 1000).toISOString(),
-      scope: tok.scope || scope, resource: resource || null,
+      scope: tok.scope || scope, resources: wanted,
       client_id: client.client_id, token_endpoint: meta.token_endpoint, issuer: meta.issuer,
     };
   } finally {
     clearTimeout(timer);
     server.close();
   }
+}
+
+/**
+ * The resources one sign-in should cover: Enforcer's API, and its MCP server as
+ * the server itself publishes it (RFC 9728), so a deployment that moves the MCP
+ * endpoint does not need a new plugin.
+ */
+export async function resourcesFor(base, fetchImpl = fetch) {
+  const out = [base];
+  try {
+    const r = await fetchImpl(`${base}/.well-known/oauth-protected-resource/mcp`, { signal: AbortSignal.timeout(10_000) });
+    const m = r.ok ? await r.json() : null;
+    if (m?.resource) out.push(String(m.resource));
+  } catch { /* the API alone still signs the governor in */ }
+  return [...new Set(out)];
 }
 
 const who = (me) => me.person?.primary_email || me.person?.name || me.account_id || 'unknown account';
@@ -152,8 +173,10 @@ async function main(argv) {
   }
 
   if (cmd === 'browser') {
-    const resource = process.env.ENFORCER_RESOURCE || base;
-    const oauth = await browserSignIn({ base, resource, onUrl: (url) => {
+    const resources = process.env.ENFORCER_RESOURCES
+      ? process.env.ENFORCER_RESOURCES.split(/\s+/).filter(Boolean)
+      : await resourcesFor(base);
+    const oauth = await browserSignIn({ base, resources, onUrl: (url) => {
       out('Opening your browser to sign in to Enforcer. If it does not open, visit:');
       out(url);
       openBrowser(url);

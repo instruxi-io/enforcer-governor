@@ -10,7 +10,7 @@ import { join } from 'node:path';
 const home = mkdtempSync(join(tmpdir(), 'gov-login-'));
 process.env.HOME = home; process.env.ENFORCER_HOME = join(home, '.enforcer'); process.env.GOVERNOR_HOME = join(home, '.g');
 
-const { browserSignIn, pkce } = await import('../bin/login.mjs');
+const { browserSignIn, pkce, resourcesFor } = await import('../bin/login.mjs');
 let pass = 0;
 const ok = async (label, fn) => { await fn(); pass++; console.log('  ok  ' + label); };
 const b64url = (b) => b.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -37,7 +37,7 @@ const as = createServer(async (req, res) => {
   if (u.pathname === '/token') {
     const p = new URLSearchParams(body);
     const good = p.get('code') === 'the-code' && b64url(createHash('sha256').update(p.get('code_verifier')).digest()) === issued.challenge
-      && p.get('resource') === issued.resource && p.get('redirect_uri') === issued.redirect;
+      && p.get('redirect_uri') === issued.redirect;
     return good ? json(200, { access_token: 'at', refresh_token: 'rt', expires_in: 900, scope: 'enforcer:read' }) : json(400, { error: 'invalid_grant' });
   }
   json(404, {});
@@ -46,17 +46,19 @@ await new Promise((r) => as.listen(0, '127.0.0.1', r));
 const base = `http://127.0.0.1:${as.address().port}`;
 
 await ok('signs in: register, authorize, loopback redirect, redeem with the verifier', async () => {
-  const tok = await browserSignIn({ base, resource: 'https://api.example.test', timeoutMs: 5000, onUrl: async (url) => {
+  const want = ['https://api.example.test', 'https://api.example.test/mcp'];
+  const tok = await browserSignIn({ base, resources: want, timeoutMs: 5000, onUrl: async (url) => {
     const a = new URL(url);
     assert.equal(a.searchParams.get('code_challenge_method'), 'S256');
-    assert.equal(a.searchParams.get('resource'), 'https://api.example.test');
-    issued.challenge = a.searchParams.get('code_challenge'); issued.resource = a.searchParams.get('resource');
+    assert.deepEqual(a.searchParams.getAll('resource'), want, 'one sign-in names the API and the MCP server (RFC 8707)');
+    issued.challenge = a.searchParams.get('code_challenge');
     // The "browser": the AS would redirect here after the user signs in.
     const cb = new URL(a.searchParams.get('redirect_uri'));
     cb.searchParams.set('code', 'the-code'); cb.searchParams.set('state', a.searchParams.get('state'));
     const r = await fetch(cb); assert.equal(r.status, 200);
   } });
-  assert.deepEqual([tok.access_token, tok.refresh_token, tok.client_id, tok.resource], ['at', 'rt', 'mcp_test', 'https://api.example.test']);
+  assert.deepEqual([tok.access_token, tok.refresh_token, tok.client_id], ['at', 'rt', 'mcp_test']);
+  assert.deepEqual(tok.resources, want);
   assert.ok(Date.parse(tok.expires_at) > Date.now());
 });
 
@@ -74,6 +76,15 @@ await ok('a refusal at the authorization server is reported, not hung on', async
     cb.searchParams.set('error', 'access_denied'); cb.searchParams.set('state', new URL(url).searchParams.get('state'));
     await fetch(cb);
   } }), /access_denied/);
+});
+
+await ok('resources come from what the MCP server publishes about itself', async () => {
+  const fake = async (url) => url.endsWith('/.well-known/oauth-protected-resource/mcp')
+    ? { ok: true, json: async () => ({ resource: 'https://api.example.test/mcp' }) }
+    : { ok: false, json: async () => ({}) };
+  assert.deepEqual(await resourcesFor('https://api.example.test', fake), ['https://api.example.test', 'https://api.example.test/mcp']);
+  const down = async () => { throw new Error('offline'); };
+  assert.deepEqual(await resourcesFor('https://api.example.test', down), ['https://api.example.test'], 'no MCP metadata still signs the governor in');
 });
 
 as.close();
