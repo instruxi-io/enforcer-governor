@@ -170,3 +170,16 @@ const run = (home, ev) => JSON.parse(execFileSync(process.execPath, [HOOK], {
   assert(waited < 15000, `an unreachable state directory must not hang the hook, took ${waited}ms`);
   console.log('an unreachable state directory fails open instead of hanging ok');
 }
+
+// The slash command passes `$ARGUMENTS` unquoted, so `set budgetOn false` is two
+// argv entries. It used to read only the first and print its usage line.
+{
+  const home = mkdtempSync(join(tmpdir(), 'gov-set-'));
+  const REPORT = new URL('../src/report.mjs', import.meta.url).pathname;
+  const out = execFileSync(process.execPath, [REPORT, 'set', 'budgetOn', 'false'], {
+    env: { ...process.env, GOVERNOR_HOME: home }, encoding: 'utf8' });
+  assert(/budgetOn: on -> off/.test(out), `set with two words must change the setting, got: ${out}`);
+  const saved = JSON.parse(readFileSync(join(home, 'config.json'), 'utf8'));
+  assert(saved.budgetOn === false, 'and write it');
+  console.log('set accepts the name and value as separate arguments ok');
+}

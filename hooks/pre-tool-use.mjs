@@ -102,9 +102,16 @@ if (verdict.action === 'ask' && verdict.source === 'policy') {
     permissionDecisionReason: `Your organisation's Enforcer policy wants you to confirm this action: ${verdict.reason}. Allow it this once?` });
 }
 
+// On a subscription the dollar figures are what the same tokens would cost at
+// API list prices — nobody is billed them. Saying "spent" there sent a user
+// looking for a $364 charge that does not exist.
+const onPlan = event.billing === 'plan';
+const money = onPlan ? ' (API-equivalent usage: your subscription is not billed these amounts)' : '';
+const turnOff = onPlan ? ' or turn spend limits off with /enforcer-governor:set budgetOn false' : '';
+
 if (verdict.action === 'deny') {
   emit(EVENT, { permissionDecision: 'deny', permissionDecisionReason: verdict.stopsAgent
-    ? `Enforcer stopped this agent: ${verdict.reason}. It has spent ${of}. Raise the limit with /enforcer-governor:limit.`
+    ? `Enforcer stopped this agent: ${verdict.reason}. It has spent ${of}${money}. Raise the limit with /enforcer-governor:limit${turnOff}.`
     : `Enforcer refused this action: it is ${verdict.reason}. The agent is not stopped and can carry on with something else.` });
 }
 

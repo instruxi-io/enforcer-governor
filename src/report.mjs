@@ -5,7 +5,12 @@ import { loadState, loadConfig, saveConfig, saveState, verify, withLock, writeRe
 import { DEFAULTS, priceOf, dollarsForTokens, burnRate, release } from './policy.mjs';
 import { SETTINGS, GROUPS, RETIRED, validate, parseValue } from './settings.mjs';
 
-const [, , cmd, arg] = process.argv;
+// Everything after the subcommand is ONE argument. The slash commands pass
+// $ARGUMENTS unquoted, so `/enforcer-governor:set budgetOn false` arrives as
+// two argv entries; taking only the first made every typed `set` print its
+// usage line and change nothing.
+const [, , cmd, ...rest] = process.argv;
+const arg = rest.join(' ').trim();
 const cfg = { ...DEFAULTS, ...loadConfig() };
 const state = loadState();
 const usd = (t, m) => '$' + dollarsForTokens(t, priceOf(m, cfg.model).in).toFixed(2);
