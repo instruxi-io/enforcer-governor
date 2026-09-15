@@ -292,6 +292,16 @@ export const DEFAULTS = {
   budgetOn: true,
   loopOn: true,
   rulesOn: true,      // capability rules: what it may DO
+  // Ask the tenant's Enforcer policy about actions a rule matched (central.mjs).
+  // Inert when signed out; the local rule stands whenever it cannot answer.
+  policyOn: true,
+  policyTimeoutMs: 1500,
+  policyTtlSec: 30,
+  centralUrl: 'https://api.instruxi.dev',
+  // Ship receipts to the control plane (src/ship.mjs), in the background,
+  // with the Enforcer sign-in. Inert when signed out.
+  shipOn: true,
+  ingestUrl: '',   // empty: centralUrl
   adviseModel: true,  // say when the model looks mismatched to the task
   enforceModel: false,// rewrite the model on the proxy. Off by default: silently
                       // changing someone's model is a big deal, and we can only

@@ -10,7 +10,7 @@ const assert = (c, m) => { if (!c) { console.error('FAIL: ' + m); process.exit(1
 const HOOK = new URL('../hooks/pre-tool-use.mjs', import.meta.url).pathname;
 
 const run = (home, ev) => JSON.parse(execFileSync(process.execPath, [HOOK], {
-  input: JSON.stringify(ev), env: { ...process.env, GOVERNOR_HOME: home }, encoding: 'utf8',
+  input: JSON.stringify(ev), env: { ...process.env, GOVERNOR_HOME: home, ENFORCER_HOME: home, ENFORCER_API_KEY: '' }, encoding: 'utf8',
 })).hookSpecificOutput;
 
 // Capability rules must not be defeated by padding the front of a command.
@@ -29,7 +29,7 @@ const run = (home, ev) => JSON.parse(execFileSync(process.execPath, [HOOK], {
   assert(piped.permissionDecision === 'deny', 'piping the internet into a shell is refused outright');
 
   const ok = run(home, { session_id: 'r1', tool_name: 'Read', tool_input: { file_path: '/tmp/readme.md' }, cwd: '/tmp' });
-  assert(ok.permissionDecision === 'allow', 'ordinary work must pass untouched');
+  assert(ok.permissionDecision === 'defer', 'ordinary work must pass untouched: defer, so the user\'s own /permissions still apply');
   console.log('capability rules fire regardless of where in the command they sit ok');
 }
 
@@ -40,7 +40,7 @@ const run = (home, ev) => JSON.parse(execFileSync(process.execPath, [HOOK], {
   const home = mkdtempSync(join(tmpdir(), 'gov-conc-'));
   const { spawn } = await import('node:child_process');
   await Promise.all(Array.from({ length: 40 }, (_, i) => new Promise(res => {
-    const p = spawn(process.execPath, [HOOK], { env: { ...process.env, GOVERNOR_HOME: home }, stdio: ['pipe', 'ignore', 'ignore'] });
+    const p = spawn(process.execPath, [HOOK], { env: { ...process.env, GOVERNOR_HOME: home, ENFORCER_HOME: home, ENFORCER_API_KEY: '' }, stdio: ['pipe', 'ignore', 'ignore'] });
     p.stdin.end(JSON.stringify({ session_id: 'c' + i, tool_name: 'Read', tool_input: { file_path: '/tmp/f' + i }, cwd: '/tmp' }));
     p.on('close', res);
   })));
@@ -124,7 +124,7 @@ const run = (home, ev) => JSON.parse(execFileSync(process.execPath, [HOOK], {
   // ...and everything else is allowed, loudly. The message has to say it did
   // not check, because silence would read as "checked and fine".
   const fine = run(home, { session_id: 'b1', tool_name: 'Bash', tool_input: { command: 'ls -la' }, cwd: '/tmp' });
-  assert(fine.permissionDecision === 'allow', 'ordinary work must not be blocked by the governor being blind');
+  assert(fine.permissionDecision === 'defer', 'ordinary work must not be blocked by the governor being blind');
   assert(/could not read its own state/.test(fine.permissionDecisionReason), 'an unchecked allow must say it was unchecked');
   console.log('capability rules hold even when the state is unreadable ok');
 }
@@ -169,4 +169,17 @@ const run = (home, ev) => JSON.parse(execFileSync(process.execPath, [HOOK], {
   const waited = Date.now() - t0;
   assert(waited < 15000, `an unreachable state directory must not hang the hook, took ${waited}ms`);
   console.log('an unreachable state directory fails open instead of hanging ok');
+}
+
+// The slash command passes `$ARGUMENTS` unquoted, so `set budgetOn false` is two
+// argv entries. It used to read only the first and print its usage line.
+{
+  const home = mkdtempSync(join(tmpdir(), 'gov-set-'));
+  const REPORT = new URL('../src/report.mjs', import.meta.url).pathname;
+  const out = execFileSync(process.execPath, [REPORT, 'set', 'budgetOn', 'false'], {
+    env: { ...process.env, GOVERNOR_HOME: home }, encoding: 'utf8' });
+  assert(/budgetOn: on -> off/.test(out), `set with two words must change the setting, got: ${out}`);
+  const saved = JSON.parse(readFileSync(join(home, 'config.json'), 'utf8'));
+  assert(saved.budgetOn === false, 'and write it');
+  console.log('set accepts the name and value as separate arguments ok');
 }

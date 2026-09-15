@@ -18,8 +18,43 @@
 // is the seam where the cost source is swapped for the harness's own figure
 // without any of the logic below knowing.
 
-import { Verdict, ECONOMICS, CAPABILITY } from './verdict.mjs';
+import { Verdict, ECONOMICS, CAPABILITY, POLICY } from './verdict.mjs';
 import { evaluate as capability, DEFAULT_RULES } from './capability.mjs';
+
+/**
+ * Fold the tenant's answer (central.mjs) into the local capability verdict.
+ *
+ * The asymmetry is the design, so it is spelled out as a table rather than
+ * left to be inferred from branches:
+ *
+ *                 local deny   local ask       local rewrite
+ *   tenant deny   deny         deny            deny
+ *   tenant ask    deny         ask (tenant's)  ask (tenant's)
+ *   tenant allow  deny         no objection    rewrite
+ *   silent        deny         ask             rewrite
+ *   unreachable   deny         ask             rewrite
+ *
+ * A tenant can make anything stricter and can waive a confirmation. It cannot
+ * lift a local hard deny, and it cannot skip a rewrite, which already runs
+ * what was asked in a safer form. Losing the tenant's answer changes nothing.
+ */
+export function compose(cap, central) {
+  if (!cap || !central) return cap;
+  const base = { rule: cap.rule, checked: [...cap.checked, POLICY], policy: central.opinion };
+  if (central.opinion === 'deny') {
+    return Verdict.deny(central.reason || 'refused by the tenant policy', { ...base, source: POLICY });
+  }
+  if (central.opinion === 'ask' && cap.action !== 'deny') {
+    return Verdict.ask(central.reason || 'the tenant policy asks for confirmation', { ...base, source: POLICY });
+  }
+  if (central.opinion === 'allow' && cap.action === 'ask') {
+    return null;   // the tenant waived the confirmation; economics still runs
+  }
+  // silent, unreachable, or an allow that may not lift this verdict: the local
+  // answer stands, and the receipt records that the tenant was asked.
+  const checked = central.opinion === 'unreachable' ? cap.checked : base.checked;
+  return new Verdict({ ...cap, checked, policy: central.opinion });
+}
 
 /**
  * @param ev    {{action,tool,input,agent,cwd,model,task}}  what the agent wants to do
@@ -37,8 +72,11 @@ export function gate(ev, cfg = {}, deps = {}) {
   // one, and the rule that stops it must not depend on the bookkeeping being
   // healthy. It is also why this call sits ABOVE the state load rather than
   // inside its success branch.
-  const cap = capability(rules, ev);
+  // deps.central is the tenant's answer for the rule that matched, fetched by
+  // the hook BEFORE this runs — the gate stays synchronous and network-free.
+  const cap = compose(capability(rules, ev), deps.central);
   if (cap && cap.action !== 'allow') return cap;
+  const waived = deps.central?.opinion === 'allow' && !cap;
 
   // Spend and loop off does NOT mean capability off — hence this sitting below
   // the call above rather than at the top of the function, which is where v2
@@ -51,7 +89,7 @@ export function gate(ev, cfg = {}, deps = {}) {
   // in the suite pinned it, which is why it survived.
   if (cfg.budgetOn === false && cfg.loopOn === false) {
     return Verdict.allow('spend and loop checks are switched off',
-      { source: ECONOMICS, checked: [CAPABILITY, ECONOMICS] });
+      { source: ECONOMICS, checked: [CAPABILITY, ECONOMICS], policy: waived ? 'allow' : null });
   }
 
   // withState hands back a `reading` alongside the state: what this session has
@@ -67,10 +105,10 @@ export function gate(ev, cfg = {}, deps = {}) {
   // as such via checked[], not buried in a sentence a reader has to parse.
   if (!held.ok) {
     return Verdict.allow('Enforcer could not read its own state, so spend was not checked. Nothing is blocked.',
-      { source: ECONOMICS, checked: [CAPABILITY] });
+      { source: ECONOMICS, checked: [CAPABILITY], policy: waived ? 'allow' : null });
   }
 
   const econ = held.value;
   if (econ) return econ;
-  return Verdict.allow('in budget', { source: ECONOMICS, checked: [CAPABILITY, ECONOMICS] });
+  return Verdict.allow('in budget', { source: ECONOMICS, checked: [CAPABILITY, ECONOMICS], policy: waived ? 'allow' : null });
 }

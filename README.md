@@ -47,6 +47,37 @@ It has a second job. Claude Code hands its own `total_cost_usd` to the status li
 
 **Capability rules that ship with the plugin.** Piping a URL into a shell is refused outright. Deleting a tree, rewriting git history, reading credentials, publishing or deploying: those stop and ask. These are capability decisions, not spend ones, so they fire on a full budget — and they are checked without reading any state at all, so they hold even when the governor cannot read its own files. Deleting the state directory turns off the spend limit; it does not turn off the rules.
 
+**Your organisation's policy, not just ours.** Sign in once with `/enforcer-governor:login` and the rules above stop being the same six patterns for everyone. When a rule matches, the governor asks your Enforcer tenant policy about it: a resource of type `agent_action` whose id names the rule (`fs.delete_tree`, `deploy.publish`, `git.force_push`, `git.rewrite_history`, `secrets.access`, `shell.pipe_to_shell`). The policy is Rego, versioned, tested before it can go live, and rolled back by activating the previous version, so "agents here never delete a whole tree" or "publishing needs a person" is one change for the whole team.
+
+Its answer composes with the local rule, and the direction matters:
+
+| | local deny | local ask | local rewrite |
+|---|---|---|---|
+| **policy deny** | deny | deny, in the policy's words | deny |
+| **policy `ask:` reason** | deny | ask, in the policy's words | ask |
+| **policy allow** | deny | no objection | rewrite |
+| **no rule / unreachable** | deny | ask | rewrite |
+
+A policy can make anything stricter and can waive a confirmation. It cannot lift a hard deny (`curl | sh` stays refused), and it cannot skip a rewrite. If Enforcer is slow, down, or you are signed out, the local rule decides alone, so losing the network never allows more. Only a matched command is asked about; ordinary tool calls never wait on the network. Answers are reused for `policyTtlSec` (30s), which is also how quickly a new policy version reaches each machine.
+
+```rego
+declared_types := ["agent_action"]
+
+allow if { input.resource_type == "agent_action" }   # declared, so silence would deny
+
+deny contains "agents in this tenant do not delete whole directory trees" if {
+	input.resource_type == "agent_action"
+	input.resource.id == "fs.delete_tree"
+}
+
+deny contains "ask: publishing from an agent needs a person to confirm" if {
+	input.resource_type == "agent_action"
+	input.resource.id == "deploy.publish"
+}
+```
+
+**One sign-in for the governor and the Enforcer MCP server.** The plugin registers the Enforcer MCP server with a `headersHelper` that reads the same credential the hooks use, `~/.enforcer/credentials.json` (0600). Sign in once and both are signed in; sign out once and both stop sending a credential. If you already added the Enforcer MCP server by hand, remove that entry so its tools do not appear twice.
+
 **A spend limit that means dollars.** `/enforcer-governor:limit 40` sets $40 per agent. Claude prices each model at its own rate, so $40 is $40 whether the agent is on Opus 5 or Haiku 4.5. Where the harness figure is unavailable the cap falls back to cost-weighted effective tokens, because cached sessions re-read their whole context every turn and raw token counts explode while costing very little.
 
 **A word to the agent, not just to you.** An agent that learns it is near the limit can land what it has instead of opening a new front. At roughly two thirds of the budget it is told once — one sentence, at the turn boundary, where it can still change its plan — and then the governor goes quiet until the situation changes. Warning at the limit itself is too late: the turn is already committed. Every word costs, because it joins the cached prefix and is billed on every later turn, which is why it is one sentence and why it is said once.
@@ -67,6 +98,7 @@ It has a second job. Claude Code hands its own `total_cost_usd` to the status li
 | `/enforcer-governor:resume [agent]` | run a stopped agent again, with room to finish |
 | `/enforcer-governor:config [--why]` | every setting, what it does, and which you have changed |
 | `/enforcer-governor:set <name> <value>` | change one, with validation |
+| `/enforcer-governor:login [api-key <key> \| status \| logout]` | sign in to Enforcer for the governor and the MCP server; no argument opens a browser |
 
 ### Getting out of the way
 
@@ -86,7 +118,8 @@ To switch the governor off without uninstalling it, put any of these in `~/.enfo
 prompt  ─► UserPromptSubmit ─► a word to the agent, if the situation changed
 
                          ┌─ capability rules ─── no state, FAILS CLOSED
-tool call ─► PreToolUse ─┤
+                         │     └─ matched? ask your tenant policy (Enforcer)
+tool call ─► PreToolUse ─┤         unreachable leaves the local rule in place
                          └─ spend + rate ─────── needs state, FAILS OPEN
                                    │
                                    ▼

@@ -29,12 +29,16 @@ import { DIR, RECEIPTS } from './store.mjs';
 
 const MARK = join(DIR, 'outbox.json');
 
+// prevHash is the last CHAINED hash at the watermark: what the next shipped
+// record's hash was computed against. The server verifies each record as
+// sha256(prev + body), so the shipper has to know prev for the first record of
+// a batch without re-reading everything before it.
 const readMark = () => {
   try {
     const m = JSON.parse(readFileSync(MARK, 'utf8'));
     return { shippedBytes: Number(m.shippedBytes) || 0, shippedAt: m.shippedAt || null,
-             lastError: m.lastError || null };
-  } catch { return { shippedBytes: 0, shippedAt: null, lastError: null }; }
+             lastError: m.lastError || null, prevHash: m.prevHash || 'genesis' };
+  } catch { return { shippedBytes: 0, shippedAt: null, lastError: null, prevHash: 'genesis' }; }
 };
 
 const writeMark = (m) => {
@@ -52,14 +56,15 @@ function size() { try { return statSync(RECEIPTS).size; } catch { return 0; } }
  *   as a truncated receipt that would fail verification on the far side.
  */
 export function pending(limit = 500) {
-  const { shippedBytes } = readMark();
+  const { shippedBytes, prevHash: markPrev } = readMark();
   const end = size();
   // The record shrank, which means it was replaced or truncated rather than
   // appended to. The watermark describes a file that no longer exists, so
   // start over: re-shipping is harmless (the server dedupes on hash), whereas
   // reading from a meaningless offset would ship garbage.
   const from = end < shippedBytes ? 0 : shippedBytes;
-  if (end <= from) return { lines: [], from, to: from };
+  const prevHash = from === 0 ? 'genesis' : markPrev;
+  if (end <= from) return { lines: [], from, to: from, prevHash };
 
   let chunk = '';
   try {
@@ -68,10 +73,10 @@ export function pending(limit = 500) {
     readSync(fd, buf, 0, buf.length, from);
     closeSync(fd);
     chunk = buf.toString('utf8');
-  } catch { return { lines: [], from, to: from }; }
+  } catch { return { lines: [], from, to: from, prevHash }; }
 
   const lastNL = chunk.lastIndexOf('\n');
-  if (lastNL < 0) return { lines: [], from, to: from };
+  if (lastNL < 0) return { lines: [], from, to: from, prevHash };
   const complete = chunk.slice(0, lastNL);
 
   const lines = [];
@@ -85,11 +90,11 @@ export function pending(limit = 500) {
     catch { /* an unparseable line is still consumed: it cannot be shipped and
                must not wedge the queue behind it forever */ }
   }
-  return { lines, from, to: from + consumed };
+  return { lines, from, to: from + consumed, prevHash };
 }
 
 /** The control plane has these. Advance the watermark. */
-export function markShipped(to, at = Date.now()) {
+export function markShipped(to, at = Date.now(), prevHash = undefined) {
   const m = readMark();
   // A watermark past the end of the record describes a file that no longer
   // exists — it was rotated, truncated or replaced. Without this the guard
@@ -101,7 +106,7 @@ export function markShipped(to, at = Date.now()) {
   // Otherwise never move backwards: a late response from a slower batch must
   // not un-ship what a later one already delivered.
   if (!stale && to <= m.shippedBytes) return false;
-  return writeMark({ shippedBytes: to, shippedAt: at, lastError: null });
+  return writeMark({ shippedBytes: to, shippedAt: at, lastError: null, prevHash: prevHash || m.prevHash });
 }
 
 /** Record why shipping failed, without losing the watermark. */

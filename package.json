@@ -1,20 +1,22 @@
 {
   "name": "enforcer-governor",
-  "version": "2.0.0",
+  "version": "2.2.0",
   "description": "A Claude Code plugin that decides whether an agent action is allowed before it runs, and keeps a tamper-evident record of every decision.",
   "type": "module",
   "scripts": {
-    "test": "node test/policy.test.mjs && node test/gate.test.mjs && node test/meter.test.mjs && node test/brief.test.mjs && node test/credentials.test.mjs && node test/outbox.test.mjs && node test/settings.test.mjs && node test/plugin.test.mjs"
+    "test": "node test/policy.test.mjs && node test/gate.test.mjs && node test/central.test.mjs && node test/login.test.mjs && node test/ship.test.mjs && node test/meter.test.mjs && node test/brief.test.mjs && node test/credentials.test.mjs && node test/outbox.test.mjs && node test/settings.test.mjs && node test/plugin.test.mjs"
   },
   "files": [
+    "bin",
     ".claude-plugin",
-    "LICENSE",
-    "TRADEMARKS.md",
     "commands",
     "hooks",
+    "LICENSE",
+    ".mcp.json",
     "settings.json",
     "src",
-    "statusline"
+    "statusline",
+    "TRADEMARKS.md"
   ],
   "keywords": [
     "claude-code",
