@@ -50,6 +50,15 @@ await ok('"ask:" turns a deny into a request for confirmation', () => {
   const r = interpret({ allow: false, reason: 'ask: history rewrites need a second look' });
   assert.deepEqual([r.opinion, r.reason], ['ask', 'history rewrites need a second look']);
 });
+await ok('an account policy speaks with the same grammar as a tenant policy', () => {
+  // Rules an operator puts on their own account arrive prefixed. Matching on the
+  // raw string made every one of them a hard deny, including the ones that asked.
+  const deny = interpret({ allow: false, reason: 'account policy: I do not issue refunds' });
+  assert.deepEqual([deny.opinion, deny.reason], ['deny', 'account policy: I do not issue refunds'],
+    'the prefix stays in the reason: who refused is part of the record');
+  const ask = interpret({ allow: false, reason: 'account policy: ask: check with me before deploying' });
+  assert.deepEqual([ask.opinion, ask.reason], ['ask', 'check with me before deploying']);
+});
 await ok('a platform refusal is a malformed question, not a tenant decision', () => {
   assert.equal(interpret({ allow: false, reason: 'resource_unspecified' }).opinion, 'unreachable');
 });
