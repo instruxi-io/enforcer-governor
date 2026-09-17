@@ -8,21 +8,27 @@ export function input() {
   try { return JSON.parse(readFileSync(0, 'utf8') || '{}'); } catch { return {}; }
 }
 
-export function emit(eventName, out) {
-  process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: eventName, ...out } }));
+// `top` carries the universal fields -- systemMessage above all. They belong
+// at the top level of the JSON, not inside hookSpecificOutput; nested there,
+// Claude Code never showed them.
+export function emit(eventName, out, top = {}) {
+  process.stdout.write(JSON.stringify({ ...top, hookSpecificOutput: { hookEventName: eventName, ...out } }));
   process.exit(0);
 }
 
-// Fail OPEN, always. A governor that blocks real work because its own state
-// file was unreadable has done more damage than the spend it was guarding.
+// No objection: say nothing. A PreToolUse hook that returns no
+// permissionDecision hands the call to the user's own permission flow -- their
+// /permissions rules, their mode, their prompts -- exactly as if this plugin
+// were not installed. That is what failing open, and passing ordinary work,
+// have to mean.
 //
-// Open means DEFER, not allow. Failing open should return the user to the
-// behaviour they would have had without this tool installed — their own
-// /permissions rules, their own prompts. `allow` is an affirmative grant that
-// short-circuits those, so a governor that could not read its own state would
-// have been silently widening access at the exact moment it knew least.
-export const allow = (event, reason) =>
-  emit(event, { permissionDecision: 'defer', permissionDecisionReason: reason });
+// Not `allow`: that is an affirmative grant that skips the prompt the user
+// would otherwise have seen. And not `defer`, which is what this used to send.
+// `defer` is not "no opinion" -- it is Claude Code's pause-and-resume signal
+// for `claude -p` hosts. Interactive sessions ignore it with a warning (so it
+// looked fine), but a headless run stops at the tool call and exits
+// `tool_deferred`, and its reason and updatedInput are discarded everywhere.
+export const pass = (event, top = {}) => emit(event, {}, top);
 
 // ── What the capability rules get to see ────────────────────────────────────
 // Whatever this leaves out is unenforced. v1 truncated to 200 characters,
