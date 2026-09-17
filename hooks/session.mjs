@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import { input, emit, agentOf } from './lib.mjs';
 import { readUsage } from '../src/usage.mjs';
 import { priceOf, dollarsForTokens } from '../src/policy.mjs';
+import { costUsd, harnessUsd, HARNESS, TRANSCRIPT } from '../src/meter.mjs';
 import { withLock, loadState, saveState, writeReceipt, loadConfig } from '../src/store.mjs';
 import { kick } from '../src/ship.mjs';
 import { recordPluginRoot } from '../src/telemetry.mjs';
@@ -19,11 +20,27 @@ if (EVENT === 'SessionEnd') {
     const { tokens, model } = readUsage(ev.session_id, ev.transcript_path);
     const a = state.agents[agent];
     if (!a && !tokens) return;
-    const usd = dollarsForTokens(tokens, priceOf(model).in);
+    // The harness's own total when it is fresh, our arithmetic when it is not.
+    // Claude Code prices a session at the organisation's CONTRACTED rates,
+    // which no third-party table can know, so its figure wins where we have it
+    // — and `meter` records which of the two this receipt is reporting, so an
+    // auditor is not left inferring it.
+    const harness = harnessUsd(ev.session_id);
+    const usd = harness ?? dollarsForTokens(tokens, priceOf(model).in);
+    const source = harness === null ? TRANSCRIPT : HARNESS;
+    // ONE number, two readers: the sentence a person reads and the field a
+    // machine sums. They are the same figure so a receipt cannot say $6.34 in
+    // prose and something else in its field.
+    const cost = costUsd(usd);
     const entry = { ts: new Date().toISOString(), agent, verdict: 'summary',
       reason: `session ended after $${usd.toFixed(2)}`, tokens: Math.round(tokens),
       ...(model ? { model } : {}), ...(a?.client ? { client: a.client } : {}),
-      ...(a?.operator ? { operator: a.operator } : {}) };
+      ...(a?.operator ? { operator: a.operator } : {}),
+      // Appended last so every field above keeps its position in the hash: a
+      // receipt written by an older governor and one written by this version
+      // chain together, because each hash only ever covers its own bytes.
+      meter: source,
+      ...(cost === undefined ? {} : { cost_usd: cost }) };
     const hash = createHash('sha256').update(state.prevHash + JSON.stringify(entry)).digest('hex');
     writeReceipt(entry, hash);
     state.prevHash = hash;
