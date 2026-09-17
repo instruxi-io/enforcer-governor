@@ -45,7 +45,13 @@ export function recordHarnessCost(sessionId, cost) {
   catch { return false; }
 }
 
-function harnessCost(sessionId) {
+/**
+ * The harness's own figure for this session, or null when there is not a
+ * trustworthy one. Exported because the session-end summary needs the same
+ * number the hook uses: a receipt that says $6.34 while the status line says
+ * $8.10 is two answers to one question.
+ */
+export function harnessUsd(sessionId) {
   try {
     const d = JSON.parse(readFileSync(file(sessionId), 'utf8'));
     if (typeof d.usd !== 'number' || !Number.isFinite(d.usd) || d.usd < 0) return null;
@@ -63,11 +69,37 @@ export function read(sessionId, transcriptPath, cfg = {}) {
   // it is where the model and the last prompt come from, and both are needed
   // to price the budget and to say what the agent is working on.
   const t = readUsage(sessionId, transcriptPath);
-  const usd = harnessCost(sessionId);
+  const usd = harnessUsd(sessionId);
   if (usd === null) return { ...t, usd: null, source: TRANSCRIPT };
 
   // Budgets are effective tokens, so convert at the model that is answering
   // now — the same unit the rest of the policy compares against.
   const perM = priceOf(t.model, cfg.model).in;
   return { ...t, tokens: Math.round((usd * 1e6) / perM), usd, source: HARNESS };
+}
+
+// ── the receipt's money field ───────────────────────────────────────────────
+
+/** The control plane refuses a cost outside these bounds (ingest/decode.go). */
+export const COST_MAX = 1e6;
+
+/**
+ * A dollar figure as a receipt may carry it, or undefined when there is no
+ * honest number to send.
+ *
+ * Undefined rather than 0: the server stores a missing cost as 0 and reads that
+ * back as "the edge never reported one", so a fabricated zero and a real zero
+ * are the same row. Sending nothing keeps that distinction true.
+ *
+ * Rounded to six decimals because the column is numeric(12,6) — shipping a full
+ * float would be rounded at the far end anyway, and then the receipt's hash
+ * would cover a number nobody stored.
+ */
+export function costUsd(n) {
+  if (typeof n !== 'number' || !Number.isFinite(n) || n < 0) return undefined;
+  // Bound the ROUNDED value, not the raw one: 999999.9999999 is inside the
+  // limit until six-decimal rounding lifts it to exactly 1e6, which the server
+  // then refuses — and a refused receipt is one the install resends forever.
+  const rounded = Math.round(n * 1e6) / 1e6;
+  return rounded >= COST_MAX ? undefined : rounded;
 }
