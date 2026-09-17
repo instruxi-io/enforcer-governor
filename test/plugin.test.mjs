@@ -9,9 +9,19 @@ import { execFileSync } from 'node:child_process';
 const assert = (c, m) => { if (!c) { console.error('FAIL: ' + m); process.exit(1); } };
 const HOOK = new URL('../hooks/pre-tool-use.mjs', import.meta.url).pathname;
 
-const run = (home, ev) => JSON.parse(execFileSync(process.execPath, [HOOK], {
-  input: JSON.stringify(ev), env: { ...process.env, GOVERNOR_HOME: home, ENFORCER_HOME: home, ENFORCER_API_KEY: '' }, encoding: 'utf8',
-})).hookSpecificOutput;
+// The whole JSON, not just hookSpecificOutput: systemMessage lives at the top.
+// Every answer is checked for `defer` here, once, so no case can slip it past.
+// `defer` is Claude Code's pause signal for `claude -p` hosts -- a governor that
+// sends it stops every headless run at its first ordinary tool call.
+const runFull = (home, ev) => {
+  const out = JSON.parse(execFileSync(process.execPath, [HOOK], {
+    input: JSON.stringify(ev), env: { ...process.env, GOVERNOR_HOME: home, ENFORCER_HOME: home, ENFORCER_API_KEY: '' }, encoding: 'utf8',
+  }));
+  assert(out.hookSpecificOutput?.permissionDecision !== 'defer', `the hook must never answer defer (${ev.tool_name})`);
+  assert(!('systemMessage' in (out.hookSpecificOutput || {})), 'systemMessage belongs at the top level, where Claude Code reads it');
+  return out;
+};
+const run = (home, ev) => runFull(home, ev).hookSpecificOutput;
 
 // Capability rules must not be defeated by padding the front of a command.
 // v1 matched against the first 200 characters of the serialised tool input, so
@@ -29,7 +39,14 @@ const run = (home, ev) => JSON.parse(execFileSync(process.execPath, [HOOK], {
   assert(piped.permissionDecision === 'deny', 'piping the internet into a shell is refused outright');
 
   const ok = run(home, { session_id: 'r1', tool_name: 'Read', tool_input: { file_path: '/tmp/readme.md' }, cwd: '/tmp' });
-  assert(ok.permissionDecision === 'defer', 'ordinary work must pass untouched: defer, so the user\'s own /permissions still apply');
+  assert(ok.permissionDecision === undefined, `ordinary work must carry no decision, so the user's own /permissions still apply; got ${ok.permissionDecision}`);
+
+  // A rewrite asks, carrying the new form: updatedInput is dropped unless it
+  // rides with allow or ask, and allow would skip the user's own prompt.
+  const push = runFull(home, { session_id: 'r1', tool_name: 'Bash', tool_input: { command: 'git push -f origin main' }, cwd: '/tmp' });
+  assert(push.hookSpecificOutput.permissionDecision === 'ask', `a rewrite must ask, got ${push.hookSpecificOutput.permissionDecision}`);
+  assert(/--force-with-lease/.test(push.hookSpecificOutput.updatedInput?.command || ''), 'a rewrite must carry the rewritten command');
+  assert(/rewrote/.test(push.systemMessage || ''), 'a rewrite must say so at the top level');
   console.log('capability rules fire regardless of where in the command they sit ok');
 }
 
@@ -123,9 +140,9 @@ const run = (home, ev) => JSON.parse(execFileSync(process.execPath, [HOOK], {
 
   // ...and everything else is allowed, loudly. The message has to say it did
   // not check, because silence would read as "checked and fine".
-  const fine = run(home, { session_id: 'b1', tool_name: 'Bash', tool_input: { command: 'ls -la' }, cwd: '/tmp' });
-  assert(fine.permissionDecision === 'defer', 'ordinary work must not be blocked by the governor being blind');
-  assert(/could not read its own state/.test(fine.permissionDecisionReason), 'an unchecked allow must say it was unchecked');
+  const fine = runFull(home, { session_id: 'b1', tool_name: 'Bash', tool_input: { command: 'ls -la' }, cwd: '/tmp' });
+  assert(fine.hookSpecificOutput.permissionDecision === undefined, 'ordinary work must not be blocked by the governor being blind');
+  assert(/could not read its own state/.test(fine.systemMessage || ''), 'an unchecked allow must say it was unchecked');
   console.log('capability rules hold even when the state is unreadable ok');
 }
 

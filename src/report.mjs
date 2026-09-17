@@ -2,6 +2,7 @@
 // Everything the slash commands print. Plain text on stdout -- these are read
 // by a person mid-session, so money first and jargon never.
 import { loadState, loadConfig, saveConfig, saveState, verify, withLock, writeReceipt, RECEIPTS } from './store.mjs';
+import { readManaged, merge } from './managed.mjs';
 import { DEFAULTS, priceOf, dollarsForTokens, burnRate, release } from './policy.mjs';
 import { SETTINGS, GROUPS, RETIRED, validate, parseValue } from './settings.mjs';
 
@@ -28,6 +29,11 @@ if (cmd === 'verify') {
 // keys is the wall the console's "?" affordances existed to avoid.
 if (cmd === 'config') {
   const live = loadConfig();
+  // What the organisation publishes, and therefore what this machine is only
+  // free to TIGHTEN. Showing the local value alone would be a lie on any
+  // setting the tenant floors (src/managed.mjs).
+  const managed = readManaged();
+  const applied = merge(cfg, managed);
   const width = Math.max(...Object.keys(SETTINGS).map(k => k.length));
   for (const g of GROUPS) {
     const keys = Object.keys(SETTINGS).filter(k => SETTINGS[k].group === g);
@@ -35,18 +41,26 @@ if (cmd === 'config') {
     console.log(`\n${g.toUpperCase()}`);
     for (const k of keys) {
       const spec = SETTINGS[k];
-      const val = cfg[k];
+      const val = applied[k];
       // Mark what has been changed. On a page of defaults the two or three
       // someone actually set are the only interesting rows.
       const set = Object.prototype.hasOwnProperty.call(live, k) && live[k] !== DEFAULTS[k];
       const shown = spec.type === 'boolean' ? (val ? 'on' : 'off')
                   : spec.unit === '$' ? `$${val}`
                   : String(val);
-      console.log(`  ${k.padEnd(width)}  ${shown.padEnd(12)}${set ? '*' : ' '} ${spec.describe}`);
+      // A managed setting is marked, and the local value is shown beside it
+      // when the two differ -- otherwise "it says $150 but I set $400" has no
+      // visible explanation.
+      const floored = k in managed && applied[k] !== live[k] && live[k] !== undefined;
+      console.log(`  ${k.padEnd(width)}  ${shown.padEnd(12)}${k in managed ? '!' : set ? '*' : ' '} ${spec.describe}`
+        + (floored ? `  [your organisation's setting; yours was ${String(live[k])}]` : ''));
       if (arg === '--why' && spec.hint) console.log(`  ${' '.repeat(width)}  ${' '.repeat(13)}${spec.hint}`);
     }
   }
   console.log('\n  * changed from the default.  /enforcer-governor:config --why explains each one.');
+  if (Object.keys(managed).length) {
+    console.log(`  ! set by your organisation (${Object.keys(managed).length} setting(s)). You can make these stricter, not looser.`);
+  }
   console.log('  Change one with /enforcer-governor:set <name> <value>.');
   const dead = Object.keys(RETIRED).filter(k => k in live);
   if (dead.length) {
@@ -74,6 +88,14 @@ if (cmd === 'set') {
   const show = v => SETTINGS[key].type === 'boolean' ? (v ? 'on' : 'off') : String(v);
   console.log(`${key}: ${show(before)} -> ${show(value)}   ${SETTINGS[key].describe}`);
   if (SETTINGS[key].hint) console.log(`  ${SETTINGS[key].hint}`);
+  const managed = readManaged();
+  if (key in managed) {
+    const applied = merge({ ...cfg, [key]: value }, managed)[key];
+    const show2 = v => SETTINGS[key].type === 'boolean' ? (v ? 'on' : 'off') : String(v);
+    if (applied !== value) {
+      console.log(`Your organisation sets ${key} to ${show2(managed[key])}, and a local value can only be stricter, so ${show2(applied)} is what applies.`);
+    }
+  }
   console.log('Agents already running pick this up on their next action.');
   process.exit(0);
 }

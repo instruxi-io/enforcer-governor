@@ -8,7 +8,7 @@
 // it for the harness. The two-layer semantics live in gate.mjs, and the one
 // thing this file still owns is the wording, because these sentences are read
 // by a person mid-work at the moment they are interrupted.
-import { input, emit, matchText, agentOf, billing } from './lib.mjs';
+import { input, emit, pass, matchText, agentOf, billing } from './lib.mjs';
 import { gate } from '../src/gate.mjs';
 import { matchRule, DEFAULT_RULES } from '../src/capability.mjs';
 import { consult } from '../src/central.mjs';
@@ -17,10 +17,14 @@ import { DEFAULTS, priceOf, tokensForDollars, getAgent, setModel } from '../src/
 import { read as meter } from '../src/meter.mjs';
 import { withLock, loadState, saveState, loadConfig, writeReceipt } from '../src/store.mjs';
 import { sha256 } from '../src/policy.mjs';
+import { effective } from '../src/managed.mjs';
 
 const EVENT = 'PreToolUse';
 const ev = input();
-const cfg = { ...DEFAULTS, ...loadConfig() };
+// Local config under the tenant's managed floor: stricter wins, per setting
+// (src/managed.mjs). Read from a cache file that SessionStart refreshes -- no
+// decision ever waits on the network.
+const cfg = effective({ ...DEFAULTS, ...loadConfig() });
 const agent = agentOf(ev);
 const event = {
   agent,
@@ -124,39 +128,28 @@ if (verdict.action === 'ask') {
 // A rewrite runs the action in a form the policy accepts. It has to SAY so:
 // silently editing what the agent asked for would make the governor an
 // invisible actor in the transcript, and the receipt records it too.
+//
+// `ask`, carrying the rewrite, so the person confirms the form that will
+// actually run. updatedInput only takes effect alongside allow or ask (defer
+// drops it -- which is how rewrites used to silently not happen). `allow` would
+// skip the prompt the user's own rules might have raised; with `ask`, their
+// deny and ask rules still see the rewritten input.
 if (verdict.action === 'rewrite') {
-  // defer, carrying the rewrite. The governor's opinion is "run THIS form
-  // instead", not "run it unchecked" — the user's own rules should still see
-  // the rewritten command. Granting here would let a rewrite walk past a deny
-  // rule that the original would have hit, which is the opposite of safer.
   emit(EVENT, {
-    permissionDecision: 'defer',
-    permissionDecisionReason: `Enforcer: ${of}`,
+    permissionDecision: 'ask',
+    permissionDecisionReason: `Enforcer rewrote this command — ${verdict.reason}. Run the rewritten form?`,
     updatedInput: verdict.input,
-    systemMessage: `Enforcer rewrote this command — ${verdict.reason}.`,
-  });
+  }, { systemMessage: `Enforcer rewrote this command — ${verdict.reason}.` });
 }
 
+// Advice is not a verdict. It never changes the decision, so it rides along
+// with no decision at all.
 if (verdict.advice) {
-  // Advice is not a verdict. It never changes the decision, so it must not
-  // become one by arriving as an affirmative allow.
-  emit(EVENT, { permissionDecision: 'defer', permissionDecisionReason: `Enforcer: ${of}`,
-    systemMessage: `Enforcer: ${verdict.advice.why}. Consider /model ${verdict.advice.suggest}.` });
+  pass(EVENT, { systemMessage: `Enforcer: ${verdict.advice.why} (${of}). Consider /model ${verdict.advice.suggest}.` });
 }
 
-// DEFER, not allow. The distinction is the difference between composing with
-// the user's own permission rules and quietly overriding them.
-//
-// `allow` from a PreToolUse hook is an affirmative grant that short-circuits
-// what follows — that is why `defer` exists as a separate decision at all,
-// and why settings rules take only allow/deny/ask while hooks take four. So a
-// governor answering `allow` to every ordinary call was suppressing the deny
-// rules and prompts the user configured in /permissions, on every call it
-// permitted. For a tool whose own README calls that block "belt to the hooks'
-// braces", cutting the braces was exactly the wrong failure.
-//
-// `defer` says what is actually true here: the governor has no objection, and
-// nothing about that should stop Claude Code asking its own questions. The
-// spend figure still rides along, so the reason line is unchanged.
-emit(EVENT, { permissionDecision: 'defer',
-  permissionDecisionReason: verdict.checked.includes('economics') ? `Enforcer: ${of}` : verdict.reason });
+// No objection: no decision. See pass() in lib.mjs for why this is neither
+// `allow` nor `defer`. The one pass that speaks is the blind one -- an unchecked
+// allow must say it was unchecked, because silence reads as "checked and fine".
+if (!verdict.checked.includes('economics')) pass(EVENT, { systemMessage: `Enforcer: ${verdict.reason}` });
+pass(EVENT);

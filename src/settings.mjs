@@ -95,6 +95,9 @@ export const SETTINGS = {
     hint: 'In the background, with your Enforcer sign-in. Receipts stay in the local file either way.' },
   adviseModel: { group: 'checks', type: 'boolean', check: bool(),
     describe: 'Say when the model and the task look mismatched. Never changes a verdict.' },
+  sweepDays: { group: 'checks', type: 'number', unit: 'days', check: num(0, 365),
+    describe: "How long a finished session's working files are kept before they are tidied away.",
+    hint: 'Spend and transcript position only; receipts and the record are never swept. 0 keeps everything.' },
 
   // ── attribution ───────────────────────────────────────────────────────────
   model: { group: 'attribution', type: 'string',
