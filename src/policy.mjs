@@ -303,6 +303,9 @@ export const DEFAULTS = {
   shipOn: true,
   ingestUrl: '',   // empty: centralUrl
   adviseModel: true,  // say when the model looks mismatched to the task
+  // Days a finished session's scratch files (cost-*/cursor-*) are kept before
+  // the SessionEnd sweep removes them (src/sweep.mjs). 0 keeps them forever.
+  sweepDays: 7,
   enforceModel: false,// rewrite the model on the proxy. Off by default: silently
                       // changing someone's model is a big deal, and we can only
                       // do it where we own the request (never for Claude Code).

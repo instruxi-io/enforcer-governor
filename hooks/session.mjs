@@ -4,10 +4,11 @@
 import { createHash } from 'node:crypto';
 import { input, emit, agentOf } from './lib.mjs';
 import { readUsage } from '../src/usage.mjs';
-import { priceOf, dollarsForTokens } from '../src/policy.mjs';
+import { priceOf, dollarsForTokens, DEFAULTS } from '../src/policy.mjs';
 import { costUsd, harnessUsd, HARNESS, TRANSCRIPT } from '../src/meter.mjs';
 import { withLock, loadState, saveState, writeReceipt, loadConfig } from '../src/store.mjs';
 import { kick } from '../src/ship.mjs';
+import { sweep } from '../src/sweep.mjs';
 import { recordPluginRoot } from '../src/telemetry.mjs';
 
 const ev = input();
@@ -56,6 +57,12 @@ if (EVENT === 'SessionStart') recordPluginRoot();
 // A session's end is the natural moment to catch up; its summary receipt was
 // just written. The 30s throttle is bypassed so the last receipts are not left
 // waiting for a session that is not coming.
-if (loadConfig().shipOn !== false) kick(EVENT === 'SessionEnd' ? 0 : 30_000);
+const cfg = loadConfig();
+if (cfg.shipOn !== false) kick(EVENT === 'SessionEnd' ? 0 : 30_000);
+
+// ...and to tidy up. Old sessions' scratch files only, by age — never this
+// session's, which /clear and --resume would both bring back. Best-effort and
+// silent: a sweep that failed is not something to interrupt anyone with.
+if (EVENT === 'SessionEnd') { try { sweep({ ...DEFAULTS, ...cfg }); } catch {} }
 
 emit(EVENT, {});
