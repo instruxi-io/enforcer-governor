@@ -9,6 +9,7 @@ import { costUsd, harnessUsd, HARNESS, TRANSCRIPT } from '../src/meter.mjs';
 import { withLock, loadState, saveState, writeReceipt, loadConfig } from '../src/store.mjs';
 import { kick } from '../src/ship.mjs';
 import { sweep } from '../src/sweep.mjs';
+import { refresh, stale } from '../src/managed.mjs';
 import { recordPluginRoot } from '../src/telemetry.mjs';
 
 const ev = input();
@@ -59,6 +60,12 @@ if (EVENT === 'SessionStart') recordPluginRoot();
 // waiting for a session that is not coming.
 const cfg = loadConfig();
 if (cfg.shipOn !== false) kick(EVENT === 'SessionEnd' ? 0 : 30_000);
+
+// A session's start is the moment to pick up the tenant's managed floor: it is
+// the one point where a short wait is affordable, and the settings it fetches
+// are read from cache by every hook afterwards. Skipped when the cache is
+// fresh, so most session starts touch no network at all.
+if (EVENT === 'SessionStart' && stale()) { try { await refresh({ ...DEFAULTS, ...cfg }); } catch {} }
 
 // ...and to tidy up. Old sessions' scratch files only, by age — never this
 // session's, which /clear and --resume would both bring back. Best-effort and

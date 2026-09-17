@@ -2,7 +2,7 @@
   "name": "enforcer-governor",
   "displayName": "Enforcer Governor",
   "description": "Decides whether an agent action is allowed before it runs, and keeps a tamper-evident record of every decision.",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "author": {
     "name": "Instruxi",
     "url": "https://instruxi.io"

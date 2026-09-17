@@ -17,10 +17,14 @@ import { DEFAULTS, priceOf, tokensForDollars, getAgent, setModel } from '../src/
 import { read as meter } from '../src/meter.mjs';
 import { withLock, loadState, saveState, loadConfig, writeReceipt } from '../src/store.mjs';
 import { sha256 } from '../src/policy.mjs';
+import { effective } from '../src/managed.mjs';
 
 const EVENT = 'PreToolUse';
 const ev = input();
-const cfg = { ...DEFAULTS, ...loadConfig() };
+// Local config under the tenant's managed floor: stricter wins, per setting
+// (src/managed.mjs). Read from a cache file that SessionStart refreshes -- no
+// decision ever waits on the network.
+const cfg = effective({ ...DEFAULTS, ...loadConfig() });
 const agent = agentOf(ev);
 const event = {
   agent,

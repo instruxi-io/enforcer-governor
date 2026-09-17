@@ -110,7 +110,13 @@ To switch the governor off without uninstalling it, put any of these in `~/.enfo
 {"budgetOn": false, "loopOn": false, "rulesOn": false}
 ```
 
-`budgetOn` covers the spend and rate checks, `loopOn` the loop check, `rulesOn` the capability rules. The three are independent: turning spend tracking off leaves `curl | sh` and `rm -rf` still guarded. All three off is fully inert. Do not delete `state.json` to unstick something: it holds the head of the receipt chain, so the next receipt hashes against nothing and `verify` correctly reports the record as broken.
+`budgetOn` covers the spend and rate checks, `loopOn` the loop check, `rulesOn` the capability rules. The three are independent: turning spend tracking off leaves `curl | sh` and `rm -rf` still guarded. All three off is fully inert — **unless your organisation publishes a floor**, below. Do not delete `state.json` to unstick something: it holds the head of the receipt chain, so the next receipt hashes against nothing and `verify` correctly reports the record as broken.
+
+### Settings your organisation sets
+
+An Enforcer tenant can publish a set of these settings for every install it signs in (`GET /api/v1/governance/settings`, written by a tenant admin). They are a **floor, not an override**: for each setting the governor applies whichever of the two is stricter, so a managed $150 beats your $400 and your $40 beats both, and a check the organisation turns on cannot be turned off locally. `/enforcer-governor:config` marks them with `!` and shows your own value beside them.
+
+Nothing waits on the network to decide: the settings are fetched at session start, at most hourly, and cached. A machine that is signed out, or has never reached the control plane, runs on its own config alone. Identity settings (`centralUrl`, `ingestUrl`, `operator`) cannot be managed — being able to repoint an install is being able to redirect its receipts.
 
 ## How it works
 
