@@ -10,12 +10,13 @@
 // done here so the result lands in ~/.enforcer/credentials.json where both
 // tools read it: register a public client (RFC 7591), open the authorization
 // URL, catch the redirect on 127.0.0.1, redeem the code with the PKCE verifier.
-// The refresh token is kept, so the sign-in outlives the 15-minute access
+// The refresh token is kept, so the sign-in outlives the one-hour access
 // token (credentials.mjs rotates it).
 import { createServer } from 'node:http';
 import { createHash, randomBytes } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { readCredentials, saveCredentials, enforcerKey, SHARED_FILE, DEFAULT_BASE_URL, authHeaders } from '../src/credentials.mjs';
+import { loadConfig } from '../src/store.mjs';
 
 const API = '/api/v1/enforcer';
 const b64url = (buf) => buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -63,8 +64,8 @@ export async function browserSignIn({ base, resource, resources, scope = 'enforc
     const ok = !err && u.searchParams.get('state') === state && u.searchParams.get('code');
     res.writeHead(ok ? 200 : 400, { 'Content-Type': 'text/html; charset=utf-8' });
     res.end(ok
-      ? '<p>Signed in to Enforcer. You can close this tab and return to your terminal.</p>'
-      : '<p>Sign-in did not complete. Return to your terminal for details.</p>');
+      ? '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Signed in to Enforcer</title><style>body{font:16px/1.5 system-ui,-apple-system,Segoe UI,sans-serif;background:#f5f6f8;color:#16181d;margin:0;display:flex;min-height:100vh;align-items:center;justify-content:center;padding:24px}.card{background:#fff;border:1px solid #dfe2e8;border-radius:10px;padding:28px;max-width:420px;width:100%}h1{font-size:20px;margin:0 0 8px}p{color:#5b6070;margin:0}</style></head><body><div class="card"><h1>Signed in</h1><p>You can close this tab and return to your terminal.</p></div></body></html>'
+      : '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sign-in did not complete</title><style>body{font:16px/1.5 system-ui,-apple-system,Segoe UI,sans-serif;background:#f5f6f8;color:#16181d;margin:0;display:flex;min-height:100vh;align-items:center;justify-content:center;padding:24px}.card{background:#fff;border:1px solid #dfe2e8;border-radius:10px;padding:28px;max-width:420px;width:100%}h1{font-size:20px;margin:0 0 8px}p{color:#5b6070;margin:0}</style></head><body><div class="card"><h1>Sign-in did not complete</h1><p>Return to your terminal for details.</p></div></body></html>');
     if (err) rejectCode(new Error(`authorization refused: ${err}${u.searchParams.get('error_description') ? ' — ' + u.searchParams.get('error_description') : ''}`));
     else if (u.searchParams.get('state') !== state) rejectCode(new Error('state mismatch — the redirect did not come from this sign-in'));
     else resolveCode(u.searchParams.get('code'));
@@ -137,7 +138,12 @@ async function whoAmI(base) {
 
 async function main(argv) {
   const [cmd = 'browser', arg] = argv;
-  const base = (readCredentials()?.enforcer?.base_url || process.env.ENFORCER_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, '');
+  // The same origin the governor asks for policy and ships receipts to. A
+  // saved sign-in pins the origin it was made against; otherwise the
+  // environment, then the `centralUrl` setting -- which /config told the user
+  // to change for a self-hosted workspace and which this command used to
+  // ignore, sending them to the default origin anyway.
+  const base = (readCredentials()?.enforcer?.base_url || process.env.ENFORCER_BASE_URL || loadConfig().centralUrl || DEFAULT_BASE_URL).replace(/\/+$/, '');
 
   if (cmd === 'status') {
     const doc = readCredentials();
@@ -162,7 +168,7 @@ async function main(argv) {
 
   if (cmd === 'api-key') {
     const key = (arg || process.env.ENFORCER_API_KEY || '').trim();
-    if (!/^[a-z0-9]+_[A-Za-z0-9_-]{20,}$/.test(key)) { out('Usage: login api-key <env3_…>  (or set ENFORCER_API_KEY)'); process.exitCode = 2; return; }
+    if (!/^[a-z0-9]+_[A-Za-z0-9_-]{20,}$/.test(key)) { out('Usage: /enforcer-governor:login api-key <your API key>  (or set ENFORCER_API_KEY)'); process.exitCode = 2; return; }
     // Likewise a key replaces a browser sign-in: one credential, one identity.
     const doc = readCredentials() || { enforcer: {} };
     const { oauth: _oauth, ...kept } = doc.enforcer;
@@ -195,7 +201,7 @@ async function main(argv) {
     return;
   }
 
-  out('Usage: login [browser | api-key <key> | status | logout]');
+  out('Usage: /enforcer-governor:login [api-key <key> | status | logout]  — no argument opens a browser');
   process.exitCode = 2;
 }
 
