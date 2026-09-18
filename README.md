@@ -11,7 +11,7 @@ Agents get stuck in loops, repeat work, and pipe the internet into a shell. Ever
 - **deny** — over budget, looping, or not permitted at all
 - **ask** — pause and check with you
 
-Every decision is appended to a hash-chained record. Edit or delete a single line and the chain visibly breaks. Everything stays on your machine.
+Every decision is appended to a hash-chained record. Edit or delete a single line and the chain visibly breaks. Until you sign in to an Enforcer workspace, everything stays on your machine — see [What leaves your machine](#what-leaves-your-machine).
 
 ## Install
 
@@ -20,7 +20,7 @@ Every decision is appended to a hash-chained record. Edit or delete a single lin
 /plugin install enforcer-governor@instruxi
 ```
 
-That brings the enforcement: the hooks, the capability rules, and the three slash commands. `/plugin disable enforcer-governor` removes them just as cleanly. Nothing is written to your settings and there is no daemon to start.
+That brings the enforcement: the hooks, the capability rules, and the eight slash commands. `/plugin disable enforcer-governor` removes them just as cleanly. There is no daemon to start. The governor keeps its own state under `~/.enforcer-governor/` and a small shared file under `~/.enforcer/`; it writes to your `~/.claude/settings.json` only when you ask it to, with `/enforcer-governor:telemetry on`.
 
 Two pieces cannot arrive that way, because Claude Code does not let a plugin ship either one: a plugin's `settings.json` honours only the `agent` and `subagentStatusLine` keys, and everything else is ignored without a word. Both are a single paste into your own `~/.claude/settings.json`, and the governor enforces correctly without either.
 
@@ -99,6 +99,7 @@ deny contains "ask: publishing from an agent needs a person to confirm" if {
 | `/enforcer-governor:config [--why]` | every setting, what it does, and which you have changed |
 | `/enforcer-governor:set <name> <value>` | change one, with validation |
 | `/enforcer-governor:login [api-key <key> \| status \| logout]` | sign in to Enforcer for the governor and the MCP server; no argument opens a browser |
+| `/enforcer-governor:telemetry [on \| off \| status]` | send Claude Code's own OpenTelemetry (cost, tokens, tool use — never prompt text) to your Enforcer workspace; writes the `OTEL_*` exporter settings into `~/.claude/settings.json` |
 
 ### Getting out of the way
 
@@ -117,6 +118,22 @@ To switch the governor off without uninstalling it, put any of these in `~/.enfo
 An Enforcer tenant can publish a set of these settings for every install it signs in (`GET /api/v1/governance/settings`, written by a tenant admin). They are a **floor, not an override**: for each setting the governor applies whichever of the two is stricter, so a managed $150 beats your $400 and your $40 beats both, and a check the organisation turns on cannot be turned off locally. `/enforcer-governor:config` marks them with `!` and shows your own value beside them.
 
 Nothing waits on the network to decide: the settings are fetched at session start, at most hourly, and cached. A machine that is signed out, or has never reached the control plane, runs on its own config alone. Identity settings (`centralUrl`, `ingestUrl`, `operator`) cannot be managed — being able to repoint an install is being able to redirect its receipts.
+
+## What leaves your machine
+
+Nothing, until you sign in. The governor decides and records locally, and a machine that has never run `/enforcer-governor:login` makes no network calls at all.
+
+Once you sign in to an Enforcer workspace, three things can leave, and each has its own switch:
+
+| what | when | switch |
+|---|---|---|
+| **Decision receipts** — the verdict, the rule that fired, the tool name, the model, token counts, a project name derived from the working directory, and the `operator` you set. Never the command text, never file contents, never prompts. | shipped in the background after each session, to your workspace's governance API | `shipOn` (default on) |
+| **Your organisation's policy answers** — for an action a local rule matched, the governor asks your workspace whether to allow, ask or deny. The request names the rule, not the command. | only when a rule matches | `policyOn` (default on) |
+| **Claude Code's own telemetry** — cost, tokens and tool-use metrics from Claude Code's built-in OpenTelemetry exporter. Prompt text is not exported. | only if you turn it on | `/enforcer-governor:telemetry on` (default off) |
+
+Everything goes to the workspace you signed in to and nowhere else. `/enforcer-governor:login logout` stops all three on this machine; what has already been sent stays in your workspace's records, which is the point of a record.
+
+Files the governor writes: `~/.enforcer-governor/` (config, state, the receipt chain, per-session scratch that is swept after `sweepDays`), `~/.enforcer/credentials.json` (your sign-in) and `~/.enforcer/plugin-root` (where the installed plugin lives, so telemetry stays signed in across plugin updates).
 
 ## How it works
 
