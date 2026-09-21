@@ -10,7 +10,7 @@
 
 *The dashboard, running the [live demo](https://governor.instruxi.io/console.html) with a simulated fleet. Every agent shows what it was asked to do, what it has spent against its cap, and how long it can keep working. Each decision at the bottom is hash-chained to the one before it.*
 
-**Stop your AI agents from wasting your money. Any agent, any provider. Free, source-available, runs on your own computer.**
+A guard that sits in front of an AI agent and decides, before each action runs, whether it is allowed. Any agent, any provider, on your own machine.
 
 AI agents burn tokens, and tokens are money. They get stuck in loops, repeat work, and blow through budgets, and every existing tool just *reports* the damage afterwards. Enforcer Governor is a guard that stands in front of your agents and answers one question before every action:
 
@@ -22,7 +22,7 @@ AI agents burn tokens, and tokens are money. They get stuck in loops, repeat wor
 
 Every decision leaves a **tamper-proof receipt**, so you can always prove what your agents did and who approved what. Everything runs on your own computer with your own keys. Nothing is sent to us, ever.
 
-**See it in 10 seconds** (no install, simulated agents): **https://enforcer-governor.vercel.app**
+**See it in 10 seconds** (no install, simulated agents): **https://governor.instruxi.io/console.html**
 
 
 Licensed [FSL-1.1-ALv2](LICENSE): free to run on your own agents, in production, commercially. Becomes Apache 2.0 two years after each release. Source-available rather than OSI open source, so it is described as free and self-hosted.
