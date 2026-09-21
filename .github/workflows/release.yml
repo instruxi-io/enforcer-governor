@@ -1,0 +1,44 @@
+# Publishes to npm with provenance, so the package page carries a verified link
+# back to the exact commit and workflow run that built it. For a tool whose
+# whole pitch is "run this in front of your agent", being able to prove what
+# was published matters more than usual.
+#
+# Requires NPM_TOKEN in repo secrets (an Automation token, since provenance
+# publishes are non-interactive).
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write      # required for npm provenance
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+
+      - name: the suite must pass before anything ships
+        run: npm test
+
+      - name: tag must match package.json
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG="$(node -p "require('./package.json').version")"
+          if [ "$GITHUB_REF_TYPE" = "tag" ] && [ "$TAG" != "$PKG" ]; then
+            echo "tag $GITHUB_REF_NAME does not match package.json $PKG"; exit 1
+          fi
+          echo "version $PKG"
+
+      - name: publish with provenance
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
