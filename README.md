@@ -1,6 +1,14 @@
 # Enforcer Governor
 
 [![ci](https://github.com/instruxi-io/enforcer-governor/actions/workflows/ci.yml/badge.svg)](https://github.com/instruxi-io/enforcer-governor/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/enforcer-governor)](https://www.npmjs.com/package/enforcer-governor)
+[![downloads](https://img.shields.io/npm/dw/enforcer-governor)](https://www.npmjs.com/package/enforcer-governor)
+[![licence FSL-1.1-ALv2](https://img.shields.io/badge/licence-FSL--1.1--ALv2-blue)](LICENSE)
+[![node](https://img.shields.io/node/v/enforcer-governor)](https://nodejs.org)
+
+[![The Enforcer Governor dashboard: six agents working, spend per agent, a model suggestion, and the hash-chained receipt strip](docs/dashboard.png)](https://governor.instruxi.io/console.html)
+
+*The dashboard, running the [live demo](https://governor.instruxi.io/console.html) with a simulated fleet. Every agent shows what it was asked to do, what it has spent against its cap, and how long it can keep working. Each decision at the bottom is hash-chained to the one before it.*
 
 **Stop your AI agents from wasting your money. Any agent, any provider. Free, source-available, runs on your own computer.**
 
@@ -227,7 +235,7 @@ Everything is set from the **owner console** on the dashboard: one panel with a 
 - **Proxy**: a passthrough for `/v1/messages` and `/v1/chat/completions` that reads exact usage from responses and refuses when an agent is over its limit. This is the tamper-resistant path, since it runs server-side.
 - **Receipts**: appended to `~/.enforcer-governor/receipts.jsonl`, each line carrying its own hash, folded in from the previous line. `GET /verify` walks the **file** and names the first line that does not add up, so an edit or a deletion anywhere in the history is caught, including in a stretch written before the last restart. Receipts written by versions before 0.11 have no stored hash and are reported as `unverifiable` rather than quietly passed.
 
-## Honest limits (v0.1)
+## Honest limits
 
 - The proxy buffers responses; streaming passthrough is next.
 - Token totals come from the transcript, which writes asynchronously, so a decision can lag real spend by one turn. Enforcement at the tool boundary makes this safe in practice.
