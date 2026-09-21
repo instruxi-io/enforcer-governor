@@ -2,7 +2,7 @@
 
 [![ci](https://github.com/instruxi-io/enforcer-governor/actions/workflows/ci.yml/badge.svg)](https://github.com/instruxi-io/enforcer-governor/actions/workflows/ci.yml)
 
-**Stop your AI agents from wasting your money. Any agent, any provider. Free, open, runs on your own computer.**
+**Stop your AI agents from wasting your money. Any agent, any provider. Free, source-available, runs on your own computer.**
 
 AI agents burn tokens, and tokens are money. They get stuck in loops, repeat work, and blow through budgets, and every existing tool just *reports* the damage afterwards. Enforcer Governor is a guard that stands in front of your agents and answers one question before every action:
 
@@ -16,6 +16,8 @@ Every decision leaves a **tamper-proof receipt**, so you can always prove what y
 
 **See it in 10 seconds** (no install, simulated agents): **https://enforcer-governor.vercel.app**
 
+
+Licensed [FSL-1.1-ALv2](LICENSE): free to run on your own agents, in production, commercially. Becomes Apache 2.0 two years after each release. Source-available rather than OSI open source, so it is described as free and self-hosted.
 ---
 
 ## Where this sits
