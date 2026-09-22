@@ -43,7 +43,7 @@
     "type": "git",
     "url": "git+https://github.com/instruxi-io/enforcer-governor.git"
   },
-  "homepage": "https://governor.instruxi.io",
+  "homepage": "https://gvnr.io",
   "bugs": {
     "url": "https://github.com/instruxi-io/enforcer-governor/issues"
   }
