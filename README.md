@@ -50,7 +50,7 @@ It has a second job. Claude Code hands its own `total_cost_usd` to the status li
 
 **Capability rules that ship with the plugin.** Piping a URL into a shell is refused outright. Deleting a tree, rewriting git history, reading credentials, publishing or deploying: those stop and ask. These are capability decisions, not spend ones, so they fire on a full budget — and they are checked without reading any state at all, so they hold even when the governor cannot read its own files. Deleting the state directory turns off the spend limit; it does not turn off the rules.
 
-**Your organisation's policy, not just ours.** Sign in once with `/enforcer-governor:login` and the rules above stop being the same six patterns for everyone. When a rule matches, the governor asks your Enforcer tenant policy about it: a resource of type `agent_action` whose id names the rule (`fs.delete_tree`, `deploy.publish`, `git.force_push`, `git.rewrite_history`, `secrets.access`, `shell.pipe_to_shell`). The policy is Rego, versioned, tested before it can go live, and rolled back by activating the previous version, so "agents here never delete a whole tree" or "publishing needs a person" is one change for the whole team.
+**Your organisation's policy, not just ours.** Sign in once with `/enforcer:login` and the rules above stop being the same six patterns for everyone. When a rule matches, the governor asks your Enforcer tenant policy about it: a resource of type `agent_action` whose id names the rule (`fs.delete_tree`, `deploy.publish`, `git.force_push`, `git.rewrite_history`, `secrets.access`, `shell.pipe_to_shell`). The policy is Rego, versioned, tested before it can go live, and rolled back by activating the previous version, so "agents here never delete a whole tree" or "publishing needs a person" is one change for the whole team.
 
 Its answer composes with the local rule, and the direction matters:
 
@@ -124,7 +124,7 @@ Nothing waits on the network to decide: the settings are fetched at session star
 
 ## What leaves your machine
 
-Nothing, until you sign in. The governor decides and records locally, and a machine that has never run `/enforcer-governor:login` makes no network calls at all.
+Nothing, until you sign in. The governor decides and records locally, and a machine that has never signed in (`/enforcer:login`) makes no network calls at all.
 
 Once you sign in to an Enforcer workspace, three things can leave, and each has its own switch:
 
@@ -134,7 +134,7 @@ Once you sign in to an Enforcer workspace, three things can leave, and each has 
 | **Your organisation's policy answers** — for an action a local rule matched, the governor asks your workspace whether to allow, ask or deny. The request names the rule, not the command. | only when a rule matches | `policyOn` (default on) |
 | **Claude Code's own telemetry** — cost, tokens and tool-use metrics from Claude Code's built-in OpenTelemetry exporter. Prompt text is not exported. | only if you turn it on | `/enforcer-governor:telemetry on` (default off) |
 
-Everything goes to the workspace you signed in to and nowhere else. `/enforcer-governor:login logout` stops all three on this machine; what has already been sent stays in your workspace's records, which is the point of a record.
+Everything goes to the workspace you signed in to and nowhere else. `/enforcer:login logout` (or `/enforcer-governor:login logout`, the same command) stops all three on this machine; what has already been sent stays in your workspace's records, which is the point of a record.
 
 Files the governor writes: `~/.enforcer-governor/` (config, state, the receipt chain, per-session scratch that is swept after `sweepDays`), `~/.enforcer/credentials.json` (your sign-in) and `~/.enforcer/plugin-root` (where the installed plugin lives, so telemetry stays signed in across plugin updates).
 
