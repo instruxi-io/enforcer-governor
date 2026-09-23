@@ -178,7 +178,7 @@ async function handle(msg) {
       return {
         protocolVersion: PROTOCOLS.includes(p.protocolVersion) ? p.protocolVersion : PROTOCOLS[PROTOCOLS.length - 1],
         capabilities: { tools: { listChanged: false } },
-        serverInfo: { name: 'gvnr', title: 'GVNR (Enforcer Governor)', version: VERSION },
+        serverInfo: { name: 'gvnr', title: 'GVNR by Instruxi', version: VERSION },
         instructions: INSTRUCTIONS,
       };
     case 'ping': return {};

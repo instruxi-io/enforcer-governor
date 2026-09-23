@@ -1,4 +1,6 @@
-# Enforcer Governor (GVNR)
+# GVNR
+
+Published on npm as `enforcer-governor`, and previously called Enforcer Governor.
 
 **[gvnr.io](https://gvnr.io)** · stops AI agents overspending and running dangerous commands, before the action runs. Free, self-hosted, and an MCP server for any MCP client.
 
@@ -8,7 +10,7 @@
 [![licence FSL-1.1-ALv2](https://img.shields.io/badge/licence-FSL--1.1--ALv2-blue)](LICENSE)
 [![node](https://img.shields.io/node/v/enforcer-governor)](https://nodejs.org)
 
-[![The GVNR dashboard: six agents working, spend per agent against its cap, and the hash-chained receipt strip](docs/dashboard.png)](https://gvnr.io/console.html)
+[![The GVNR dashboard: each agent's task and spend against its cap, with the hash-chained receipt strip underneath](docs/dashboard.png)](https://gvnr.io/console.html)
 
 *The dashboard, running the [live demo](https://gvnr.io/console.html) with a simulated fleet. Every agent shows what it was asked to do, what it has spent against its cap, and how long it can keep working. Each decision at the bottom is hash-chained to the one before it.*
 
@@ -26,7 +28,8 @@ Every decision leaves a **tamper-evident receipt**, so you can always prove what
 
 **See it in 10 seconds** (no install, simulated agents): **https://gvnr.io/console.html**
 
-Licensed [FSL-1.1-ALv2](LICENSE): free to run on your own agents, in production, commercially. Becomes Apache 2.0 two years after each release. Source-available rather than OSI open source, so it is described as free and self-hosted.
+Licensed [FSL-1.1-ALv2](LICENSE): free to run on your own agents, in production, commercially. Becomes Apache 2.0 two years after each release. Source-available rather than OSI open source.
+
 ---
 
 ## Where this sits
@@ -35,14 +38,16 @@ Spend caps are no longer unique, and it would be dishonest to imply otherwise. M
 
 Two kinds of tool get close, and each covers half. **Spend tools** stop the money but have no opinion on what the agent is doing. **Command guards** block the dangerous command but never look at the money. GVNR does both in one local install, and keeps a receipt of every decision:
 
-| | Stops spend before the call | Limits the rate | Gates the action | Runs where | Record |
-|---|---|---|---|---|---|
-| Provider limits | at a set total | no | no | the provider | usage reports |
-| Observability tools | no, they report | no | no | hosted or local | logs |
-| LLM gateways | yes, per key | configurable | no | self-hosted or hosted | logs |
-| Hosted spend caps | yes | some | no | their cloud | varies |
-| Command guards | no | no | yes, before it runs | your machine | not their focus |
-| **GVNR** | **yes, per agent and per fleet** | **yes, on by default** | **yes, before it runs (Claude Code hook)** | **your machine** | **hash-chained receipts** |
+| | Stops spend first | Gates the action |
+|---|---|---|
+| Provider limits | at a set total | no |
+| Observability tools | no, reports after | no |
+| LLM gateways | per key, rate configurable | no |
+| Hosted spend caps | yes, some by the minute | no |
+| Command guards | no | yes, before it runs |
+| **GVNR** | **per agent and fleet, rate limits on by default** | **yes, before it runs** |
+
+GVNR runs on your machine and writes a hash-chained receipt for every decision. The action gate is the Claude Code hook.
 
 A spend cap answers "can it afford this?". It has no opinion on `curl | sh`, on `rm -rf`, or on reading your `.env`, all of which are cheap. A command guard answers "is this dangerous?" and never notices a session fanning out into fifty subagents at $400 a minute. GVNR asks both, on the same action, before it runs.
 
@@ -54,15 +59,15 @@ One thing: **Node.js**, a free tool most developers already have. Check by typin
 
 ---
 
-## Three things, not one
+## Four things, not one
 
-**Control.** What the agent may DO, checked before it does it. Piping the internet into a shell is refused outright. Deleting a tree, rewriting git history, reading credentials, publishing or deploying: those stop and ask you. Ordinary work passes untouched. These are capability decisions, not spend ones, so they fire with a full budget.
+**Control.** What the agent may do, checked before it does it. Piping the internet into a shell is refused outright. Deleting a tree, rewriting git history, reading credentials, publishing or deploying: those stop and ask you. Ordinary work passes untouched. These are capability decisions, not spend ones, so they fire with a full budget.
 
 **Receipts.** Every decision is hash-chained, and each one names the human the agent was acting for, the tool it tried to use, the model answering, and the rule that decided. Edit or delete a single record and the chain visibly breaks. Those are the fields an audit asks for, recorded as fields rather than buried in prose.
 
 **Spend.** A dollar limit per agent, a soft cap that asks you before it keeps going, and total caps across every agent per day, week and month. Loops and repeated work are caught on behaviour, not just cost.
 
-**Speed, not just totals.** The incidents that actually cost people money are rate incidents, and every cap that ships elsewhere is a total. Three shapes are watched:
+**Speed, not just totals.** The incidents that actually cost people money are rate incidents, and most caps that ship elsewhere are totals. Three shapes are watched:
 
 - **Dollars per minute**, per agent and across the fleet. Ordinary work sits around $0.10 to $0.25 a minute, so the defaults of $2 and $10 leave normal sessions alone.
 - **New agents per minute.** A team that starts over an hour is a choice. Eight appearing inside a minute is an orchestrator spawning orchestrators, which is how one documented session reached 49 subagents before anyone looked.
@@ -96,9 +101,9 @@ export OPENAI_BASE_URL=http://localhost:4000/v1
 export ANTHROPIC_BASE_URL=http://localhost:4000
 ```
 
-Every request now passes through the governor. It meters real usage from each response and refuses (HTTP 429) once an agent is over budget or grounded. Tag requests per agent with an `x-enforcer-agent: <name>` header so they show up separately on the dashboard.
+Every request now passes through GVNR. It meters real usage from each response and refuses (HTTP 429) once an agent is over budget or grounded. Tag requests per agent with an `x-enforcer-agent: <name>` header so they show up separately on the dashboard.
 
-For anything that speaks the OpenAI chat-completions shape but lives elsewhere, tell the governor where to forward:
+For anything that speaks the OpenAI chat-completions shape but lives elsewhere, tell GVNR where to forward:
 
 ```bash
 # Gemini
@@ -111,11 +116,9 @@ GOVERNOR_OPENAI_URL=https://api.x.ai/v1/chat/completions npx --yes enforcer-gove
 # a local runtime
 GOVERNOR_OPENAI_URL=http://localhost:11434/v1/chat/completions npx --yes enforcer-governor start
 
-# OpenRouter, which puts 400+ models behind one endpoint
+# OpenRouter
 GOVERNOR_OPENAI_URL=https://openrouter.ai/api/v1/chat/completions npx --yes enforcer-governor start
 ```
-
-OpenRouter is worth calling out because it solves a different problem and the two compose. It picks a model per turn and bills you for it; it is a marketplace, and a marketplace has no reason to ship a hard stop. The governor sits in front of it and supplies what it does not: a limit that actually stops an agent, a check on what the agent may DO rather than what it may spend, and a receipt for every decision.
 
 ### Route two: a coding agent with hook support
 
@@ -127,7 +130,7 @@ In a **second** terminal, go into the project you want watched and run:
 npx --yes enforcer-governor install-hook
 ```
 
-Then start a **new** session in that project. That is all. Add `--global` to watch every project at once. To remove it, press **Remove Enforcer** at the bottom of the dashboard, or run `npx enforcer-governor uninstall-hook`.
+Then start a **new** session in that project. That is all. Add `--global` to watch every project at once. To remove it, press **Remove GVNR** at the bottom of the dashboard, or run `npx enforcer-governor uninstall-hook`.
 
 > The public ChatGPT website is closed and cannot be governed. Anything built on the OpenAI **API** can.
 
@@ -135,10 +138,10 @@ Then start a **new** session in that project. That is all. Add `--global` to wat
 
 ## Use it from any MCP client
 
-GVNR is also an MCP server, so Cursor, Claude Desktop, Claude Code, Windsurf or any other MCP client can use it. Start the governor, then add the server:
+GVNR is also an MCP server, so Cursor, Claude Desktop, Claude Code, Windsurf or any other MCP client can use it. Start GVNR, then add the server:
 
 ```bash
-npx --yes enforcer-governor start          # the governor and its dashboard
+npx --yes enforcer-governor start          # GVNR and its dashboard
 claude mcp add gvnr -- npx -y enforcer-governor mcp
 ```
 
@@ -183,9 +186,9 @@ Drop a `governor.config.json` in the directory you run it from:
 
 **Set the limit in dollars.** `dollars` is the spend cap per agent per session; `model` is which model's prices convert it into a token budget. The dashboard shows you what that buys before anything runs: how many tokens, and roughly how long an agent can work on it. Change it there at any time; agents already running pick up the new limit immediately, and one that was stopped for hitting the old limit is released.
 
-**Claude, ChatGPT, Gemini and Grok are all supported, and the model is detected for you.** Every agent reports which model answered, so the governor prices each one at its own rate and the dashboard's picker follows whatever it sees. `$20` means $20 whether that agent is on Opus 5, GPT-5 mini or Gemini 2.5 Pro. Pick a model by hand and your choice sticks.
+**Claude, OpenAI (GPT) models, Gemini and Grok are all supported, and pricing follows the model automatically.** Every agent reports which model answered, so GVNR prices each one at its own rate and the dashboard's price picker follows whatever it sees. `$20` means $20 whether that agent is on Opus 5, GPT-5 mini or Gemini 2.5 Pro. Set the pricing by hand and your choice sticks.
 
-Under the hood the cap is **cost-weighted effective tokens**, not raw counts. Cached sessions re-read their whole context every turn, so raw sums explode into the billions while costing very little. The governor weights by price instead, so one effective token is one input-token of cost at that model's price and `dollars` converts with a single multiply.
+Under the hood the cap is **cost-weighted effective tokens**, not raw counts. Cached sessions re-read their whole context every turn, so raw sums explode into the billions while costing very little. GVNR weights by price instead, so one effective token is one input-token of cost at that model's price and `dollars` converts with a single multiply.
 
 The weights are per model, because the output multiplier is not a constant: Anthropic prices output at 5x input across its range, OpenAI runs 4x to 8x, and Gemini runs 4x to 8.33x. Cached input differs too. Two Gemini caveats are baked in: the Flash 3.7/3.6 rates are the ones in force through 2026-12-31, and the Pro rates are the sub-200k-prompt tier. `$20` is 4,000,000 effective tokens on Opus 5, 2,000,000 on Fable 5 and 10,000,000 on Sonnet 5. Set `budget` directly instead if you would rather think in tokens.
 
@@ -195,9 +198,9 @@ Prices are the providers' published list rates. **On a flat subscription you are
 
 ---
 
-## When the budget runs out, finish somewhere cheaper
+## Optional: a fallback endpoint for when the budget runs out
 
-`reroute` is the fourth verb, and it is off unless you ask for it. When an agent hits its limit the choice is normally stop or keep paying. This adds a third: hand the job to a cheaper or local model and carry on.
+Off unless you turn it on. When an agent on the API route hits its cap, GVNR denies the request. If you would rather that job carried on somewhere cheaper, such as a local model you run, you can name that endpoint yourself:
 
 ```json
 {
@@ -207,9 +210,11 @@ Prices are the providers' published list rates. **On a flat subscription you are
 }
 ```
 
-It is **not** a context transfer. Repointing a provider mid-session leaves the new one with nothing, and resending a long transcript is the expensive move because the prompt cache is per provider. Instead the outgoing model writes a short structured brief, and the incoming model starts from that: small enough for any window including a local one, with nothing large to re-read.
+GVNR never chooses the endpoint or the model. It sends to exactly the URL and model name you configured, and only after the cap has denied the agent. The denial is still recorded, the forwarded request gets its own receipt, and the response carries `x-enforcer-verdict: reroute` so your code can tell which endpoint answered.
 
-Two rules come with it. The brief is written by the **outgoing** model, because it did the reasoning. And the cut lands on a user turn, so an assistant tool call is never separated from its tool result. It fires once per agent, because repeated compaction degrades a session as recursive summaries distort earlier reasoning.
+It is **not** a context transfer. Resending a long transcript to a new endpoint is the expensive move, because the prompt cache belongs to the old provider. Instead the outgoing model writes a short structured brief, and the fallback starts from that: small enough for any window, including a local one.
+
+Two rules come with it. The brief is written by the **outgoing** model, because it did the reasoning. And the cut lands on a user turn, so an assistant tool call is never separated from its tool result. It happens once per agent, because repeated summarising distorts earlier reasoning, so a second breach after that is a plain stop.
 
 Measured against a local Qwen 3.6 27B on the same task, scored on a fixed checklist written before the runs:
 
@@ -219,7 +224,7 @@ Measured against a local Qwen 3.6 27B on the same task, scored on a fixed checkl
 | **the brief alone** | **7/7** |
 | nothing | 0/7 |
 
-Three things worth knowing before you turn it on. A local model is slow, so this waits: eight minutes for the run above, which is the price of free tokens. `max_tokens` counts reasoning on a reasoning model, so a brief asked for with a small budget can come back empty. And a brief under 80 characters is refused rather than handed over, because a fallback starting from nothing looks exactly like one that lost the task.
+Three things worth knowing before you turn it on. A local model is slow, so this waits: eight minutes for the run above. `max_tokens` counts reasoning on a reasoning model, so a brief asked for with a small budget can come back empty. And a brief under 80 characters is refused rather than handed over, so the agent gets the normal denial instead.
 
 ---
 
@@ -251,14 +256,14 @@ A folder you have not mapped is still counted, under a guessed name marked with 
 
 ```
 coding agent ─hook─┐
-                    ├──► Governor ──► allow / deny / escalate ──► hash-chained receipt
+                    ├──► GVNR ──────► allow / deny / escalate ──► hash-chained receipt
 other agents ─proxy─┘        │
                              └──► dashboard (live gauges + decision tape)
 ```
 
 Everything is set from the **owner console** on the dashboard: one panel with a fader for each limit and a switch for each check, so there is one place to answer what these agents may do and what they may spend.
 
-- **Hook**: reads the session transcript, totals the tokens, asks the governor, and translates the verdict into the agent's own allow / deny / ask. If the governor is down it fails **open**, so it never blocks your real work.
+- **Hook**: reads the session transcript, totals the tokens, asks GVNR, and translates the verdict into the agent's own allow / deny / ask. If GVNR is down it fails **open**, so it never blocks your real work.
 - **Proxy**: a passthrough for `/v1/messages` and `/v1/chat/completions` that reads exact usage from responses and refuses when an agent is over its limit. This is the tamper-resistant path, since it runs server-side.
 - **Receipts**: appended to `~/.enforcer-governor/receipts.jsonl`, each line carrying its own hash, folded in from the previous line. `GET /verify` walks the **file** and names the first line that does not add up, so an edit or a deletion anywhere in the history is caught, including in a stretch written before the last restart. Receipts written by versions before 0.11 have no stored hash and are reported as `unverifiable` rather than quietly passed.
 
@@ -267,7 +272,7 @@ Everything is set from the **owner console** on the dashboard: one panel with a 
 - The proxy buffers responses; streaming passthrough is next.
 - Token totals come from the transcript, which writes asynchronously, so a decision can lag real spend by one turn. Enforcement at the tool boundary makes this safe in practice.
 - On subscription billing, dollar figures are estimates at list prices, labelled `est.`
-- The governor answers only this machine: loopback connections, local Host headers, and no cross-origin requests. Controls that loosen a limit (settings, approve, resume, remove) need a key that changes on every start and lives only in the dashboard page. That stops a stray `curl` or another website; an agent with a shell running as you could still load the dashboard and read the key. Against a deliberate adversary rather than an accident, run the agent in a container or VM and keep GVNR on the host.
+- GVNR answers only this machine: loopback connections, local Host headers, and no cross-origin requests. Controls that loosen a limit (settings, approve, resume, remove) need a key that changes on every start and lives only in the dashboard page. That stops a stray `curl` or another website; an agent with a shell running as you could still load the dashboard and read the key. Against a deliberate adversary rather than an accident, run the agent in a container or VM and keep GVNR on the host.
 - If GVNR is not running, the hook lets actions through and says so, rather than breaking your agent.
 
 ## Run the tests
@@ -278,7 +283,7 @@ npm test
 
 ## The bigger picture: Enforcer
 
-The Governor is one idea applied to one resource. The idea is **Enforcer**, Instruxi's policy engine, and it asks a single question in front of every system it guards:
+GVNR is one idea applied to one resource. The idea is **Enforcer**, Instruxi's policy engine, and it asks a single question in front of every system it guards:
 
 > **May this identity do this, right now?**
 

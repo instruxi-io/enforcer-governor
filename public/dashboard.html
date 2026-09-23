@@ -19,7 +19,7 @@
   @media (prefers-reduced-motion: reduce){
     *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;}
   }
-  *{box-sizing:border-box;margin:0;} body{background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;overflow-x:hidden;} body.ungoverned{background:#0c0708;}
+  *{box-sizing:border-box;margin:0;} html{overflow-x:clip;} body{background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;overflow-x:hidden;} body.ungoverned{background:#0c0708;}
   .wrap{max-width:1860px;margin:0 auto;padding:0 clamp(14px,2.5vw,32px);}
   /* Prose stays readable even when the page does not: a measure is a measure
      regardless of how wide the window is. */
@@ -186,7 +186,7 @@
     border:1px solid var(--line);border-radius:50%;color:var(--faint);font-family:var(--mono);font-size:9px;
     line-height:12px;transition:color .1s ease,border-color .1s ease;}
   .q:hover,.q:focus-visible{color:var(--teal);border-color:rgba(87,196,184,.5);outline:none;}
-  .qtip{position:absolute;left:0;top:calc(100% + 8px);z-index:9;width:min(300px,72vw);
+  .qtip{position:absolute;left:0;top:calc(100% + 8px);z-index:9;width:min(300px,72vw);max-width:calc(100vw - 32px);
     background:#0A0E13;border:1px solid var(--line);padding:11px 13px;
     font-size:11.5px;line-height:1.55;color:var(--dim);
     opacity:0;visibility:hidden;transform:translateY(-3px);
@@ -286,8 +286,11 @@
   /* Grid, not flex. Flex stretches a lone card on the last row across the
      whole page, which reads as broken; a grid leaves the gap, which reads as
      a row that is not full. At this width six cards sit on one line anyway. */
-  .fleet{display:grid;grid-template-columns:repeat(auto-fit,minmax(272px,1fr));
-    gap:1px;background:var(--line);border:1px solid var(--line);}
+  /* The hairlines are each card's own outline, not the grid showing through,
+     so a row that is not full leaves page background, not a grey block. */
+  .fleet{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));
+    gap:1px;background:var(--bg);padding:1px;}
+  .fleet>.agent{outline:1px solid var(--line);}
   .empty{grid-column:1/-1;background:var(--panel);border:1px dashed var(--line);border-radius:0;padding:22px 24px;}
   .e-h{font-size:15px;color:var(--ink);font-weight:600;margin-bottom:14px;}
   .e-step{margin-bottom:14px;} .e-step b{display:block;font-size:13px;color:var(--teal);margin-bottom:2px;} .e-step span{font-size:12.5px;color:var(--dim);display:block;margin-bottom:7px;}
@@ -366,7 +369,7 @@
   .a-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 16px 14px;font-family:var(--mono);font-size:10.5px;color:var(--dim);} .a-status{display:flex;align-items:center;gap:5px;} .st-dot{width:6px;height:6px;border-radius:50%;background:var(--allow);flex:none;} .warn .st-dot{background:var(--esc);}.esc .st-dot{background:var(--esc);}.grounded .st-dot,.free .st-dot{background:var(--deny);}
   .kill{font-family:var(--mono);font-size:10px;color:var(--faint);background:none;border:1px solid var(--line);border-radius:0;padding:3px 8px;cursor:pointer;flex:none;} .kill:hover{border-color:var(--deny);color:var(--deny);} .kill:disabled{opacity:.35;cursor:default;}
   .tape-wrap{margin:-1px 0 0;background:var(--panel);border:1px solid var(--line);overflow:hidden;}
-  .tape-top{display:flex;align-items:center;gap:14px;padding:11px 15px;border-bottom:1px solid var(--line);background:var(--panel2);font-family:var(--mono);font-size:11px;} .tape-top .lbl{letter-spacing:.16em;text-transform:uppercase;color:var(--faint);} .tape-top .legend{display:flex;gap:14px;margin-left:auto;color:var(--dim);} .tape-top .legend i{width:8px;height:8px;border-radius:0;display:inline-block;margin-right:5px;vertical-align:middle;}
+  .tape-top{display:flex;align-items:center;flex-wrap:wrap;gap:10px 14px;padding:11px 15px;border-bottom:1px solid var(--line);background:var(--panel2);font-family:var(--mono);font-size:11px;} .tape-top .lbl{letter-spacing:.16em;text-transform:uppercase;color:var(--faint);} .tape-top .legend{display:flex;gap:14px;margin-left:auto;color:var(--dim);} .tape-top .legend i{width:8px;height:8px;border-radius:0;display:inline-block;margin-right:5px;vertical-align:middle;}
   .verify{font-family:var(--mono);font-size:10.5px;color:var(--dim);background:none;border:1px solid var(--line);border-radius:0;padding:5px 11px;cursor:pointer;} .verify:hover{border-color:var(--teal);color:var(--teal);}
   .tape{display:flex;gap:4px;padding:16px;overflow-x:auto;min-height:82px;} .chip{flex:none;width:176px;border:1px solid var(--lineS);border-left-width:2px;padding:8px 10px;background:#0A0E13;font-family:var(--mono);animation:sl .35s ease backwards;} @keyframes sl{from{opacity:0;transform:translateX(-10px);}}
   .chip.allow{border-left-color:var(--allow);}.chip.deny{border-left-color:var(--deny);}.chip.escalate{border-left-color:var(--esc);}.chip.gap{border-left-color:var(--faint);border-style:dashed;}
@@ -374,8 +377,9 @@
   .chip .who{font-size:11px;color:var(--ink);margin:3px 0 2px;} .chip .rule{font-size:10px;color:var(--faint);} .chip .hash{font-size:9.5px;color:var(--teal);margin-top:5px;word-break:break-all;opacity:.85;} .chip .auth{font-size:9.5px;color:var(--esc);margin-top:3px;} .chip .nohash{font-size:9.5px;color:var(--deny);margin-top:5px;}
   .esc-modal{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(4,6,9,.72);opacity:0;pointer-events:none;transition:opacity .25s;z-index:50;} .esc-modal.show{opacity:1;pointer-events:auto;}
   .esc-card{width:min(460px,calc(100% - 32px));background:#12161d;border:1px solid rgba(212,167,44,.6);border-radius:0;padding:22px 24px;}
-  .esc-card .eh{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--esc);margin-bottom:12px;} .esc-card h3{font-family:var(--serif);font-size:20px;margin-bottom:12px;} .ectx{font-family:var(--mono);font-size:12px;color:var(--dim);line-height:1.8;background:#0A0E13;border:1px solid var(--lineS);border-radius:0;padding:11px 13px;margin-bottom:16px;} .ectx b{color:var(--ink);}
-  .ebtns{display:flex;gap:10px;} .esc-btn{flex:1;font-family:var(--mono);font-size:13px;font-weight:600;cursor:pointer;border-radius:0;padding:11px;border:1px solid;} .esc-approve{background:rgba(63,185,112,.14);border-color:var(--allow);color:var(--allow);} .esc-deny{background:none;border-color:var(--line);color:var(--dim);}
+  .esc-card h3 .etask{display:block;margin-top:6px;font-size:14px;line-height:1.4;color:var(--dim);}
+  .esc-card .eh{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--esc);margin-bottom:12px;} .esc-card h3{font-family:var(--serif);font-size:20px;margin-bottom:12px;} .ectx{font-family:var(--mono);font-size:12px;color:var(--dim);line-height:1.8;background:#0A0E13;border:1px solid var(--lineS);border-radius:0;padding:11px 13px;margin-bottom:16px;display:grid;grid-template-columns:max-content minmax(0,1fr);column-gap:14px;} .ectx b{color:var(--ink);}
+  .ebtns{display:flex;flex-wrap:wrap;gap:10px;} .esc-btn{flex:1;font-family:var(--mono);font-size:13px;font-weight:600;cursor:pointer;border-radius:0;padding:11px;border:1px solid;} .esc-approve{background:rgba(63,185,112,.14);border-color:var(--allow);color:var(--allow);} .esc-deny{background:none;border-color:var(--line);color:var(--dim);}
   footer{border-top:1px solid var(--lineS);padding:22px 0 40px;font-family:var(--mono);font-size:11px;color:var(--faint);display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001s!important;}}
 
@@ -412,7 +416,7 @@
   <span class="tag" id="modeTag">DEMO</span>
   <div class="metrics">
     <div class="metric"><div class="v" id="mSpent">$0</div><div class="k">spent</div></div>
-    <div class="metric"><div class="v" id="mBurn">&mdash;</div><div class="k">burning</div></div>
+    <div class="metric"><div class="v" id="mBurn">nothing</div><div class="k">burning</div></div>
     <div class="metric"><div class="v" id="mChain"><span class="chainok">intact</span></div><div class="k">records</div></div>
   </div>
 </div></div>
@@ -440,7 +444,7 @@
   <div class="fleet" id="fleet"></div>
   <div class="tape-wrap">
     <div class="tape-top"><span class="lbl">Every decision, receipted</span>
-      <span class="legend"><span><i style="background:var(--allow)"></i><b id="mAllow">0</b> allowed</span><span><i style="background:var(--deny)"></i><b id="mDeny">0</b> blocked</span><span><i style="background:var(--esc)"></i><b id="mEsc">0</b> asked</span></span>
+      <span class="legend"><span><i style="background:var(--allow)"></i><b id="mAllow">0</b> allowed</span><span><i style="background:var(--deny)"></i><b id="mDeny">0</b> blocked</span><span><i style="background:var(--esc)"></i><b id="mEsc">0</b> escalated</span></span>
       <button class="verify" id="verifyBtn">Check the records</button>
       <a class="verify" id="csvBtn" href="/receipts.csv" download hidden>Export CSV</a>
       <button class="verify" id="csvDemo" hidden>Export CSV</button>
@@ -465,7 +469,7 @@
     <div class="con-h">
       <h2 class="con-t">Owner console</h2>
       <span class="who" id="whoFor"></span>
-      <button class="sw master on" id="swEnforcer"><span class="knob"></span><span>Enforcer</span></button>
+      <button class="sw master on" id="swEnforcer"><span class="knob"></span><span>GVNR</span></button>
     </div>
 
     <div class="checks">
@@ -508,7 +512,7 @@
           </span><span class="f-v" id="vDollars">$20</span></div>
           <input class="f-r" type="range" id="rDollars" min="0" max="8" step="1" value="4" aria-label="Spend limit per agent">
           <div class="translate">
-            <div class="tr"><div class="v"><em id="trTime">&mdash;</em></div><div class="k">of agent work</div></div>
+            <div class="tr"><div class="v"><em id="trTime"></em></div><div class="k">of agent work</div></div>
             <div class="tr"><div class="v" id="trAsk">$15</div><div class="k">it asks you at</div></div>
             <div class="tr"><div class="v" id="trStop">$20</div><div class="k">it stops at</div></div>
             <div class="tr"><div class="v" id="trTok">4.00M</div><div class="k">tokens, if you care</div></div>
@@ -520,7 +524,7 @@
             <span class="qtip">A ceiling across every agent at once. A per-agent limit cannot bound a team: seven agents on a twenty dollar limit can spend a hundred and forty.</span>
           </span><span class="f-v" id="vDay">off</span></div>
           <input class="f-r" type="range" id="rDay" min="0" max="7" step="1" value="0" aria-label="Total spend limit per day">
-          <div class="f-sub">Spent so far: <b id="fleetSpent">&mdash;</b></div>
+          <div class="f-sub">Spent so far: <b id="fleetSpent">$0</b></div>
         </div>
         <div class="spend-note" id="spendNote"></div>
       </div>
@@ -532,14 +536,14 @@
             <button class="q" type="button" aria-label="What is this?">?</button>
             <span class="qtip">Dollars a minute, for one agent. Ordinary work runs about ten to twenty five cents a minute, so this only catches a genuine runaway. A daily cap notices once the day is gone; this notices in the first minute.</span>
           </span><span class="f-v" id="vBurn">$2/min</span></div>
-          <input class="f-r" type="range" id="rBurn" min="0" max="7" step="1" value="2" aria-label="Burn rate limit per agent">
+          <input class="f-r" type="range" id="rBurn" min="0" max="7" step="1" value="3" aria-label="Burn rate limit per agent">
         </div>
         <div class="fader">
           <div class="f-top"><span class="f-k">speed, everything together
             <button class="q" type="button" aria-label="What is this?">?</button>
             <span class="qtip">The same measure across the whole fleet. This is the one that catches a session fanning out into dozens of subagents, which is how people lose four figures in an afternoon.</span>
           </span><span class="f-v" id="vFleetBurn">$10/min</span></div>
-          <input class="f-r" type="range" id="rFleetBurn" min="0" max="6" step="1" value="2" aria-label="Burn rate limit across all agents">
+          <input class="f-r" type="range" id="rFleetBurn" min="0" max="6" step="1" value="3" aria-label="Burn rate limit across all agents">
           <div class="f-sub">Burning right now: <b id="fleetBurn">nothing</b></div>
         </div>
         <div class="fader">
@@ -573,8 +577,8 @@
          README" is not an answer to it. -->
     <div class="exit">
       <div class="exit-t">Want it gone?</div>
-      <p class="exit-p">This removes Enforcer from your agent's settings and stops every check straight away. Nothing you have already recorded is deleted, and your agents carry on working normally. You can put it back any time with one command.</p>
-      <button class="exitbtn" id="exitBtn">Remove Enforcer</button>
+      <p class="exit-p">This removes GVNR from your agent's settings and stops every check straight away. Nothing you have already recorded is deleted, and your agents carry on working normally. You can put it back any time with one command.</p>
+      <button class="exitbtn" id="exitBtn">Remove GVNR</button>
       <span class="exit-done" id="exitDone"></span>
     </div>
   </section>
@@ -587,7 +591,7 @@
     <input id="dayLimit" type="number" value="0"><input id="weekLimit" type="number" value="0"><input id="monthLimit" type="number" value="0">
     <input id="burnLimit" type="number" value="2"><input id="fleetBurnLimit" type="number" value="10">
   </div>
-<footer><div class="wrap" style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;width:100%"><span>INSTRUXI · ENFORCER GOVERNOR</span><span>deterministic checks decide · humans judge · every decision receipted</span></div></footer>
+<footer><div class="wrap" style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;width:100%"><span>INSTRUXI · GVNR</span><span>deterministic checks decide · humans judge · every decision receipted</span></div></footer>
 <div class="esc-modal" id="escModal"><div class="esc-card">
   <div class="eh">Your agent needs a decision <span id="escTimer"></span></div>
   <h3 id="escTitle"></h3><div class="ectx" id="escCtx"></div>
@@ -694,24 +698,32 @@ window.h = s => String(s ?? '').replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) 
   // ponytail: one global assumption, not per-model. Good enough to size a
   // first budget; observed burn takes over almost immediately.
   const ASSUMED_BURN=30000;
-  // baseTokens matters: on a reload the snapshot arrives with a session's spend
-  // already on it. Counting that as "burned since the page opened" reports a
-  // rate in the millions/min and a runway of seconds. Only measure what burns
-  // while we are watching.
-  let firstSeen=0, baseTokens=0, fleetTokens=0;
-  function burnRate(){
-    if(!firstSeen)return 0;
-    const m=(Date.now()-firstSeen)/60000;
-    return m>0.5?Math.max(0,fleetTokens-baseTokens)/m:0;
+  // Rates come from real elapsed time: each card keeps (time, dollars) samples
+  // and its rate is the change across the window, so a slow or skipped tick
+  // cannot inflate it. Only what burns while we watch counts, so a reload that
+  // arrives with a session's spend already on it does not read as a spike.
+  // ponytail: a 60s sliding window per card; longer reads calmer, reacts slower.
+  const WIN=60000, SHOWN=4000, SETTLE=20000;
+  function sample(c,usd,now){
+    const s=(c.samples||=[]); s.push([now,usd]);
+    while(s.length>2 && now-s[0][0]>WIN) s.shift();
+    c.span=now-s[0][0];
+    c.usdRate = c.span>=SHOWN ? Math.max(0,(usd-s[0][1])/(c.span/60000)) : null;
+  }
+  const idle=c=>c.status==='grounded'||c.status==='paused'||(!LIVE&&!!window.__demoHold);
+  // The typical agent's settled rate. Median, so one runaway does not make
+  // $20 look like ten minutes of ordinary work.
+  function perAgentRate(){
+    const r=Object.values(cards).filter(c=>!idle(c)&&c.span>=SETTLE&&c.usdRate>0).map(c=>c.usdRate).sort((a,b)=>a-b);
+    return r.length ? (r.length%2 ? r[r.length>>1] : (r[r.length/2-1]+r[r.length/2])/2) : 0;
   }
   function human(mins){
-    if(!isFinite(mins)||mins<=0)return '\u2014';
+    if(!isFinite(mins)||mins<=0)return 'nothing';
     if(mins<1)return 'under a minute';
     if(mins<60)return Math.round(mins)+' min';
     const h=Math.floor(mins/60), m=Math.round(mins%60);
     return m?h+'h '+m+'m':h+'h';
   }
-  function runway(tokens){ const r=burnRate(); return {mins:tokens/(r||ASSUMED_BURN),measured:r>0}; }
 
   // Group the picker by provider so it is obvious both are supported, and so
   // Grouped by provider so nobody scrolls past twenty models of one family to
@@ -745,7 +757,8 @@ window.h = s => String(s ?? '').replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) 
   }
 
   function renderSpend(){
-    const tok=tokensFor(dollars), {mins,measured}=runway(tok);
+    const tok=tokensFor(dollars), r=perAgentRate(), measured=r>0;
+    const mins=dollars/(r||ASSUMED_BURN/1e6*perM());
     $('trTok').textContent=fmt(tok);
     $('trTime').textContent=(measured?'':'about ')+human(mins);
     $('trAsk').textContent=money(dollars*0.75);
@@ -756,7 +769,7 @@ window.h = s => String(s ?? '').replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) 
     $('spendNote').innerHTML = (measured
         ? 'Timing is measured from what your agents are actually burning.'
         : 'Timing is an estimate until an agent runs, then it uses the real rate.')
-      + ' Priced at ' + prov + '\u2019s list rates for ' + (m.label || modelKey) + '.'
+      + ' Tokens are counted at ' + prov + '\u2019s list rates for ' + (m.label || modelKey) + '. Each agent is priced at its own model.'
       + '<br><b>On a flat subscription you are not billed per token</b>, so treat these as equivalent API cost, not a bill.';
   }
 
@@ -893,8 +906,7 @@ window.h = s => String(s ?? '').replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) 
       re.textContent = burn>0 ? money(burn)+'/min' : '';
       re.classList.toggle('hot', BURN>0 && burn >= BURN*0.6);
     }
-    const lt=c.el.querySelector('.a-left'), rem=Math.max(0,c.budget-tokens), rw=runway(rem);
-    lt.textContent = status==='grounded' ? '' : (rw.measured?'':'~')+human(rw.mins)+' left';
+    if(status==='grounded') c.el.querySelector('.a-left').textContent='';   // the ticker owns it otherwise
     const lb=c.el.querySelector('.loopbadge'); if(loopStreak>=3){lb.textContent='REPEAT x'+loopStreak;lb.classList.add('show');}else lb.classList.remove('show');
     // Grounded used to disable the button, leaving no way back. In live mode it
     // becomes Resume; in the demo it stays disabled so the simulation reads clean.
@@ -916,6 +928,10 @@ window.h = s => String(s ?? '').replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) 
     const el=$('status'), line=$('stLine'), sub=$('stSub');
     el.classList.remove('needs','stopped');
     const plural=(k,w)=>k+' '+w+(k===1?'':'s');
+    const hold=!LIVE&&window.__demoHold;
+    if(hold){ el.classList.add('needs');
+      line.textContent='Fleet paused at its speed limit';
+      sub.innerHTML='Everything together was burning <b>'+money(hold.burn)+' a minute</b>, over your '+money(hold.lim)+' a minute mark. Raise it in the console to carry on.'; return; }
     if(!n){ line.textContent='Waiting for your first agent';
       sub.textContent='Leave this running and use your agents as normal. They appear here the moment one of them does anything.'; return; }
     if(stopped){ el.classList.add('stopped');
@@ -928,7 +944,7 @@ window.h = s => String(s ?? '').replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) 
     sub.innerHTML=plural(n,'agent')+' working, <b>'+money(fleetSpend)+'</b> spent so far'
       + (fleetBurn>0 ? ', burning <b>'+money(fleetBurn)+' a minute</b>' : '') + '.';
   }
-  let fleetSpend=0, fleetBurn=0, lastSpend=null;
+  let fleetSpend=0, fleetBurn=0;
 
   function bump(v){ if(v==='allow')allow++;else if(v==='deny')deny++;else if(v==='escalate')esc++; $('mAllow').textContent=allow;$('mDeny').textContent=deny;$('mEsc').textContent=esc; }
   function onDecision(d){
@@ -936,15 +952,22 @@ window.h = s => String(s ?? '').replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) 
     const a=d.agent; paint(a.id,{...a,model:d.model,task:d.task,billing:d.billing||''});
     chip(d.verdict,a.id,d.reason,d.receipt,d.entry&&d.entry.authority);
     bump(d.verdict);
-    if(d.verdict==='escalate') openEsc(a);
+    if(d.verdict==='escalate') openEsc(a,d.reason);
   }
 
   // ── Escalation modal (LIVE: posts to server; DEMO: local) ──
   let escId=null,escTimer=null;
-  function openEsc(a){
-    escId=a.id; const c0=cards[a.id];
-    $('escTitle').textContent=(c0&&c0.task?c0.task:a.id)+' \u2014 needs more than its limit';
-    $('escCtx').innerHTML=`agent &nbsp; <b>${h(a.id)}</b><br>spent &nbsp; <b>${money(usdForAgent(a.tokens,c0&&c0.model))}</b> of ${money(usdForAgent(a.budget,c0&&c0.model))}<br>reason &nbsp; it passed the point where you asked to be told<br>ask &nbsp;&nbsp;&nbsp; half as much again to finish, or stop here`;
+  // The reason is the one that actually triggered the question, as sent with
+  // the decision, so the modal never says "limit" when a rule or a rate fired.
+  function openEsc(a,reason){
+    escId=a.id; const c0=cards[a.id], rule=/^wants to /.test(reason||'');
+    $('escTitle').innerHTML=h(a.id)+(rule?' '+h(reason):' needs more than its limit')
+      +(c0&&c0.task?'<span class="etask">'+h(c0.task)+'</span>':'');
+    const row=(k,v)=>'<span>'+k+'</span><span>'+v+'</span>';
+    $('escCtx').innerHTML=row('agent','<b>'+h(a.id)+'</b>')
+      +row('spent','<b>'+money(usdForAgent(a.tokens,c0&&c0.model))+'</b> of '+money(usdForAgent(a.budget,c0&&c0.model)))
+      +row('reason',h(String(reason||'it passed the point where you asked to be told').trim()))
+      +row('ask','half as much again to finish, or stop here');
     $('escModal').classList.add('show'); let left=12; $('escTimer').textContent=' · '+left+'s';
     escTimer=setInterval(()=>{left--;$('escTimer').textContent=' · '+left+'s';if(left<=0)resolveEsc(false,true);},1000);
   }
@@ -966,7 +989,7 @@ window.h = s => String(s ?? '').replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) 
       exitBtn.classList.add('armed');
       exitBtn.textContent='Press again to remove it';
       setTimeout(()=>{ if(exitBtn.classList.contains('armed')){
-        exitBtn.classList.remove('armed'); exitBtn.textContent='Remove Enforcer'; } },6000);
+        exitBtn.classList.remove('armed'); exitBtn.textContent='Remove GVNR'; } },6000);
       return;
     }
     exitBtn.disabled=true; exitBtn.textContent='Removing';
@@ -978,7 +1001,7 @@ window.h = s => String(s ?? '').replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) 
           + 'To close this dashboard, press Ctrl+C in the terminal you started it in.'
         : 'Could not edit the settings file. Run <b>npx enforcer-governor uninstall-hook</b> in your project folder instead.';
     }catch{
-      exitBtn.disabled=false; exitBtn.textContent='Remove Enforcer';
+      exitBtn.disabled=false; exitBtn.textContent='Remove GVNR';
       $('exitDone').innerHTML='The governor is not answering. Press Ctrl+C in its terminal, then run <b>npx enforcer-governor uninstall-hook</b>.';
     }
   };
@@ -1095,6 +1118,7 @@ window.h = s => String(s ?? '').replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) 
   $('segDeny').onclick=()=>{policy.soft='deny';$('segDeny').classList.add('on');$('segEsc').classList.remove('on');pushConfig();};
   for (const [id,key] of [['burnLimit','burnLimit'],['fleetBurnLimit','fleetBurnLimit']]) {
     $(id).onchange=()=>{ const v=Math.max(0,+$(id).value||0); if(id==='burnLimit')BURN=v;
+      if(!LIVE && id==='fleetBurnLimit') window.__demoHold=null;   // a new mark: carry on and re-check
       if(LIVE)fetch('/config',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({[key]:v})}).catch(()=>{}); };
   }
   // ── Faders ──────────────────────────────────────────────────────────────
@@ -1136,6 +1160,12 @@ window.h = s => String(s ?? '').replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) 
     document.querySelectorAll('.f-k.open').forEach(k => { if (!q || k !== q.parentElement) k.classList.remove('open'); });
     if (q) { e.preventDefault(); q.parentElement.classList.toggle('open'); }
   });
+  // A tip near the right edge hangs off a phone screen, and even hidden it
+  // widens the page. Pull each one back inside the viewport.
+  function placeTips(){ document.querySelectorAll('.qtip').forEach(t=>{ t.style.left='';
+    const over=t.getBoundingClientRect().right-(document.documentElement.clientWidth-16);
+    if(over>0) t.style.left=(-over)+'px'; }); }
+  placeTips(); addEventListener('resize',placeTips);
 
   function commitFader(id, live){
     touched[id] = Date.now();
@@ -1171,38 +1201,45 @@ window.h = s => String(s ?? '').replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) 
     else demoVerify(b);
     setTimeout(()=>b.textContent='Check the records',3500);
   };
+  // The header, the status line and "Burning right now" all read one value.
+  function paintBurn(v,lim){
+    const hot=lim>0 && v>=lim*0.6, txt=v>0 ? money(v)+'/min' : 'nothing';
+    const fb=$('fleetBurn'); fb.textContent=txt; fb.style.color=hot?'var(--esc)':'';
+    const mb=$('mBurn'); mb.textContent=txt; mb.classList.toggle('esc',hot);
+  }
   // One ticker keeps the money honest: spend is what the fleet actually burned,
-  // runway is what the busiest agent has left before it gets grounded.
+  // and every rate on screen comes from the same samples, so they agree.
   setInterval(()=>{
-    let total=0,max=0,spend=0,leadModel='';
+    const now=Date.now(); let spend=0,maxUsd=0,burn=0,leadModel='';
     for(const k in cards){
-      const c=cards[k], t=c.lastTokens||0;
-      total+=t; spend+=usdForAgent(t,c.model);
-      // Follow the biggest spender, not whoever reported last. With a mixed
-      // mixed fleet, last-wins makes the picker flip back and forth on
-      // screen, which reads as broken.
-      if(t>max){ max=t; leadModel=c.model||''; }
-      // Refresh each card's time-left from the SAME clock as the header. Left
-      // to its last paint, a card keeps showing a runway computed at an older
-      // burn rate, and the two disagree on screen.
+      const c=cards[k], t=c.lastTokens||0, usd=usdForAgent(t,c.model);
+      spend+=usd;
+      // Follow the biggest spender in dollars, not whoever reported last or
+      // whoever has the most tokens: a cheap model racks up tokens fastest.
+      if(usd>maxUsd){ maxUsd=usd; leadModel=c.model||''; }
+      sample(c,usd,now);
+      const r=idle(c)?0:(c.usdRate||0); burn+=r;
+      // Time left for THIS agent at ITS rate, shown only once the rate has
+      // twenty seconds behind it. Before that it is a guess that swings.
       const lt=c.el.querySelector('.a-left');
-      if(lt && !c.el.classList.contains('grounded')){
-        const rw=runway(Math.max(0,c.budget-t));
-        lt.textContent=(rw.measured?'':'~')+human(rw.mins)+' left';
-      }
+      if(lt) lt.textContent = r>0 && c.span>=SETTLE ? human(usdForAgent(Math.max(0,c.budget-t),c.model)/r)+' left' : '';
+      if(!LIVE){ const re=c.el.querySelector('.rate');
+        re.textContent = r>0 ? money(r)+'/min' : '';
+        re.classList.toggle('hot', BURN>0 && r>=BURN*0.6); }
     }
-    fleetTokens=total;
-    // Dollars per minute from what the fleet actually spent since the last
-    // tick. In live mode the server's figure replaces this a moment later.
-    if(lastSpend!==null){ const perMin=Math.max(0,(spend-lastSpend))*30;
-      if(!LIVE){ fleetBurn=perMin;
-        $('mBurn').textContent = perMin>0 ? money(perMin)+'/min' : 'nothing'; } }
-    lastSpend=spend; fleetSpend=spend;
-    if(total>0 && !firstSeen){ firstSeen=Date.now(); baseTokens=total; }
+    // In live mode the server's fleet figure is the one shown (applyConfig).
+    if(!LIVE){
+      const lim=+$('fleetBurnLimit').value||0;
+      // Crossing the fleet rate pauses the fleet and asks, as the governor does.
+      if(lim>0 && burn>lim && !window.__demoHold) window.__demoHold={burn,lim};
+      fleetBurn=window.__demoHold?0:burn;
+      paintBurn(fleetBurn,lim);
+      $('fleetSpent').textContent=money(spend)+' today';
+    }
+    fleetSpend=spend;
     if(leadModel) noticeModel(leadModel);
     $('mSpent').textContent=money(spend);
     renderStatus();
-
     renderSpend();
   },2000);
   renderSpend();
@@ -1219,12 +1256,7 @@ window.h = s => String(s ?? '').replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) 
       if(typeof c.dollars==='number') setFader('rDollars',c.dollars);
       if(typeof c.dailyLimit==='number') setFader('rDay',c.dailyLimit);
       renderSplit(c); renderByClient(c);
-      if(typeof c.fleetBurn==='number'){ fleetBurn=c.fleetBurn;
-        const fb=$('fleetBurn'); fb.textContent = c.fleetBurn>0 ? money(c.fleetBurn)+'/min' : 'nothing';
-        const mb=$('mBurn'); mb.textContent = c.fleetBurn>0 ? money(c.fleetBurn)+'/min' : 'nothing';
-        mb.classList.toggle('esc', c.fleetBurnLimit>0 && c.fleetBurn>=c.fleetBurnLimit*0.6);
-        fb.style.color = (c.fleetBurnLimit>0 && c.fleetBurn>=c.fleetBurnLimit*0.6) ? 'var(--esc)' : '';
-      }
+      if(typeof c.fleetBurn==='number'){ fleetBurn=c.fleetBurn; paintBurn(c.fleetBurn,c.fleetBurnLimit); }
       if(c.softAction){ policy.soft=c.softAction; $('segEsc').classList.toggle('on',c.softAction==='escalate'); $('segDeny').classList.toggle('on',c.softAction==='deny'); }
       if(c.models&&Object.keys(c.models).length){ MODELS=c.models; reKeys(); buildModelSelect(); }
       if(c.model&&MODELS[c.model]) modelKey=c.model;
@@ -1258,7 +1290,7 @@ window.h = s => String(s ?? '').replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) 
         <div class="e-cmd"><code>export OPENAI_BASE_URL=${location.origin}/v1</code><button class="e-copy" data-c="export OPENAI_BASE_URL=${location.origin}/v1">Copy</button></div>
         <div class="e-cmd"><code>export ANTHROPIC_BASE_URL=${location.origin}</code><button class="e-copy" data-c="export ANTHROPIC_BASE_URL=${location.origin}">Copy</button></div>
       </div>
-      <div class="e-foot">Want it gone? Scroll to the bottom of the console and press Remove Enforcer. Nothing is deleted and your agents carry on as normal.</div>
+      <div class="e-foot">Want it gone? Scroll to the bottom of the console and press Remove GVNR. Nothing is deleted and your agents carry on as normal.</div>
     </div>`;
     document.querySelectorAll('.e-copy').forEach(b=>b.onclick=async()=>{ try{await navigator.clipboard.writeText(b.dataset.c);b.textContent='Copied';}catch{b.textContent='Select it';} setTimeout(()=>b.textContent='Copy',2000); });
     return;
@@ -1266,10 +1298,12 @@ window.h = s => String(s ?? '').replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) 
 
   // ── DEMO driver (self-contained simulator, real policy logic) ──
   var demoKill=()=>{}, demoResolve=()=>{}, demoVerify=(b)=>{b.textContent='demo';};
-  // Deferred one tick so the simulator script below has defined window.__runDemo.
-  setTimeout(() => window.__runDemo(paint, onDecision, () => policy, {
+  // Deferred until the document has parsed, so the simulator script below has
+  // defined window.__runDemo. A zero timeout raced the parser: on a chunked
+  // load the timer fired first and the demo never started.
+  document.addEventListener('DOMContentLoaded', () => window.__runDemo(paint, onDecision, () => policy, {
     setResolvers(k,v,ver){ demoKill=k; demoResolve=v; demoVerify=ver; },
-  }), 0);
+  }));
 })();
 </script>
 <script>
@@ -1277,34 +1311,37 @@ window.h = s => String(s ?? '').replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) 
 window.__runDemo = (paint, onDecision, getPolicy, wire) => {
   const rand=(a,b)=>a+Math.random()*(b-a), pick=a=>a[Math.floor(Math.random()*a.length)];
   const enc=new TextEncoder(); const sha=async s=>{const h=await crypto.subtle.digest('SHA-256',enc.encode(s));return[...new Uint8Array(h)].map(b=>b.toString(16).padStart(2,'0')).join('');};
+  // The fleet arrives mid-session, as a real one would: at $2 a minute per
+  // agent nobody reaches a $15 ask mark from zero inside a demo. Rates are
+  // dollars a minute of real time, well inside the $2/min per-agent and
+  // $10/min fleet defaults. The story: scraper-07 starts repeating itself and
+  // is stopped on its fourth repeat, then research-swarm-03 reaches its ask
+  // mark and asks. Everyone else just works.
   const AG=[
-    {id:'data-pipeline-01',client:'Acme Corp',task:"normalise yesterday's events and load them into the warehouse",model:'claude-sonnet',budget:180000,soft:.75,burn:[900,1800],plan:'steady'},
-    {id:'research-swarm-03',client:'Delta Health',task:"compare our pricing against the top five competitors",model:'claude-opus',budget:220000,soft:.60,burn:[2600,4200],plan:'escalate'},
-    {id:'scraper-07',client:'Beta Ltd',task:"pull every product listing from the supplier catalogue",model:'claude-haiku',budget:150000,soft:.80,burn:[700,1400],plan:'loop'},
-    {id:'report-gen-02',client:'Acme Corp',task:"build the weekly ops report and email it to the team",model:'claude-sonnet',budget:160000,soft:.75,burn:[800,1500],plan:'steady'},
-    {id:'test-runner-05',client:'Beta Ltd',task:"run the full suite and fix whatever fails",model:'claude-haiku',budget:120000,soft:.80,burn:[500,1100],plan:'steady'},
-    {id:'summarizer-09',client:'?support-tools',task:"summarise the last 200 support tickets by theme",model:'claude-sonnet',budget:150000,soft:.75,burn:[700,1300],plan:'steady'},
+    {id:'data-pipeline-01',client:'Acme Corp',task:"normalise yesterday's events and load them into the warehouse",model:'claude-sonnet-5',start:6.40,rate:.22,plan:'steady'},
+    {id:'research-swarm-03',client:'Delta Health',task:"compare our pricing against the top five competitors",model:'claude-opus-5',start:14.58,rate:1.5,plan:'escalate'},
+    {id:'scraper-07',client:'Beta Ltd',task:"pull every product listing from the supplier catalogue",model:'claude-haiku-4-5',start:2.10,rate:.18,plan:'loop'},
+    {id:'report-gen-02',client:'Acme Corp',task:"build the weekly ops report and email it to the team",model:'claude-sonnet-5',start:4.75,rate:.2,plan:'steady'},
+    {id:'test-runner-05',client:'Beta Ltd',task:"run the full suite and fix whatever fails",model:'claude-haiku-4-5',start:3.20,rate:.15,plan:'steady'},
+    {id:'summarizer-09',client:'?support-tools',task:"summarise the last 200 support tickets by theme",model:'claude-sonnet-5',start:5.30,rate:.2,plan:'steady'},
   ];
+  const perTok=m=>window.__usd(1e6,m)/1e6;          // dollars per token, at the card's own model
   const STEADY=['read src/api.ts','edit handler.go','run test suite','grep usage','read schema.sql','write report.md','call mcp:search'];
-  const st={}; let prev='genesis'; const chain=[]; let escA=null;
-  AG.forEach(a=>{ st[a.id]={...a,tokens:0,recent:[],escalated:false,status:'active'}; paint(a.id,{tokens:0,budget:a.budget,status:'active',model:a.model,task:a.task,loopStreak:0}); });
+  const st={}; let prev='genesis'; const chain=[];
+  AG.forEach(a=>{ st[a.id]={...a,tokens:a.start/perTok(a.model),soft:.75,recent:[],escalated:false,status:'active'}; });
   // The spend control has to move something even in the demo, or it reads as
-  // decoration. AG holds the $20 baseline; scale the simulated fleet off it.
+  // decoration. Each agent's cap is the dollar limit at its own model's price.
   window.__demoBudget = () => AG.forEach(a=>{
-    const s=st[a.id], cap=window.__capFor?window.__capFor(a.model):a.budget;
-    s.burnScale=cap/a.budget;   // keep the simulation's pacing at any limit
-    s.budget=cap;
+    const s=st[a.id]; s.budget=window.__capFor(a.model);
     paint(a.id,{tokens:s.tokens,budget:s.budget,status:s.status,model:a.model,task:a.task,loopStreak:s.loopStreak||0});
   });
   window.__demoBudget();
 
   // The by-client split, from what the simulated fleet is actually spending.
-  // Beta Ltd is capped low on purpose: within a minute it crosses its cap on
-  // screen, which is the whole point of the panel.
-  // Beta Ltd's cap is set where the simulated fleet crosses it about half a
-  // minute in, so a viewer watches it go from fine to near to stopped rather
-  // than arriving at an absurd percentage that reads as a broken number.
-  const DEMO_CAPS=window.__demoCaps={'Acme Corp':40,'Beta Ltd':9,'Delta Health':60};
+  // Caps sit well above the demo's spend: the story here is one loop and one
+  // question, and a client marked stopped while its agents carry on reads as
+  // a contradiction.
+  const DEMO_CAPS=window.__demoCaps={'Acme Corp':40,'Beta Ltd':20,'Delta Health':60};
   setInterval(()=>{
     const by={};
     for(const a of AG){
@@ -1334,27 +1371,46 @@ window.__runDemo = (paint, onDecision, getPolicy, wire) => {
   };
 
   async function rcpt(a,verb,rule,authority){ const e={ts:Date.now(),agent:a.id,operator:'you@yourcompany.com',verdict:verb,reason:rule,tool:(a.lastTool||'Task'),model:a.model,tokens:Math.round(a.tokens)}; if(authority)e.authority=authority; const j=JSON.stringify(e); const h=await sha(prev+j); chain.push({j,h}); prev=h; return {verdict:verb,reason:rule,receipt:'rcpt_'+h.slice(0,12),agent:{id:a.id,tokens:Math.round(a.tokens),budget:a.budget,status:a.status,loopStreak:a.loopStreak||0},model:a.model,task:a.task,entry:e}; }
-  function actionFor(a){ if(a.plan==='loop'&&a.tokens>a.budget*.32)return 'GET /page?id=42'; if(a.plan==='loop')return pick(['GET /list','parse','GET /page?id='+Math.floor(rand(1,40))]); return pick(STEADY); }
+  function actionFor(a){
+    a.n=(a.n||0)+1;
+    if(a.plan==='loop'&&a.n>5) return 'GET /page?id=42';   // stuck from its sixth action
+    const pool=a.plan==='loop'?['GET /list','parse','GET /page?id='+Math.floor(rand(1,40))]:STEADY;
+    // Never the same action twice running, so only the agent written to loop
+    // can ever trip the loop check.
+    let x; do x=pick(pool); while(x===a.recent[a.recent.length-1]); return x;
+  }
   async function step(a){
     const P=getPolicy(); if(a.status==='grounded'||a.status==='paused')return;
-    const act=actionFor(a), cost=rand(a.burn[0],a.burn[1])*(a.burnScale||1); a.tokens+=cost;
+    // Cost from real time since this agent's last action, capped so a pause
+    // or a throttled background tab does not land as one giant charge.
+    const now=Date.now(), dt=Math.min(3000,now-(a.lastT||now-1500)); a.lastT=now;
+    const act=actionFor(a); a.tokens+=a.rate/60*dt/1000*rand(.85,1.15)/perTok(a.model);
     // Name the tool from the action, so the exported file shows the spread a
     // real one does rather than the same word on every row.
     a.lastTool = ({read:'Read',edit:'Edit',write:'Write',run:'Bash',grep:'Grep',call:'Task',parse:'Task'})[act.split(/[\s:]/)[0].toLowerCase()] || 'Bash';
     if(!P.enforcer){ a.status='free'; onDecision({verdict:'gap',reason:'executed with no policy check',agent:{id:a.id,tokens:a.tokens,budget:a.budget,status:'free'}}); return; }
     if(a.status==='free')a.status='active';
     a.recent.push(act); if(a.recent.length>6)a.recent.shift(); let streak=1; for(let i=a.recent.length-2;i>=0;i--){if(a.recent[i]===act)streak++;else break;} a.loopStreak=streak;
-    if(P.loop&&streak>=4){a.status='grounded';onDecision(await rcpt(a,'deny','waste: identical action x'+streak));return;}
-    if(P.budget&&a.tokens>=a.budget){a.status='grounded';onDecision(await rcpt(a,'deny','hard budget reached'));return;}
-    if(P.budget&&!a.escalated&&a.tokens>=a.budget*a.soft){ a.escalated=true; if(P.soft==='escalate'){a.status='paused';escA=a;onDecision(await rcpt(a,'escalate','soft cap '+Math.round(a.soft*100)+'% reached'));return;} a.status='grounded';onDecision(await rcpt(a,'deny','soft cap reached (auto-deny)'));return; }
+    if(P.loop&&streak>=4){a.status='grounded';onDecision(await rcpt(a,'deny','it repeated the same action '+streak+' times in a row, that is a loop'));return;}
+    if(P.budget&&a.tokens>=a.budget){a.status='grounded';onDecision(await rcpt(a,'deny','it reached your spend limit'));return;}
+    // The same mark the card draws, so the question arrives where the card says it will.
+    if(P.budget&&!a.escalated&&a.tokens>=a.budget*a.soft){ a.escalated=true;
+      const why='it has used '+Math.round(a.soft*100)+'% of your spend limit';   // the server's own words
+      if(P.soft==='escalate'){a.status='paused';onDecision(await rcpt(a,'escalate',why));return;}
+      a.status='grounded';onDecision(await rcpt(a,'deny','it passed the warn-me mark, and you set that to stop it'));return; }
     onDecision(await rcpt(a,'allow','within budget, on task'));
   }
   wire.setResolvers(
     async id=>{ const a=st[id]; if(!a||a.status==='grounded')return; a.status='grounded'; onDecision(await rcpt(a,'deny','manual kill switch','human: you')); },
-    async (id,approve,timeout)=>{ const a=st[id]; if(!a)return; escA=null; if(approve){a.budget=Math.round(a.budget*1.5);a.status='active';a.escalated=false;onDecision(await rcpt(a,'allow','budget raised +50%','human: you'));} else {a.status='grounded';onDecision(await rcpt(a,'deny',timeout?'escalation expired, fail-closed':'escalation denied',timeout?'fail-closed':'human: you'));} },
+    async (id,approve,timeout)=>{ const a=st[id]; if(!a)return; if(approve){a.budget=Math.round(a.budget*1.5);a.status='active';a.escalated=false;onDecision(await rcpt(a,'allow','budget raised +50%','human: you'));} else {a.status='grounded';onDecision(await rcpt(a,'deny',timeout?'escalation expired, fail-closed':'escalation denied',timeout?'fail-closed':'human: you'));} },
     async b=>{ let h='genesis',ok=true; for(const l of chain){h=await sha(h+l.j);if(h!==l.h){ok=false;break;}} document.getElementById('mChain').innerHTML=ok?`<span class="chainok">all ${chain.length} match</span>`:`<span class="chainbad">do not match</span>`; b.textContent=ok?`All ${chain.length} records check out`:'Records do not match'; }
   );
-  (async function loop(){ const red=matchMedia('(prefers-reduced-motion:reduce)').matches; while(true){ for(const a of AG){ if(escA)break; await step(st[a.id]); await new Promise(r=>setTimeout(r,red?260:120)); } await new Promise(r=>setTimeout(r,escA?300:(red?1400:850))); } })();
+  // The others keep working while one agent waits on you, as they would for
+  // real. Only a fleet over its speed mark holds everyone.
+  const wait=ms=>new Promise(r=>setTimeout(r,ms));
+  (async function loop(){ const red=matchMedia('(prefers-reduced-motion:reduce)').matches; while(true){
+    if(window.__demoHold){ await wait(300); continue; }
+    for(const a of AG){ await step(st[a.id]); await wait(red?260:120); } await wait(red?1400:850); } })();
 };
 </script>
 </body>
