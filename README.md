@@ -33,12 +33,12 @@ Two pieces cannot arrive that way, because Claude Code does not let a plugin shi
 {
   "statusLine": {
     "type": "command",
-    "command": "node $HOME/.claude/plugins/marketplaces/instruxi/statusline/spend.mjs"
+    "command": "node \"$(cat \"$HOME/.enforcer/plugin-root\")/statusline/spend.mjs\""
   }
 }
 ```
 
-That path is where a marketplace added from GitHub lands. If you installed from a local checkout it is your own directory instead; `claude plugin marketplace list --json` prints the exact `installLocation`.
+The plugin's install directory changes with every version, so the status line does not name it: the governor records where it is running from in `~/.enforcer/plugin-root` at every session start, and the command follows that. Until the first session after installing, it prints nothing.
 
 **The permission rules**, which are belt to the hooks' braces. Copy the `permissions` block from this repo's [`settings.json`](settings.json) into yours. The plugin cannot install it, so without this paste the hooks are doing the work alone — see [How it works](#how-it-works) for exactly what that costs you, which is less than it sounds.
 
