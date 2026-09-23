@@ -57,6 +57,12 @@ export const UNREACHABLE = 'unreachable';
 // rule", without a field the API does not return.
 const TENANT_ALLOW = 'tenant policy';
 const TENANT_SILENT_DENY = 'tenant policy did not allow it';
+// A denial from the ACCOUNT layer — rules the operator put on their own account
+// (/me/policy, enforcer-v3 #375) — arrives prefixed. The prefix is kept in what
+// the receipt records, because "you told yourself not to" and "your tenant
+// refuses" are different facts; it is stripped before the reason is MATCHED, so
+// an `ask:` an operator wrote about themselves still asks instead of denying.
+const ACCOUNT_PREFIX = /^account policy:\s*/i;
 const isPlatformReason = (r) => /^[a-z_]+$/.test(String(r || ''));
 
 const readCache = () => { try { return JSON.parse(readFileSync(CACHE(), 'utf8')) || {}; } catch { return {}; } };
@@ -83,15 +89,16 @@ async function call(fetchImpl, url, init, timeoutMs) {
 export function interpret(decision) {
   if (!decision || typeof decision.allow !== 'boolean') return { opinion: UNREACHABLE, detail: 'unexpected response' };
   const reason = String(decision.reason || '');
+  const bare = reason.replace(ACCOUNT_PREFIX, '');
   if (decision.allow) {
     return reason === TENANT_ALLOW ? { opinion: ALLOW, reason } : { opinion: SILENT, reason };
   }
   // A platform-level refusal means the question was malformed for this caller
   // (wrong tenant, no owner) — a governor fault, not a tenant decision. Treat
   // it as no answer so the local rule stands, and say why in the receipt.
-  if (isPlatformReason(reason)) return { opinion: UNREACHABLE, detail: `platform refused the check: ${reason}` };
-  if (/^ask:/i.test(reason)) return { opinion: ASK, reason: reason.replace(/^ask:\s*/i, '') || 'the tenant policy asks for confirmation' };
-  if (reason === TENANT_SILENT_DENY) {
+  if (isPlatformReason(bare)) return { opinion: UNREACHABLE, detail: `platform refused the check: ${reason}` };
+  if (/^ask:/i.test(bare)) return { opinion: ASK, reason: bare.replace(/^ask:\s*/i, '') || 'the policy asks for confirmation' };
+  if (bare === TENANT_SILENT_DENY) {
     return { opinion: DENY, reason: `the tenant policy declares agent actions and has no rule allowing this one` };
   }
   return { opinion: DENY, reason };
