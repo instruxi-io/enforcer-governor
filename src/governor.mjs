@@ -2,6 +2,7 @@
 // Serves the dashboard, exposes the /decide API the hook calls, streams
 // decisions over SSE, and proxies agent traffic for non-Claude agents.
 import http from 'node:http';
+import { randomBytes } from 'node:crypto';
 import { readFile, appendFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -170,7 +171,41 @@ async function readBody(req) {
   for await (const c of req) chunks.push(c);
   return Buffer.concat(chunks);
 }
-const json = (res, code, obj) => { res.writeHead(code, { 'content-type': 'application/json', 'access-control-allow-origin': '*' }); res.end(JSON.stringify(obj)); };
+const json = (res, code, obj) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(obj)); };
+
+// A browser tab on any other site must not be able to drive the governor. The
+// dashboard is served from here, so it is always same-origin; SDKs and curl send
+// no Origin at all. Only the proxy paths keep permissive CORS, for API clients.
+const LOCAL_HOSTS = () => [`localhost:${CONFIG.port}`, `127.0.0.1:${CONFIG.port}`, `[::1]:${CONFIG.port}`];
+const sameOrigin = (req) => {
+  const o = req.headers.origin;
+  return !o || LOCAL_HOSTS().map(h => 'http://' + h).includes(o);
+};
+// Only this machine. The daemon listened on every interface, so anyone on the
+// same Wi-Fi could switch every check off; a request with no Origin passes the
+// browser check, so the socket address is checked as well.
+const fromThisMachine = (req) => {
+  const a = String(req.socket.remoteAddress || '');
+  return a === '::1' || a.startsWith('127.') || a.startsWith('::ffff:127.');
+};
+// A page on another site that rebinds its own name to 127.0.0.1 arrives with
+// its own Host header, and it could read /state, prompt text included.
+const localHost = (req) => {
+  const h = String(req.headers.host || '');
+  return LOCAL_HOSTS().includes(h) || ['localhost', '127.0.0.1', '[::1]'].includes(h);
+};
+// Routes that loosen something need the key the governor put in the dashboard
+// page it served. It changes on every start and never touches disk. This stops
+// anything that did not load the dashboard, which is every naive curl.
+// ponytail: an agent with a shell can still fetch the dashboard and read the
+// key, as the same user it can do anything the dashboard can. Against a
+// deliberate adversary, isolate the agent; this closes the easy doors.
+const CONTROL_KEY = randomBytes(24).toString('hex');
+const LOOSENING = new Set(['/config', '/approve', '/release', '/uninstall', '/clients']);
+// Names shown on the dashboard and written to the CSV come from callers, so
+// they are cut to plain characters here, once, before anything stores them.
+const cleanName = (v, max = 96) => typeof v === 'string'
+  ? v.replace(/[^\w .:@/+-]/g, '').replace(/^[=+\-@]+/, '').slice(0, max) : '';
 
 // ── Proxy: meter + gate real agent traffic ("any agent" path) ───────────────
 // Gemini, Groq, Together and friends all speak the OpenAI chat-completions
@@ -248,14 +283,14 @@ async function reroute(agent, body, pre, res, path) {
 }
 
 async function handleProxy(req, res, path) {
-  const agent = req.headers['x-enforcer-agent'] || 'proxy-agent';
+  const agent = cleanName(req.headers['x-enforcer-agent'], 128) || 'proxy-agent';
   // On the API route there is no working directory to derive a client from,
   // so one header names it. This read was lost in an edit and every proxy
   // request crashed on the undefined variable for five releases, because
   // nothing tested this path.
-  const client = req.headers['x-enforcer-client'] || '';
+  const client = cleanName(req.headers['x-enforcer-client']) || '';
   // Pre-check: if this agent is already grounded/over budget, refuse before spending.
-  const pre = decide(state, { agent, client, deltaTokens: 0, action: 'proxy:' + path }, CONFIG);
+  const pre = decide(state, { agent, client, deltaTokens: 0, action: 'proxy:' + path, precheck: true }, CONFIG);
   let body = await readBody(req);
   if (pre.verdict === 'deny') {
     const moved = CONFIG.rerouteOn && CONFIG.fallbackUrl && await reroute(agent, body, pre, res, path);
@@ -305,18 +340,37 @@ async function handleProxy(req, res, path) {
   }
   if (model) setModel(known, model);
   if (!known.budgetRaised) known.budget = budgetFor(known);
-  const post = decide(state, { agent, client, deltaTokens: used, action: 'proxy:' + path }, CONFIG);
+  // Keyed on the request body: a new turn is a new action, the same request
+  // sent again is a repeat. The bare path made every request look identical.
+  // Keyed on the latest two messages: a stuck agent repeats its last turn while
+  // the conversation behind it keeps growing, so a whole-body key never matched.
+  let turn = String(body);
+  // The system prompt, model and tool list are part of what makes a request
+  // different: a batch job that only changes its system prompt is not a loop.
+  try { const j = JSON.parse(turn); if (Array.isArray(j.messages)) turn = JSON.stringify([j.system, j.model, Array.isArray(j.tools) ? j.tools.length : 0, j.messages.slice(-2)]); } catch {}
+  const post = decide(state, { agent, client, deltaTokens: used, action: 'proxy:' + path + '#' + sha256(turn).slice(0, 16) }, CONFIG);
   post.agent.lastUsed = used;
   broadcast('decision', { ...post, model: model || 'proxy', advice: post.advice || null }); await persist(post);
   res.writeHead(upstream.status, { 'content-type': upstream.headers.get('content-type') || 'application/json', 'x-enforcer-verdict': post.verdict, 'x-enforcer-receipt': post.receipt });
   res.end(respBody);
 }
 
-const server = http.createServer(async (req, res) => {
+// One bad request must never take the daemon down: a dead governor fails open
+// on everything, so a crash here is a way to switch every check off.
+const server = http.createServer((req, res) => handle(req, res).catch(e => {
+  try { if (!res.headersSent) json(res, 500, { error: String(e && e.message || e) }); else res.end(); } catch {}
+}));
+
+async function handle(req, res) {
   const url = new URL(req.url, 'http://localhost');
   const path = url.pathname;
 
-  if (req.method === 'OPTIONS') { res.writeHead(204, { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*' }); return res.end(); }
+  if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
+  if (!fromThisMachine(req)) return json(res, 403, { error: 'the governor only answers this machine' });
+  if (!sameOrigin(req)) return json(res, 403, { error: 'cross-origin requests to the governor are refused' });
+  if (!UPSTREAMS[path] && !localHost(req)) return json(res, 403, { error: 'unexpected Host header' });
+  if (req.method === 'POST' && LOOSENING.has(path) && req.headers['x-gvnr-key'] !== CONTROL_KEY)
+    return json(res, 403, { error: 'this control needs the dashboard. Open it and use the button there' });
 
   // Proxy paths (real agent traffic)
   if (req.method === 'POST' && UPSTREAMS[path]) return handleProxy(req, res, path);
@@ -324,6 +378,12 @@ const server = http.createServer(async (req, res) => {
   // Decision API  -  the hook posts here
   if (req.method === 'POST' && path === '/decide') {
     const ev = JSON.parse((await readBody(req)).toString() || '{}');
+    if (!ev || typeof ev !== 'object') return json(res, 400, { error: 'expected a JSON object' });
+    // The clock and the pre-check flag are the governor's, not the caller's:
+    // an old ts reset the day, week and month totals.
+    delete ev.ts; delete ev.precheck;
+    ev.agent = cleanName(ev.agent, 128); ev.client = cleanName(ev.client);
+    for (const k of ['task', 'tool', 'model', 'billing', 'cwd', 'action']) if (k in ev && typeof ev[k] !== 'string') delete ev[k];
     // Price the agent at its own model BEFORE judging it, not after, or the
     // first action of every session is measured against the wrong cap.
     const a = getAgent(state, ev.agent || 'default', CONFIG);
@@ -397,7 +457,8 @@ const server = http.createServer(async (req, res) => {
     const w = walkReceipts();
     const cols = ['ts', 'iso', 'client', 'agent', 'operator', 'verdict', 'reason', 'rule', 'tool', 'model', 'tokens', 'usd', 'authority', 'hash'];
     const esc = v => {
-      const t = v === undefined || v === null ? '' : String(v);
+      let t = v === undefined || v === null ? '' : String(v);
+      if (/^[=+\-@\t\r]/.test(t)) t = "'" + t;          // never a formula in a spreadsheet
       return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
     };
     const rows = [cols.join(',')];
@@ -465,7 +526,7 @@ const server = http.createServer(async (req, res) => {
 
   // SSE stream
   if (req.method === 'GET' && path === '/events') {
-    res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive', 'access-control-allow-origin': '*' });
+    res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' });
     res.write(`event: snapshot\ndata: ${JSON.stringify(snapshot())}\n\n`);
     clients.add(res);
     const ping = setInterval(() => { try { res.write(': ping\n\n'); } catch {} }, 20000);
@@ -477,20 +538,24 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && (path === '/' || path === '/index.html')) {
     try {
       let html = await readFile(join(ROOT, 'public', 'dashboard.html'), 'utf8');
-      html = html.replace('/*__LIVE__*/', 'window.__GOVERNOR_LIVE__=true;');
-      res.writeHead(200, { 'content-type': 'text/html' }); return res.end(html);
+      html = html.replace('/*__LIVE__*/', `window.__GOVERNOR_LIVE__=true;window.__GVNR_KEY__=${JSON.stringify(CONTROL_KEY)};`);
+      // Never inside a frame: a framed dashboard carries its own origin and key,
+      // so a click tricked out of the person would count as theirs.
+      res.writeHead(200, { 'content-type': 'text/html', 'x-frame-options': 'DENY',
+        'content-security-policy': "frame-ancestors 'none'" });
+      return res.end(html);
     } catch { return json(res, 500, { error: 'dashboard not found' }); }
   }
 
   json(res, 404, { error: 'not found' });
-});
+}
 
 // Listening is opt-in, so importing this file (a test, a tool) does not start a
 // daemon and grab port 4000 as a side effect of the import.
 export function start() {
 server.listen(CONFIG.port, () => {
   const url = `http://localhost:${CONFIG.port}`;
-  console.log(`\n  Enforcer Governor is running.`);
+  console.log(`\n  GVNR (Enforcer Governor) is running.`);
   console.log(`\n  Your dashboard:  ${url}  (opening it now)`);
   // One tailored next step beats a menu of five.
   import('./detect.mjs').then(({ nextStep }) => {

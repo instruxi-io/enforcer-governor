@@ -45,7 +45,7 @@ console.log('receipts survive a restart and fail loudly on edits and deletions o
 {
   const { spawn } = await import('node:child_process');
   const home = mkdtempSync(join(tmpdir(), 'gov-conc-'));
-  const port = 47311;   // unlikely to collide with anything else on the machine
+  const port = 47000 + Math.floor(Math.random() * 900);
   const gov = spawn(process.execPath, ['src/governor.mjs', 'start', '--no-open'],
     { env: { ...process.env, HOME: home, GOVERNOR_PORT: String(port) }, stdio: 'ignore' });
   const up = async () => { for (let i = 0; i < 60; i++) {
@@ -75,16 +75,18 @@ console.log('receipts survive a restart and fail loudly on edits and deletions o
 {
   const { spawn } = await import('node:child_process');
   const home = mkdtempSync(join(tmpdir(), 'gov-lifecycle-'));
-  const port = 47312;
+  const port = 47000 + Math.floor(Math.random() * 900) + 1000;
   const gov = spawn(process.execPath, ['src/governor.mjs', 'start', '--no-open'],
     { env: { ...process.env, HOME: home, GOVERNOR_PORT: String(port) }, stdio: 'ignore' });
+  let key = '';
   const post = (p, b) => fetch(`http://localhost:${port}${p}`, {
-    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(b) });
+    method: 'POST', headers: { 'content-type': 'application/json', 'x-gvnr-key': key }, body: JSON.stringify(b) });
   try {
     for (let i = 0; i < 60; i++) {
       try { const j = await (await fetch(`http://localhost:${port}/verify`)).json(); if (typeof j.ok === 'boolean') break; }
       catch { await new Promise(r => setTimeout(r, 100)); }
     }
+    key = (await (await fetch(`http://localhost:${port}/`)).text()).match(/__GVNR_KEY__="([0-9a-f]+)"/)[1];
     // Walk an agent through every route that records: decide, kill, release, decide.
     await post('/decide', { agent: 'a', tokens: 100, tool: 'Read', action: 'Read:x', model: 'claude-opus-5' });
     await post('/kill', { agent: 'a' });
@@ -104,7 +106,7 @@ console.log('receipts survive a restart and fail loudly on edits and deletions o
   const { spawn } = await import('node:child_process');
   const { createServer } = await import('node:http');
   const home = mkdtempSync(join(tmpdir(), 'gov-proxy-'));
-  const upstreamPort = 47320, port = 47321;
+  const port = 49000 + Math.floor(Math.random() * 900), upstreamPort = port + 1000;
 
   let seen = null;
   const upstream = createServer((req, res) => {
@@ -141,5 +143,30 @@ console.log('receipts survive a restart and fail loudly on edits and deletions o
     assert(a && a.tokens > 0, 'usage from the response must be metered onto the agent');
     assert(st.config.byClient['Acme Corp'] > 0, 'the client header must attribute the spend');
     console.log('a request through the proxy is metered, attributed and receipted ok');
+
+    // A normal conversation is many requests. Every proxy agent used to be
+    // grounded as a loop on its second one, because each request was checked
+    // twice under the same name.
+    for (let turn = 2; turn <= 6; turn++) {
+      const rr = await fetch(`http://localhost:${port}/v1/chat/completions`, {
+        method: 'POST', headers: { 'content-type': 'application/json', 'x-enforcer-agent': 'p1' },
+        body: JSON.stringify({ model: 'claude-opus-5', messages: [{ role: 'user', content: 'hello' }, { role: 'user', content: 'turn ' + turn }] }),
+      });
+      assert(rr.status === 200, `turn ${turn} of a conversation must succeed, got ${rr.status}`);
+    }
+    console.log('a multi-turn conversation through the proxy is not mistaken for a loop ok');
+    const vv = await (await fetch(`http://localhost:${port}/verify`)).json();
+    assert(vv.ok, `proxy requests must leave a record that verifies: ${JSON.stringify(vv)}`);
+    console.log('proxy requests leave a receipt chain that verifies on disk ok');
+
+    // A batch job that only changes its system prompt is not a loop.
+    for (let n = 1; n <= 6; n++) {
+      const rr = await fetch(`http://localhost:${port}/v1/chat/completions`, {
+        method: 'POST', headers: { 'content-type': 'application/json', 'x-enforcer-agent': 'batch' },
+        body: JSON.stringify({ model: 'claude-opus-5', system: 'document ' + n, messages: [{ role: 'user', content: 'Summarise the document.' }] }),
+      });
+      assert(rr.status === 200, `batch item ${n} must succeed, got ${rr.status}`);
+    }
+    console.log('a batch job that changes only its system prompt is not a loop ok');
   } finally { gov.kill(); upstream.close(); }
 }

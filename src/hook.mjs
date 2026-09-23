@@ -92,20 +92,32 @@ async function main() {
   try { ev = JSON.parse(readStdin() || '{}'); } catch {}
   const agent = ev.session_id ? 'claude:' + String(ev.session_id).slice(0, 8) : 'claude-code';
   const { tokens, model, task } = readTranscript(ev.transcript_path);
-  const action = `${ev.tool_name || 'tool'}:${JSON.stringify(ev.tool_input ?? '').slice(0, 200)}`;
+  // What the rules judge is what will actually run. For anything carrying a
+  // shell command (Bash, PowerShell, an MCP terminal tool) that is the raw
+  // command, judged as Bash, because the shell rules are scoped to Bash and a
+  // different tool name used to skip them all. For other tools it is their
+  // identifying fields, without file contents, which are long and are not
+  // where a path or a URL hides. Nothing is cut: policy asks about anything
+  // too long to judge, rather than judging a prefix.
+  const input = ev.tool_input && typeof ev.tool_input === 'object' ? ev.tool_input : {};
+  const shell = typeof input.command === 'string' ? input.command : null;
+  const BULK = new Set(['content', 'new_string', 'old_string', 'edits', 'new_source']);
+  const fields = Object.entries(input).filter(([k, v]) => !BULK.has(k) && typeof v === 'string').map(([, v]) => v);
+  const tool = shell !== null ? 'Bash' : (ev.tool_name || 'tool');
+  const action = shell !== null ? `Bash:${shell}` : `${tool}:${fields.join(' ')}`;
 
   let r;
   try {
     const resp = await fetch(`http://localhost:${PORT}/decide`, {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ agent, tokens, action, task, tool: ev.tool_name, model: model || 'claude-code',
+      body: JSON.stringify({ agent, tokens, action, task, tool, model: model || 'claude-code',
         billing: billingMode(), cwd: ev.cwd }),
       signal: AbortSignal.timeout(2500),
     });
     r = await resp.json();
   } catch {
     // Fail OPEN: if the governor is down, never block the user's real work.
-    return emit('allow', 'Enforcer is not running, so this was not checked. Nothing is blocked.');
+    return emit('allow', 'GVNR is not running, so this was not checked. Nothing is blocked.');
   }
 
   // This is the one message a person actually reads, in the middle of their
@@ -124,29 +136,29 @@ async function main() {
   const capability = !!(r.entry && r.entry.rule);
   if (r.verdict === 'deny') {
     if (capability) {
-      return emit('deny', `Enforcer refused this action: it is ${r.reason}. `
+      return emit('deny', `GVNR refused this action: it is ${r.reason}. `
         + `The agent is not stopped and can carry on with something else. `
         + `To allow this kind of action, change the rule at ${dash}`);
     }
-    return emit('deny', `Enforcer stopped this agent: ${r.reason}. It has spent ${of}. `
+    return emit('deny', `GVNR stopped this agent: ${r.reason}. It has spent ${of}. `
       + `Raise the limit or resume it at ${dash}`);
   }
   if (r.verdict === 'escalate') {
     if (capability) {
-      return emit('ask', `Enforcer wants you to confirm: this action would ${r.reason.replace(/^wants to /, '')}. `
+      return emit('ask', `GVNR wants you to confirm: this action would ${r.reason.replace(/^wants to /, '')}. `
         + `Allow it this once?`);
     }
-    return emit('ask', `Enforcer is checking with you: ${r.reason}. It has spent ${of}. `
+    return emit('ask', `GVNR is checking with you: ${r.reason}. It has spent ${of}. `
       + `Allow it to keep going?`);
   }
   // A PreToolUse hook cannot change the model -- verified against the hooks
   // docs -- so the honest move is to tell the human, who can switch with
   // /model. systemMessage surfaces it without interrupting the work.
   if (r.advice) {
-    return emit('allow', `Enforcer: ${of}`,
-      `Enforcer: ${r.advice.why}. Consider /model ${r.advice.suggest}.`);
+    return emit('allow', `GVNR: ${of}`,
+      `GVNR: ${r.advice.why}. Consider /model ${r.advice.suggest}.`);
   }
-  return emit('allow', `Enforcer: ${of}`);
+  return emit('allow', `GVNR: ${of}`);
 }
 
 main();

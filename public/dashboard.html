@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Enforcer Governor</title>
+<title>GVNR</title>
 <style>
   :root{
     --bg:#0D0D0D;--panel:#141414;--panel2:#1A1A1A;--line:#2A2A2A;--lineS:#2A2A2A;
@@ -421,7 +421,7 @@
 </head>
 <body>
 <div class="top"><div class="wrap row">
-  <span class="brand"><b>ENFORCER</b> GOVERNOR</span>
+  <span class="brand"><b>GVNR</b></span>
   <span class="tag" id="modeTag">DEMO</span>
   <div class="metrics">
     <div class="metric"><div class="v" id="mSpent">$0</div><div class="k">spent</div></div>
@@ -615,6 +615,16 @@
 
 <script>
 /*__LIVE__*/
+// Every name on this page came from a caller: an agent id, a client, a folder,
+// a rule. Written as HTML unescaped, an agent called <img onerror=...> ran as
+// this page and could switch every check off. h() makes each one text.
+window.h = s => String(s ?? '').replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) + ';');
+// Controls that loosen a limit need the key the governor put in this page.
+(() => {
+  const f = window.fetch.bind(window), key = window.__GVNR_KEY__ || '';
+  window.fetch = (u, o = {}) => (typeof u === 'string' && u.startsWith('/') && o.method === 'POST')
+    ? f(u, { ...o, headers: { ...(o.headers || {}), 'x-gvnr-key': key } }) : f(u, o);
+})();
 (() => {
   const $=id=>document.getElementById(id), LIVE=window.__GOVERNOR_LIVE__===true;
   const fmt=n=>n>=1e6?(n/1e6).toFixed(2)+'M':n>=1e3?(n/1e3).toFixed(1)+'k':String(Math.round(n));
@@ -777,7 +787,7 @@
     box.innerHTML = RULES.length ? RULES.map(r=>{
       const act = r.action==='deny' ? 'deny' : 'ask';
       const verdict = act==='deny' ? 'refused' : 'asks you';
-      return `<div class="cap ${act}"><b>${r.name}</b><span class="verdict">${verdict}</span></div>`;
+      return `<div class="cap ${act}"><b>${h(r.name)}</b><span class="verdict">${verdict}</span></div>`;
     }).join('') : '<div class="capnote">No capability rules are set, so only spend is checked.</div>';
   }
   function renderFleet(c){
@@ -843,7 +853,7 @@
     const el=document.createElement('div'); el.className='agent'+(wasEmpty?' arriving':'');
     el.innerHTML=`<div class="a-top">
         <div class="a-head"><span class="a-task idle">waiting for a task</span></div>
-        <div class="a-meta"><span class="aid">${id}</span><span class="amdl"></span><span class="bill">API BILLING</span></div>
+        <div class="a-meta"><span class="aid">${h(id)}</span><span class="amdl"></span><span class="bill">API BILLING</span></div>
       </div>
       <div class="gauge"><div class="gtok">$0</div><div class="gpct">0%</div><div class="loopbadge">REPEAT</div>
         <div class="meter"><div class="fill"></div><div class="softmark" style="left:${(soft||.75)*100}%"></div></div></div>
@@ -921,7 +931,7 @@
   }
   function chip(verb,who,rule,hashLabel,authority){
     const c=document.createElement('div'); c.className='chip '+verb;
-    c.innerHTML=`<div class="verb">${verb==='gap'?'NO CHECK':verb.toUpperCase()}</div><div class="who">${who}</div><div class="rule">${rule}</div>${authority?`<div class="auth">${authority}</div>`:''}${hashLabel?`<div class="hash">${hashLabel}</div>`:`<div class="nohash">no receipt issued</div>`}`;
+    c.innerHTML=`<div class="verb">${verb==='gap'?'NO CHECK':verb.toUpperCase()}</div><div class="who">${h(who)}</div><div class="rule">${h(rule)}</div>${authority?`<div class="auth">${h(authority)}</div>`:''}${hashLabel?`<div class="hash">${h(hashLabel)}</div>`:`<div class="nohash">no receipt issued</div>`}`;
     const t=$('tape'); t.appendChild(c); while(t.children.length>40)t.removeChild(t.firstChild); t.scrollLeft=t.scrollWidth;
   }
   // One sentence for the whole fleet. Ordered by what needs a person first:
@@ -966,7 +976,7 @@
   function openEsc(a){
     escId=a.id; const c0=cards[a.id];
     $('escTitle').textContent=(c0&&c0.task?c0.task:a.id)+' \u2014 needs more than its limit';
-    $('escCtx').innerHTML=`agent &nbsp; <b>${a.id}</b><br>spent &nbsp; <b>${money(usdForAgent(a.tokens,c0&&c0.model))}</b> of ${money(usdForAgent(a.budget,c0&&c0.model))}<br>reason &nbsp; it passed the point where you asked to be told<br>ask &nbsp;&nbsp;&nbsp; half as much again to finish, or stop here`;
+    $('escCtx').innerHTML=`agent &nbsp; <b>${h(a.id)}</b><br>spent &nbsp; <b>${money(usdForAgent(a.tokens,c0&&c0.model))}</b> of ${money(usdForAgent(a.budget,c0&&c0.model))}<br>reason &nbsp; it passed the point where you asked to be told<br>ask &nbsp;&nbsp;&nbsp; half as much again to finish, or stop here`;
     $('escModal').classList.add('show'); let left=12; $('escTimer').textContent=' · '+left+'s';
     escTimer=setInterval(()=>{left--;$('escTimer').textContent=' · '+left+'s';if(left<=0)resolveEsc(false,true);},1000);
   }
@@ -1042,10 +1052,10 @@
       const cls=cap>0&&spent>=cap ? ' over' : cap>0&&spent>=cap*0.8 ? ' near' : '';
       const label=guess?k.slice(1):k;
       return `<div class="bc-row${cls}">
-        <span class="bc-name${guess?' guess':''}" title="${guess?'guessed from the folder name, not confirmed':''}">${label}${guess?' (unconfirmed)':''}</span>
+        <span class="bc-name${guess?' guess':''}" title="${guess?'guessed from the folder name, not confirmed':''}">${h(label)}${guess?' (unconfirmed)':''}</span>
         <span class="bc-usd">$${spent.toFixed(2)}</span>
         <div class="bc-bar"><div class="bc-fill" style="width:${pct}%"></div></div>
-        <div class="bc-cap">cap $<input data-client="${k}" value="${cap||''}" placeholder="none" aria-label="Monthly cap for ${label}">
+        <div class="bc-cap">cap $<input data-client="${h(k)}" value="${cap||''}" placeholder="none" aria-label="Monthly cap for ${h(label)}">
           <span>a month${cap>0?' \u00b7 '+Math.round(spent/cap*100)+'% used'+(spent>=cap?', stopped':''):''}</span></div>
       </div>`;
     }).join('');
@@ -1072,8 +1082,8 @@
     box.dataset.n = String(un.length);
     $('spCount').textContent = `Work is happening in ${un.length} different places.`;
     $('spRows').innerHTML = un.map(([path,guess])=>
-      `<div class="sp-row"><span class="sp-path" title="${path}">${path}</span>`
-      + `<input data-path="${path}" value="${guess}" aria-label="Client name for ${path}"></div>`).join('');
+      `<div class="sp-row"><span class="sp-path" title="${h(path)}">${h(path)}</span>`
+      + `<input data-path="${h(path)}" value="${h(guess)}" aria-label="Client name for ${h(path)}"></div>`).join('');
     box.hidden = false;
   }
   const spD=$('spDismiss'); if(spD) spD.onclick=()=>{ splitOff=true; $('split').hidden=true; };
@@ -1267,7 +1277,7 @@
       if(typeof c.dollars==='number' && document.activeElement!==$('dollars') && !window.__faderBusy){ dollars=c.dollars; $('dollars').value=c.dollars; }
       if(Array.isArray(c.rules)){ RULES=c.rules; renderRules(); }
       if(typeof c.rulesOn==='boolean') $('swRules').classList.toggle('on',c.rulesOn);
-      if(c.operator) $('whoFor').innerHTML='agents act for <b>'+c.operator+'</b>';
+      if(c.operator) $('whoFor').innerHTML='agents act for <b>'+h(c.operator)+'</b>';
       renderFleet(c);
       renderSpend();
     };
@@ -1279,7 +1289,7 @@
     es.onerror=()=>{}; // reconnects automatically
     if(!Object.keys(cards).length) $('fleet').innerHTML=`<div class="empty">
       <div class="e-live"><span class="e-dot"></span>Connected. The governor is running and watching.</div>
-      <div class="e-what"><b>What this is.</b> An agent spends real money as it works, every file it reads and every command it runs. Enforcer watches that spend as it happens and stops the agent at a limit you set, so a job that goes wrong costs you a coffee instead of a week's budget. It works the same for Claude, ChatGPT, Gemini, Grok and anything running on your own machine, and nothing about how you work changes.</div>
+      <div class="e-what"><b>What this is.</b> An agent spends real money as it works, every file it reads and every command it runs. GVNR watches that spend as it happens and stops the agent at a limit you set, so a job that goes wrong costs you a coffee instead of a week's budget. It works the same for Claude, ChatGPT, Gemini, Grok and anything running on your own machine, and nothing about how you work changes.</div>
       <div class="e-h">Nothing has happened yet. Set a limit, then connect an agent.</div>
       <ol class="e-steps">
         <li><b>Set your spend limit.</b><span>Scroll down to the console: drag the first fader or type a figure. It shows what that buys and roughly how long an agent can work on it. $20 is a normal day.</span></li>

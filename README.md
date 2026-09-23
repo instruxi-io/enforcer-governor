@@ -1,4 +1,6 @@
-# Enforcer Governor
+# Enforcer Governor (GVNR)
+
+**[gvnr.io](https://gvnr.io)** · stops AI agents overspending and running dangerous commands, before the action runs. Free, self-hosted, and an MCP server for any MCP client.
 
 [![ci](https://github.com/instruxi-io/enforcer-governor/actions/workflows/ci.yml/badge.svg)](https://github.com/instruxi-io/enforcer-governor/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/enforcer-governor)](https://www.npmjs.com/package/enforcer-governor)
@@ -12,15 +14,15 @@
 
 A guard that sits in front of an AI agent and decides, before each action runs, whether it is allowed. Any agent, any provider, on your own machine.
 
-AI agents burn tokens, and tokens are money. They get stuck in loops, repeat work, and blow through budgets, and every existing tool just *reports* the damage afterwards. Enforcer Governor is a guard that stands in front of your agents and answers one question before every action:
+AI agents burn tokens, and tokens are money. They get stuck in loops, repeat work, and blow through budgets, and most tools only *report* the damage afterwards. GVNR is a guard that stands in front of your agents and answers one question before every action:
 
 > **May this agent do this, right now?**
 
-- **allow** &mdash; in budget and on task, carry on
-- **deny** &mdash; over budget or stuck in a loop, blocked
-- **escalate** &mdash; wants more budget, so it pauses and asks YOU
+- **allow**: in budget and on task, carry on
+- **deny**: over its spend cap, stuck in a loop, or a refused command, blocked
+- **escalate**: irreversible, or spending too fast, so it pauses and asks YOU
 
-Every decision leaves a **tamper-proof receipt**, so you can always prove what your agents did and who approved what. Everything runs on your own computer with your own keys. Nothing is sent to us, ever.
+Every decision leaves a **tamper-evident receipt**, so you can always prove what your agents did and who approved what. Everything runs on your own computer with your own keys. Nothing is sent to us, ever.
 
 **See it in 10 seconds** (no install, simulated agents): **https://gvnr.io/console.html**
 
@@ -70,7 +72,7 @@ Each one **asks** rather than blocks, and asks once, so an overnight run stops a
 
 **The right model for the job.** Running the test suite on your most expensive model is the most common way to overspend without noticing. The governor reads the task the agent was actually given and says when the model looks mismatched, in either direction: a top-tier model on mechanical work, or a light one on work that needs reasoning. It moves one step at a time, along named tiers, and says nothing at all when the task is ambiguous, because a bad downgrade costs more in wasted work than it saves in tokens.
 
-It does **not** claim to detect hallucination &mdash; nobody can do that reliably. It catches the mechanical waste that is actually detectable, and escalates the judgment calls to you.
+It does **not** claim to detect hallucination. Nobody can do that reliably. It catches the mechanical waste that is actually detectable, and escalates the judgment calls to you.
 
 ---
 
@@ -132,6 +134,35 @@ Then start a **new** session in that project. That is all. Add `--global` to wat
 > The public ChatGPT website is closed and cannot be governed. Anything built on the OpenAI **API** can.
 
 ---
+
+## Use it from any MCP client
+
+GVNR is also an MCP server, so Cursor, Claude Desktop, Claude Code, Windsurf or any other MCP client can use it. Start the governor, then add the server:
+
+```bash
+npx --yes enforcer-governor start          # the governor and its dashboard
+claude mcp add gvnr -- npx -y enforcer-governor mcp
+```
+
+Or in any client's MCP config:
+
+```json
+{ "mcpServers": { "gvnr": { "command": "npx", "args": ["-y", "enforcer-governor", "mcp"] } } }
+```
+
+| Tool | What it does |
+|---|---|
+| `gvnr_request_permission` | Ask before acting. Returns allow, deny or ask_human, and records a receipt. |
+| `gvnr_status` | Every agent, its spend and spend rate, and the limits in force. |
+| `gvnr_recent_decisions` | The latest decisions from the receipt file. |
+| `gvnr_verify_receipts` | Checks the hash chain and names the line if a record was edited. |
+| `gvnr_stop_agent` | Stops an agent. Only a human can resume it, from the dashboard. |
+
+Each server process is one agent, shown as `mcp:<name>`: set `GVNR_AGENT` in the client config to name it, otherwise it gets a random id per session. The agent cannot pick or change its own id.
+
+Two things to know. Asking permission over MCP is cooperative: an agent that calls the tool gets a real verdict, but nothing forces an agent to call it, so the Claude Code hook remains the enforced route. And nothing in the tool list can loosen a limit: no approve, resume or config, because the agent calling the tools is the one being governed.
+
+Listed on the official MCP Registry as `io.gvnr/enforcer-governor`.
 
 ## Configure
 
@@ -240,6 +271,8 @@ Everything is set from the **owner console** on the dashboard: one panel with a 
 - The proxy buffers responses; streaming passthrough is next.
 - Token totals come from the transcript, which writes asynchronously, so a decision can lag real spend by one turn. Enforcement at the tool boundary makes this safe in practice.
 - On subscription billing, dollar figures are estimates at list prices, labelled `est.`
+- The governor answers only this machine: loopback connections, local Host headers, and no cross-origin requests. Controls that loosen a limit (settings, approve, resume, remove) need a key that changes on every start and lives only in the dashboard page. That stops a stray `curl` or another website; an agent with a shell running as you could still load the dashboard and read the key. Against a deliberate adversary rather than an accident, run the agent in a container or VM and keep GVNR on the host.
+- If GVNR is not running, the hook lets actions through and says so, rather than breaking your agent.
 - Model matching is a heuristic on the wording of the task, so it stays quiet unless the signal is clear. It is advice everywhere except the proxy, where it can downgrade if you turn that on.
 
 ## Run the tests

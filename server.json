@@ -1,0 +1,54 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.gvnr/enforcer-governor",
+  "description": "Stops AI agents overspending and running dangerous commands before they act. Free, self-hosted.",
+  "repository": {
+    "url": "https://github.com/instruxi-io/enforcer-governor",
+    "source": "github"
+  },
+  "version": "0.29.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "enforcer-governor",
+      "version": "0.29.0",
+      "runtimeHint": "npx",
+      "transport": {
+        "type": "stdio"
+      },
+      "packageArguments": [
+        {
+          "type": "positional",
+          "value": "mcp"
+        }
+      ],
+      "environmentVariables": [
+        {
+          "name": "GOVERNOR_PORT",
+          "description": "Port of the local GVNR governor. Defaults to 4000.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
+        },
+        {
+          "name": "GVNR_AGENT",
+          "description": "A name for this client's agent, shown as mcp:<name>. Defaults to a random id per session.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
+        }
+      ]
+    }
+  ],
+  "title": "GVNR (Enforcer Governor)",
+  "websiteUrl": "https://gvnr.io",
+  "icons": [
+    {
+      "src": "https://gvnr.io/icon-512.png",
+      "mimeType": "image/png",
+      "sizes": [
+        "512x512"
+      ]
+    }
+  ]
+}

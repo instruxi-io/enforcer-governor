@@ -94,7 +94,8 @@ export function priceOf(model = '', fallback = DEFAULT_MODEL) {
   if (/^(gpt|o[134]\b|chatgpt)/.test(m)) return { key: 'gpt-5.5', ...MODELS['gpt-5.5'] };
   if (/(gemini|bard|palm)/.test(m)) return { key: 'gemini-3.1-pro', ...MODELS['gemini-3.1-pro'] };
   if (m.includes('claude')) return { key: DEFAULT_MODEL, ...MODELS[DEFAULT_MODEL] };
-  return { key: fallback, ...(MODELS[fallback] || MODELS[DEFAULT_MODEL]) };
+  // Own keys only: a model called toString must not price as Object.prototype.
+  return Object.hasOwn(MODELS, fallback) ? { key: fallback, ...MODELS[fallback] } : { key: DEFAULT_MODEL, ...MODELS[DEFAULT_MODEL] };
 }
 
 // Cost weights relative to input=1, for turning raw usage into effective tokens.
@@ -122,10 +123,23 @@ export const dollarsForTokens = (tok, perM) => (tok / 1e6) * perM;
 // action: 'deny' refuses outright; 'ask' hands the decision to the human via
 // Claude Code's own permission prompt -- no bespoke approval UI needed.
 export const DEFAULT_RULES = [
+  // Checked first. The governor's own control routes, its uninstaller and its
+  // config are reachable from any shell the agent has, so an agent could
+  // otherwise switch every check off with one allowed curl.
+  { name: 'change or stop GVNR itself', tool: '',
+    // ponytail: a speed bump, not a lock. A determined agent with a shell can
+    // spell a URL a regex will not see; the control routes also need a per-start
+    // key the dashboard holds, which is the part that actually protects them.
+    match: '(localhost|127(?:\\.\\d{1,3}){1,3}|0x7f[0-9a-f]{0,6}|::1|::ffff:127|0\\.0\\.0\\.0|hostname)[^\\s\'"]{0,80}(config|release|approve|uninstall|clients|decide|kill)\\b|enforcer-governor\\s+uninstall|\\.enforcer-governor/|(pkill|killall)\\b[^|;&]*(enforcer-governor|governor\\.mjs|node)', action: 'ask' },
   { name: 'pipe the internet into a shell', tool: 'Bash',
     match: '(curl|wget)[^|]*\\|\\s*(ba|z|fi)?sh', action: 'deny' },
   { name: 'delete a whole tree', tool: 'Bash',
-    match: 'rm\\s+(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r)', action: 'ask' },
+    // Lookaheads keep this linear: the nested form took seconds on rm -rrrr...,
+    // long enough for the hook to time out and fail open.
+    // Recursive and force anywhere in the flags that follow: -rf, -r -f,
+    // --recursive --force. Bounded windows and no nested quantifiers keep it
+    // linear, because a slow rule times the hook out and it fails open.
+    match: '\\brm(?=(?:\\s[^|;&\\n]{0,200}?)?\\s-(?:[a-z]*r|-recursive\\b))(?=(?:\\s[^|;&\\n]{0,200}?)?\\s-(?:[a-z]*f|-force\\b))', action: 'ask' },
   { name: 'rewrite git history', tool: 'Bash',
     // The force flag can sit anywhere after `push` (git accepts it after the
     // remote and branch), and a +refspec force-pushes with no flag at all.
@@ -138,8 +152,15 @@ export const DEFAULT_RULES = [
 ];
 
 // First rule whose tool and pattern both match. An empty tool means any tool.
+// Longest action the rules will judge. Past this the person is asked rather
+// than the text cut: a cut is exactly where something would hide.
+export const MAX_ACTION = 16000;
+
 export function matchRule(rules, ev) {
-  const text = String(ev.action || '');
+  // Judge what the shell will run, not its JSON: an escaped tab or newline is
+  // two characters there, so every rule looking for whitespace used to miss it.
+  const text = String(ev.action || '').replace(/\\[tnr]/g, ' ');
+  if (text.length > MAX_ACTION) return { name: 'run a command too long to check', tool: '', match: '', action: 'ask' };
   // Fall back to the prefix of the action ("Bash:...") when the caller did not
   // name the tool. A missing field used to make every capability rule quietly
   // miss, which fails in the one direction a guard must never fail in.
@@ -322,7 +343,10 @@ export const PERIODS = [['day', dayKey], ['week', weekKey], ['month', monthKey]]
 
 export function makeState() {
   return {
-    agents: {}, chain: [], prevHash: 'genesis',
+    // Keyed by caller-supplied ids, so no prototype: an id of __proto__ or
+    // constructor must be an ordinary key, not Object.prototype. One such id
+    // used to crash the daemon, and a dead governor fails open on everything.
+    agents: Object.create(null), chain: [], prevHash: 'genesis',
     // Total spend across EVERY agent. A per-agent cap cannot bound a team:
     // Claude Code agent teams run each teammate as its own session, so seven
     // teammates on a $20 per-agent cap can spend $140. These totals are the
@@ -339,9 +363,9 @@ export function makeState() {
     spawns: [],
     // Dollars per client, per period. Keyed the same way the fleet totals are,
     // so a new day resets them without a scheduler.
-    clients: { day: { k: '', by: {} }, week: { k: '', by: {} }, month: { k: '', by: {} } },
+    clients: { day: { k: '', by: Object.create(null) }, week: { k: '', by: Object.create(null) }, month: { k: '', by: Object.create(null) } },
     // Folders seen that nobody has mapped yet: path -> the name we guessed.
-    unmapped: {},
+    unmapped: Object.create(null),
   };
 }
 
@@ -377,7 +401,7 @@ export function rollPeriods(state, now = Date.now()) {
     if (p.k !== k) { p.k = k; p.usd = 0; }
     if (state.clients) {
       const c = state.clients[name];
-      if (c.k !== k) { c.k = k; c.by = {}; }
+      if (c.k !== k) { c.k = k; c.by = Object.create(null); }
     }
   }
 }
@@ -386,6 +410,7 @@ export function addSpend(state, a, deltaTokens, now = Date.now()) {
   if (!state.periods || !(deltaTokens > 0)) return;
   rollPeriods(state, now);
   const usd = dollarsForTokens(deltaTokens, priceOf(a.model).in);
+  if (!Number.isFinite(usd)) return;            // never poison the fleet's totals
   for (const [name] of PERIODS) state.periods[name].usd += usd;
   if (state.clients && a.client) {
     for (const [name] of PERIODS) {
@@ -408,8 +433,14 @@ export function addSpend(state, a, deltaTokens, now = Date.now()) {
 // rare; the model-matching feature makes it deliberate, so it has to be right.
 export function setModel(a, model) {
   if (!model || model === a.model) return;
-  const from = priceOf(a.model, model).in, to = priceOf(model).in;
-  if (a.model && a.tokens > 0 && from !== to) a.tokens = Math.round(a.tokens * from / to);
+  // An unpriced name on either side means no rescale. Falling back to the
+  // default price on the way in but not on the way out let one call with a
+  // made-up model name cut an agent's metered spend by up to 20x.
+  const from = priceOf(a.model, model).in, to = priceOf(model, a.model).in;
+  if (a.model && a.tokens > 0 && from !== to && from > 0 && to > 0) {
+    const next = Math.round(a.tokens * from / to);
+    if (Number.isFinite(next)) a.tokens = next;
+  }
   a.model = model;
 }
 
@@ -430,6 +461,26 @@ export function getAgent(state, id, cfg, now = Date.now()) {
 
 // The one call. Returns { verdict, reason, receipt, hash, agent }.
 // verdict is one of: allow | deny | escalate.
+// The reason an agent is over a spending cap, or null. The fleet's day, week
+// and month totals, then its client's monthly cap.
+function capReason(state, a, cfg, which) {
+  if (!cfg.budgetOn) return null;
+  if (which !== 'client' && state.periods) {
+    const caps = { day: cfg.dailyLimit, week: cfg.weeklyLimit, month: cfg.monthlyLimit };
+    const word = { day: 'today', week: 'this week', month: 'this month' };
+    for (const [name] of PERIODS) {
+      const cap = caps[name], spent = state.periods[name].usd;
+      if (cap > 0 && spent >= cap) return `your agents have spent $${spent.toFixed(2)} ${word[name]}, which is your $${cap} limit`;
+    }
+  }
+  if (which !== 'fleet' && a.client && state.clients) {
+    const cap = (cfg.clientLimits || {})[a.client];
+    const spent = state.clients.month.by[a.client] || 0;
+    if (cap > 0 && spent >= cap) return `work for ${a.client} has cost $${spent.toFixed(2)} this month, which is its $${cap} limit`;
+  }
+  return null;
+}
+
 export function decide(state, ev, config = {}) {
   const cfg = { ...DEFAULTS, ...config };
   const now = ev.ts || Date.now();
@@ -454,6 +505,25 @@ export function decide(state, ev, config = {}) {
   // while an API key quietly moved them onto per-token billing.
   if (ev.billing) a.billing = ev.billing;
 
+  // A pre-check is a question about a request that has not been sent, asked so
+  // a stopped agent is refused before it spends. It answers only that and
+  // writes nothing else: every rate, loop and alarm is judged once, on the
+  // real decision. Recording it left an unsaved link in the chain, so verify
+  // called the record tampered with after one proxy request, and running the
+  // alarms here let a pre-check swallow the fan-out alarm for everyone.
+  if (ev.precheck) {
+    const off = cfg.budgetOn === false && cfg.loopOn === false;
+    if (!off && a.status !== 'grounded') {
+      const over = capReason(state, a, cfg) || (cfg.budgetOn && a.tokens >= a.budget ? 'it reached your spend limit' : null);
+      if (over) { a.status = 'grounded'; return record(state, a, 'deny', over, a.tokens); }
+    }
+    if (off || a.status !== 'grounded') {
+      return { verdict: 'allow', reason: 'pre-check', precheck: true,
+        agent: { id: a.id, tokens: Math.round(a.tokens), budget: a.budget, status: a.status, loopStreak: a.loopStreak || 0 } };
+    }
+    // Stopped, with checks on: the refusal below is the answer, and it is saved.
+  }
+
   // Master switch wins over everything, including a grounded agent. Turning the
   // governor off in the dashboard has to actually let work through, otherwise
   // there is no way back and the user is stuck.
@@ -469,6 +539,7 @@ export function decide(state, ev, config = {}) {
       'this agent is stopped. Resume it in the dashboard, or turn the checks off there',
       a.tokens);
   }
+
 
   // Capability first. "You may not do this" outranks "you have budget left",
   // and a cheap command can still be the destructive one.
@@ -493,7 +564,8 @@ export function decide(state, ev, config = {}) {
   // comparison against the budget silently evaluates false and the agent is
   // never stopped at all. Infinity poisons the running totals permanently, and
   // a negative lets a caller rewind its own spend.
-  const clean = n => (typeof n === 'number' && Number.isFinite(n) && n >= 0) ? n : null;
+  // A reading above a trillion tokens (millions of dollars) is not a reading.
+  const clean = n => (typeof n === 'number' && Number.isFinite(n) && n >= 0 && n <= 1e12) ? n : null;
   const wasTokens = a.tokens;
   const abs = clean(ev.tokens), delta = clean(ev.deltaTokens);
   // Cumulative totals only ever move forward; a lower figure means a restarted
@@ -501,35 +573,33 @@ export function decide(state, ev, config = {}) {
   if (abs !== null) a.tokens = Math.max(a.tokens, abs);
   else if (delta !== null) a.tokens += delta;
   if (typeof ev.cost === 'number') a.cost = ev.cost;
-  addSpend(state, a, a.tokens - wasTokens, now);
+  if (Number.isFinite(a.tokens)) addSpend(state, a, a.tokens - wasTokens, now);
+  if (!Number.isFinite(a.tokens)) {
+    a.status = 'grounded';
+    return record(state, a, 'deny', 'its spend reading is not a number, so it is stopped to be safe', 0);
+  }
 
   // Totals first: a team of agents can each sit inside its own limit while
   // together spending many times what the human intended.
-  if (cfg.budgetOn && state.periods) {
-    const caps = { day: cfg.dailyLimit, week: cfg.weeklyLimit, month: cfg.monthlyLimit };
-    const word = { day: 'today', week: 'this week', month: 'this month' };
-    for (const [name] of PERIODS) {
-      const cap = caps[name], spent = state.periods[name].usd;
-      if (cap > 0 && spent >= cap) {
-        a.status = 'grounded';
-        return record(state, a, 'deny',
-          `your agents have spent $${spent.toFixed(2)} ${word[name]}, which is your $${cap} limit`,
-          a.tokens);
-      }
-    }
+  {
+    const over = capReason(state, a, cfg, 'fleet');
+    if (over) { a.status = 'grounded'; return record(state, a, 'deny', over, a.tokens); }
   }
 
   // Loop / waste: the same action signature showing up too often in the recent
   // window. Counting OCCURRENCES rather than a back-to-back streak matters:
   // a stuck agent usually alternates (read A, edit A, read A, edit A...), and a
   // consecutive-only check never fires on that at all.
+  // A pre-check is a question about an action that has not happened yet, so
+  // it does not count. The proxy asks twice per request, and counting both
+  // grounded every proxy agent as a loop on its second request.
   const sig = ev.action || `${ev.tool || 'tool'}:${JSON.stringify(ev.args ?? '')}`;
-  a.recent.push(sig);
+  if (!ev.precheck) a.recent.push(sig);
   if (a.recent.length > cfg.loopWindow) a.recent.shift();
   const repeats = a.recent.reduce((n, s) => n + (s === sig ? 1 : 0), 0);
   a.loopStreak = repeats;
 
-  if (cfg.loopOn && repeats >= cfg.loopLimit) {
+  if (cfg.loopOn && !ev.precheck && repeats >= cfg.loopLimit) {
     a.status = 'grounded';
     return record(state, a, 'deny',
       `it repeated the same action ${repeats} times in its last ${a.recent.length} - that is a loop`, a.tokens);
@@ -578,15 +648,9 @@ export function decide(state, ev, config = {}) {
     }
   }
 
-  if (cfg.budgetOn && a.client && state.clients) {
-    const cap = (cfg.clientLimits || {})[a.client];
-    const spent = state.clients.month.by[a.client] || 0;
-    if (cap > 0 && spent >= cap) {
-      a.status = 'grounded';
-      return record(state, a, 'deny',
-        `work for ${a.client} has cost $${spent.toFixed(2)} this month, which is its $${cap} limit`,
-        a.tokens);
-    }
+  {
+    const over = capReason(state, a, cfg, 'client');
+    if (over) { a.status = 'grounded'; return record(state, a, 'deny', over, a.tokens); }
   }
 
   if (cfg.budgetOn && a.tokens >= a.budget) {

@@ -1,7 +1,7 @@
 {
   "name": "enforcer-governor",
-  "version": "0.28.1",
-  "description": "Real-time token-spend control for AI agents. Allow, deny, or escalate every agent action, with hash-chained receipts. Free to run on your own agents, self-hosted.",
+  "version": "0.29.0",
+  "description": "Enforcer Governor (GVNR): stops AI agents overspending and running dangerous commands, before the action runs. Per-minute spend caps, allow/deny/ask on every action, hash-chained receipts, MCP server. Free, self-hosted.",
   "type": "module",
   "bin": {
     "enforcer-governor": "src/cli.mjs"
@@ -9,7 +9,7 @@
   "scripts": {
     "start": "node src/governor.mjs",
     "install-hook": "node src/cli.mjs install-hook",
-    "test": "node test/policy.test.mjs && node test/receipts.test.mjs"
+    "test": "node test/policy.test.mjs && node test/receipts.test.mjs && node test/mcp.test.mjs"
   },
   "files": [
     "src",
@@ -33,7 +33,13 @@
     "rate-limiting",
     "llmops",
     "audit-log",
-    "cli"
+    "cli",
+    "mcp-server",
+    "model-context-protocol",
+    "gvnr",
+    "spend-limit",
+    "rate-limit",
+    "claude-code-hook"
   ],
   "license": "FSL-1.1-ALv2",
   "engines": {
@@ -46,5 +52,6 @@
   "homepage": "https://gvnr.io",
   "bugs": {
     "url": "https://github.com/instruxi-io/enforcer-governor/issues"
-  }
+  },
+  "mcpName": "io.gvnr/enforcer-governor"
 }
