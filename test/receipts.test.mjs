@@ -6,7 +6,9 @@ import { tmpdir } from 'node:os';
 import { sha256 } from '../src/policy.mjs';
 import { walkReceipts } from '../src/governor.mjs';
 
-const assert = (c, m) => { if (!c) { console.error('FAIL: ' + m); process.exit(1); } };
+// Throw rather than exit: exiting skipped the finally blocks, which left the
+// governor each test started running and holding its port.
+const assert = (c, m) => { if (!c) { console.error('FAIL: ' + m); throw new Error(m); } };
 const dir = mkdtempSync(join(tmpdir(), 'gov-receipts-'));
 const file = join(dir, 'receipts.jsonl');
 
@@ -114,7 +116,7 @@ console.log('receipts survive a restart and fail loudly on edits and deletions o
       seen = JSON.parse(b || '{}');
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ id: 'x', model: seen.model,
-        choices: [{ message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
+        choices: [{ message: { role: 'assistant', content: 'Brief: the agent was summarising support tickets by theme, three themes found so far, continue from ticket 120 onwards.' }, finish_reason: 'stop' }],
         usage: { prompt_tokens: 1000, completion_tokens: 100, total_tokens: 1100 } }));
     });
   });
@@ -168,5 +170,19 @@ console.log('receipts survive a restart and fail loudly on edits and deletions o
       assert(rr.status === 200, `batch item ${n} must succeed, got ${rr.status}`);
     }
     console.log('a batch job that changes only its system prompt is not a loop ok');
+
+    // A reroute is two decisions: the refusal, then the handover. Both must be
+    // on disk, or verify calls the record tampered with after every reroute.
+    const key = (await (await fetch(`http://localhost:${port}/`)).text()).match(/__GVNR_KEY__="([0-9a-f]+)"/)[1];
+    const cfg = b => fetch(`http://localhost:${port}/config`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-gvnr-key': key }, body: JSON.stringify(b) });
+    await cfg({ rerouteOn: true, fallbackUrl: `http://localhost:${upstreamPort}/v1/chat/completions`, fallbackModel: 'local-model', dollars: 0.0001 });
+    const rr = await fetch(`http://localhost:${port}/v1/chat/completions`, {
+      method: 'POST', headers: { 'content-type': 'application/json', 'x-enforcer-agent': 'p1' },
+      body: JSON.stringify({ model: 'claude-opus-5', messages: [{ role: 'user', content: 'one more turn' }] }),
+    });
+    assert(rr.headers.get('x-enforcer-verdict') === 'reroute', `an out-of-budget agent should be rerouted, got ${rr.status} ${rr.headers.get('x-enforcer-verdict')}`);
+    const vr = await (await fetch(`http://localhost:${port}/verify`)).json();
+    assert(vr.ok, `the chain must verify after a reroute: ${JSON.stringify(vr)}`);
+    console.log('a reroute leaves a receipt chain that verifies on disk ok');
   } finally { gov.kill(); upstream.close(); }
 }

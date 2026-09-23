@@ -8,7 +8,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { handoffRequest, resumeWith, postJSON, HANDOFF_OPTS, RESUME_OPTS } from './handoff.mjs';
-import { makeState, decide, resolve, kill, release, verifyChain, getAgent, setModel, record, rollPeriods, burnRate, spawnRate, clientFor, sha256, priceOf, dollarsForTokens, weightsFor, modelAdvice, taskShape, MODELS, DEFAULTS, DEFAULT_RULES, tokensForDollars } from './policy.mjs';
+import { makeState, decide, resolve, kill, release, verifyChain, getAgent, setModel, record, rollPeriods, burnRate, spawnRate, clientFor, sha256, priceOf, dollarsForTokens, weightsFor, MODELS, DEFAULTS, DEFAULT_RULES, tokensForDollars } from './policy.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dir, '..');
@@ -22,7 +22,7 @@ const PERIODS_FILE = join(DATA_DIR, 'periods.json');
 // every limit back to the default while the spend total carries on climbing --
 // you would believe you were capped when you were not.
 const SAVED_FILE = join(DATA_DIR, 'config.json');
-const SAVED_KEYS = ['dollars', 'model', 'soft', 'softAction', 'budgetOn', 'loopOn', 'rulesOn', 'adviseModel', 'enforceModel', 'burnLimit', 'fleetBurnLimit', 'fanoutLimit', 'retryLimit', 'rerouteOn', 'fallbackUrl', 'fallbackModel', 'clients', 'clientLimits',
+const SAVED_KEYS = ['dollars', 'model', 'soft', 'softAction', 'budgetOn', 'loopOn', 'rulesOn', 'burnLimit', 'fleetBurnLimit', 'fanoutLimit', 'retryLimit', 'rerouteOn', 'fallbackUrl', 'fallbackModel', 'clients', 'clientLimits',
                     'dailyLimit', 'weeklyLimit', 'monthlyLimit', 'operator'];
 
 // Config: defaults <- governor.config.json (cwd) <- env.
@@ -83,14 +83,10 @@ function snapshot() {
     status: a.status, cost: a.cost, model: a.model || '', task: a.task || '', billing: a.billing || '',
     client: a.client || '',
     burn: +burnRate(state, undefined, a.id).toFixed(2),
-    // Carried on the snapshot too, or the advice only ever appears on a card
-    // built by a live decision and vanishes the moment you reload the page.
-    advice: CONFIG.adviseModel !== false ? modelAdvice(a.model, taskShape(a.task)) : null,
   })), config: {
     budget: CONFIG.budget, soft: CONFIG.soft, loopLimit: CONFIG.loopLimit,
     softAction: CONFIG.softAction, budgetOn: CONFIG.budgetOn, loopOn: CONFIG.loopOn,
     rulesOn: CONFIG.rulesOn, operator: CONFIG.operator, rules: CONFIG.rules || DEFAULT_RULES,
-    adviseModel: CONFIG.adviseModel, enforceModel: CONFIG.enforceModel,
     dollars: CONFIG.dollars, model: CONFIG.model, models: MODELS,
     dailyLimit: CONFIG.dailyLimit, weeklyLimit: CONFIG.weeklyLimit, monthlyLimit: CONFIG.monthlyLimit,
     burnLimit: CONFIG.burnLimit, fleetBurnLimit: CONFIG.fleetBurnLimit, fleetBurn: +burnRate(state).toFixed(2),
@@ -293,27 +289,13 @@ async function handleProxy(req, res, path) {
   const pre = decide(state, { agent, client, deltaTokens: 0, action: 'proxy:' + path, precheck: true }, CONFIG);
   let body = await readBody(req);
   if (pre.verdict === 'deny') {
+    // The refusal is saved before any reroute: it is a decision in the chain
+    // either way, and saving it only on the 429 path left a gap on disk that
+    // made verify call the record tampered with after every reroute.
+    broadcast('decision', { ...pre, model: 'proxy' }); await persist(pre);
     const moved = CONFIG.rerouteOn && CONFIG.fallbackUrl && await reroute(agent, body, pre, res, path);
     if (moved) return;
-    broadcast('decision', { ...pre, model: 'proxy' }); await persist(pre);
-    return json(res, 429, { error: { type: 'enforcer_blocked', message: 'Enforcer blocked this agent: ' + pre.reason, receipt: pre.receipt } });
-  }
-  // The one place a downgrade is actually possible: we own this request, so we
-  // can rewrite the model before forwarding. Off unless explicitly enabled --
-  // silently changing someone's model is a big decision. Only ever downgrades:
-  // spending MORE of someone's money without asking is not ours to do.
-  let swapped = null;
-  if (CONFIG.enforceModel) {
-    try {
-      const j = JSON.parse(body.toString());
-      const known = state.agents[agent];
-      const advice = modelAdvice(j.model, taskShape(known && known.task));
-      if (advice && advice.cheaper) {
-        j.model = advice.suggest;
-        body = Buffer.from(JSON.stringify(j));
-        swapped = advice;
-      }
-    } catch {}
+    return json(res, 429, { error: { type: 'enforcer_blocked', message: 'GVNR blocked this agent: ' + pre.reason, receipt: pre.receipt } });
   }
   const headers = { ...req.headers }; delete headers.host; delete headers['content-length'];
   let upstream;
@@ -331,17 +313,8 @@ async function handleProxy(req, res, path) {
   const { tokens: used, model } = extractUsage(respBody, path);
   // Price this agent at whatever model actually answered, before judging it.
   const known = getAgent(state, agent, CONFIG);
-  // Changing someone's model is an enforcement action, so it gets its own
-  // receipt in the chain. An unrecorded intervention is exactly the thing this
-  // tool exists to stop.
-  if (swapped) {
-    const sw = record(state, known, 'allow', `switched this request to ${swapped.label}: ${swapped.why}`, known.tokens, 'policy');
-    broadcast('decision', { ...sw, model: swapped.suggest }); await persist(sw);
-  }
   if (model) setModel(known, model);
   if (!known.budgetRaised) known.budget = budgetFor(known);
-  // Keyed on the request body: a new turn is a new action, the same request
-  // sent again is a repeat. The bare path made every request look identical.
   // Keyed on the latest two messages: a stuck agent repeats its last turn while
   // the conversation behind it keeps growing, so a whole-body key never matched.
   let turn = String(body);
@@ -350,7 +323,7 @@ async function handleProxy(req, res, path) {
   try { const j = JSON.parse(turn); if (Array.isArray(j.messages)) turn = JSON.stringify([j.system, j.model, Array.isArray(j.tools) ? j.tools.length : 0, j.messages.slice(-2)]); } catch {}
   const post = decide(state, { agent, client, deltaTokens: used, action: 'proxy:' + path + '#' + sha256(turn).slice(0, 16) }, CONFIG);
   post.agent.lastUsed = used;
-  broadcast('decision', { ...post, model: model || 'proxy', advice: post.advice || null }); await persist(post);
+  broadcast('decision', { ...post, model: model || 'proxy' }); await persist(post);
   res.writeHead(upstream.status, { 'content-type': upstream.headers.get('content-type') || 'application/json', 'x-enforcer-verdict': post.verdict, 'x-enforcer-receipt': post.receipt });
   res.end(respBody);
 }
@@ -391,7 +364,7 @@ async function handle(req, res) {
     if (ev.task) a.task = ev.task;
     if (!a.budgetRaised) a.budget = budgetFor(a);
     const r = decide(state, ev, CONFIG);
-    broadcast('decision', { ...r, model: ev.model || '', task: ev.task || '', advice: r.advice || null, billing: ev.billing || '' });
+    broadcast('decision', { ...r, model: ev.model || '', task: ev.task || '', billing: ev.billing || '' });
     await persist(r);
     return json(res, 200, r);
   }
@@ -422,7 +395,7 @@ async function handle(req, res) {
   }
   if (req.method === 'POST' && path === '/config') {
     const patch = JSON.parse((await readBody(req)).toString() || '{}');
-    for (const k of ['budgetOn', 'loopOn', 'rulesOn', 'softAction', 'budget', 'soft', 'dollars', 'model', 'dailyLimit', 'weeklyLimit', 'monthlyLimit', 'operator', 'adviseModel', 'enforceModel', 'burnLimit', 'fleetBurnLimit', 'fanoutLimit', 'retryLimit', 'rerouteOn', 'fallbackUrl', 'fallbackModel', 'clients', 'clientLimits']) {
+    for (const k of ['budgetOn', 'loopOn', 'rulesOn', 'softAction', 'budget', 'soft', 'dollars', 'model', 'dailyLimit', 'weeklyLimit', 'monthlyLimit', 'operator', 'burnLimit', 'fleetBurnLimit', 'fanoutLimit', 'retryLimit', 'rerouteOn', 'fallbackUrl', 'fallbackModel', 'clients', 'clientLimits']) {
       if (k in patch) CONFIG[k] = patch[k];
     }
     // Raising the limit has to affect the agent already running, not just the

@@ -287,36 +287,6 @@ console.log('  a refused action does not revoke the agent ok');
 }
 console.log('  junk token readings cannot bypass or poison the limits ok');
 
-// ── Model advice must be conservative ─────────────────────────────────────
-// A wrong downgrade produces worse work, which costs more than it saves. So:
-// silent unless sure, one step at a time, and never off the named ladder.
-{
-  const { taskShape, modelAdvice } = await import('../src/policy.mjs');
-  const advise = (t, m) => modelAdvice(m, taskShape(t));
-
-  assert.equal(taskShape('run the full test suite and fix whatever fails'), 'mechanical');
-  assert.equal(taskShape('figure out why the webhook drops events'), 'reasoning');
-  assert.equal(taskShape('refactor the auth module and run the tests'), 'reasoning',
-    'a task with both signals counts as reasoning, never downgraded');
-  assert.equal(taskShape('add the dollar budget input'), null, 'ambiguous work gets no opinion');
-  assert.equal(taskShape(''), null);
-
-  // one step, to something that can actually do the job
-  assert.equal(advise('run the tests', 'claude-opus-5').suggest, 'claude-sonnet-5');
-  assert.equal(advise('bump the version', 'gpt-5.6-sol').suggest, 'gpt-5.4',
-    'never suggests the floor of the family (nano cannot carry multi-step work)');
-  // never crosses providers
-  for (const [t, m] of [['run the tests', 'gpt-5.6-sol'], ['run the tests', 'gemini-3.1-pro']]) {
-    const a = advise(t, m);
-    if (a) assert.equal(MODELS[a.suggest].p, priceOf(m).p, 'advice stays with the same provider');
-  }
-  // silence where there is nothing useful to say
-  assert.equal(advise('refactor the module', 'claude-opus-5'), null, 'already the top model');
-  assert.equal(advise('run the tests', 'gpt-5.5-pro'), null, 'off the named ladder: no guess');
-  assert.equal(advise('anything at all', 'claude-opus-5'), null, 'unknown shape stays silent');
-}
-console.log('  model advice is conservative ok');
-
 // Switching model mid-session must not hand the agent free money. The unit of
 // an effective token is that model's input price, so the total converts too.
 {

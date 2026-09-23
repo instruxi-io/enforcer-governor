@@ -55,7 +55,7 @@
     line-height:1.75;color:var(--dim);white-space:pre;}
   .csv-note{padding:0 16px 14px;font-size:11.5px;color:var(--faint);}
   .tape-empty{font-size:12.5px;line-height:1.6;color:var(--faint);padding:16px;max-width:62ch;}
-  .tape:not(:empty)+.tape-empty{display:none;}
+  .tape:not(:empty)~.tape-empty{display:none;}
   .tape:empty{min-height:0;padding:0;border:none;}
   .legend b{color:var(--ink);font-weight:500;font-variant-numeric:tabular-nums;}
   .lead{padding:22px 0 4px;} .lead h1{font-family:var(--serif);font-weight:400;font-size:clamp(21px,3vw,30px);line-height:1.14;max-width:26ch;} .lead p{color:var(--dim);font-size:14.5px;max-width:76ch;margin-top:9px;} .lead b{color:var(--ink);} .verbs .a{color:var(--allow);}.verbs .d{color:var(--deny);}.verbs .e{color:var(--esc);}
@@ -312,18 +312,6 @@
   .a-task{font-family:var(--serif);font-size:13.5px;line-height:1.34;color:var(--ink);
     display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:2.68em;}
   .a-task.idle{color:var(--faint);font-style:italic;}
-  /* Model-vs-task mismatch. Advisory, so it reads as a note and never as an
-     alarm: a wrong downgrade costs more in bad work than it saves in tokens. */
-  .a-advice{display:none;margin:10px 16px 2px;font-size:11px;line-height:1.45;color:var(--dim);
-    border-left:2px solid var(--teal);padding-left:9px;}
-  .a-advice.show{display:block;}
-  /* Says which kind of thing it is, so it is never read as a limit warning. */
-  .a-advice .tag{display:block;font-family:var(--sans);font-size:9px;font-weight:600;
-    letter-spacing:.1em;text-transform:uppercase;color:var(--teal);margin-bottom:3px;}
-  .a-advice b{color:var(--ink);font-weight:600;}
-  .agent.reconsider .a-task,.agent.reconsider .a-advice,.agent.reconsider .amdl{
-    animation:reconsider .3s ease-out;}
-  @keyframes reconsider{from{opacity:.15;}to{opacity:1;}}
   .perm{font-family:var(--mono);font-size:9.5px;color:var(--faint);margin-left:6px;}
   /* Rate, shown next to the money it is turning into. Amber only when it is
      actually near the mark, so a glance at a calm fleet stays calm. */
@@ -335,7 +323,6 @@
     text-transform:uppercase;color:var(--esc);background:rgba(255,159,67,.15);
     border:1px solid rgba(255,159,67,.3);border-radius:0;padding:2px 8px;margin-left:6px;}
   .bill.show{display:inline-block;}
-  .a-advice b{color:var(--ink);font-weight:500;}
   .a-meta{font-family:var(--mono);font-size:9.5px;color:var(--faint);margin-top:6px;letter-spacing:.04em;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   /* Burn trace: what this agent has been spending, moment to moment. */
@@ -493,16 +480,10 @@
           <div class="swrow"><button class="sw on" id="swRules"><span class="knob"></span><span>Capability checks</span></button>
             <span class="f-k"><button class="q" type="button" aria-label="What is this?">?</button>
             <span class="qtip">Judges what an agent may DO, not just what it may spend. Piping the internet into a shell is refused outright. Deleting a whole tree, rewriting git history, reading or writing credentials, and publishing or deploying all stop and ask you first. Ordinary work passes untouched, and these fire even on a full budget, because a dangerous command is usually a cheap one.</span></span></div>
-          <div class="swrow"><button class="sw on" id="swModel"><span class="knob"></span><span>Match model to task</span></button>
-            <span class="f-k"><button class="q" type="button" aria-label="What is this?">?</button>
-            <span class="qtip">Reads the task the person typed and says when the model looks wrong for it, in either direction. Where the governor sits in front of a coding agent as a hook it can only advise, because a hook cannot change a model. On the API route it can switch it for you.</span></span></div>
         </div>
         <div class="segwrap">
         <div class="segrow"><span class="seg-lbl">when it nears the limit</span><span class="f-k"><button class="q" type="button" aria-label="What is this?">?</button><span class="qtip">At three quarters of the spend limit, either pause and ask you, or stop the agent outright without asking.</span></span>
           <div class="seg"><button class="seg-b on" id="segEsc">Ask me</button><button class="seg-b dm" id="segDeny">Just stop it</button></div>
-        </div>
-        <div class="segrow"><span class="seg-lbl">on a model mismatch</span><span class="f-k"><button class="q" type="button" aria-label="What is this?">?</button><span class="qtip">Tell me leaves the choice to you. Switch it rewrites the request to the cheaper model, and only ever downgrades. That works on the API route, where the governor owns the request.</span></span>
-          <div class="seg"><button class="seg-b on" id="segSay">Tell me</button><button class="seg-b dm" id="segSwap">Switch it</button></div>
         </div>
         </div>
 
@@ -629,7 +610,7 @@ window.h = s => String(s ?? '').replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) 
   const $=id=>document.getElementById(id), LIVE=window.__GOVERNOR_LIVE__===true;
   const fmt=n=>n>=1e6?(n/1e6).toFixed(2)+'M':n>=1e3?(n/1e3).toFixed(1)+'k':String(Math.round(n));
   const cards={}; let allow=0,deny=0,esc=0;
-  const policy={enforcer:true,budget:true,loop:true,soft:'escalate',advise:true,enforceModel:false};
+  const policy={enforcer:true,budget:true,loop:true,soft:'escalate'};
   let BURN=2;   // per-agent dollars a minute, mirrored from the server
   $('modeTag').textContent = LIVE?'LIVE · governing your agents':'DEMO · simulated fleet';
   if (LIVE) $('modeTag').classList.add('live');
@@ -859,7 +840,6 @@ window.h = s => String(s ?? '').replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) 
         <div class="meter"><div class="fill"></div><div class="softmark" style="left:${(soft||.75)*100}%"></div></div></div>
       <div class="sparklbl">cost per action</div>
       <div class="sparkwrap"><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" aria-hidden="true"><g></g></svg></div>
-      <div class="a-advice"></div>
       <div class="a-foot"><div class="a-status"><span class="st-dot"></span><span class="stxt">working</span></div><span class="rate"></span><span class="a-left"></span><button class="kill">kill</button></div>`;
     $('fleet').appendChild(el);
     const c={el,budget:budget||200000,soft:soft||.75};
@@ -873,7 +853,7 @@ window.h = s => String(s ?? '').replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) 
     };
     cards[id]=c; return c;
   }
-  function paint(id, {tokens,budget,status,model,task,loopStreak,advice,burn,billing}){
+  function paint(id, {tokens,budget,status,model,task,loopStreak,burn,billing}){
     const c=card(id,model,budget); if(budget)c.budget=budget;
     if(model)c.model=model;
     if(task && task!==c.task){ c.task=task; const t=c.el.querySelector('.a-task'); t.textContent=task; t.classList.remove('idle'); }
@@ -894,14 +874,6 @@ window.h = s => String(s ?? '').replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) 
       }).join('');
     }
     c.el.querySelector('.amdl').textContent=c.model?' · '+c.model:'';
-    // Advice arrives on decisions and disappears when the mismatch is gone.
-    if(advice!==undefined){
-      const adv=c.el.querySelector('.a-advice');
-      if(advice){ adv.innerHTML='<span class="tag">Model suggestion</span>'
-        +(advice.cheaper?'A cheaper model would do: ':'This needs a stronger model: ')
-        +'<b>'+advice.label+'</b>. '+advice.why+'.'; adv.classList.add('show'); }
-      else adv.classList.remove('show');
-    }
     const pct=Math.min(100,tokens/c.budget*100);
     c.el.classList.remove('warn','esc','grounded','free');
     let cls='', txt='working';
@@ -961,11 +933,7 @@ window.h = s => String(s ?? '').replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) 
   function bump(v){ if(v==='allow')allow++;else if(v==='deny')deny++;else if(v==='escalate')esc++; $('mAllow').textContent=allow;$('mDeny').textContent=deny;$('mEsc').textContent=esc; }
   function onDecision(d){
     if(d.verdict==='gap'){ chip('gap',d.agent.id||d.agent,d.reason,null,null); paint(d.agent.id||d.agent,d.agent); return; }
-    // Pass advice through as-is. Coercing a missing key to null told paint to
-    // CLEAR the advice, so the once-a-second decisions wiped a recommendation
-    // a moment after it appeared. The server always sends an explicit null
-    // when it has no opinion, so clearing still happens when it should.
-    const a=d.agent; paint(a.id,{...a,model:d.model,task:d.task,advice:d.advice,billing:d.billing||''});
+    const a=d.agent; paint(a.id,{...a,model:d.model,task:d.task,billing:d.billing||''});
     chip(d.verdict,a.id,d.reason,d.receipt,d.entry&&d.entry.authority);
     bump(d.verdict);
     if(d.verdict==='escalate') openEsc(a);
@@ -1097,7 +1065,7 @@ window.h = s => String(s ?? '').replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) 
     catch{ spS.disabled=false; spS.textContent='Save these names'; }
   };
 
-  function pushConfig(){ if(!LIVE)return; fetch('/config',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({budgetOn:policy.budget,loopOn:policy.loop,softAction:policy.soft,adviseModel:policy.advise,enforceModel:policy.enforceModel})}).catch(()=>{}); }
+  function pushConfig(){ if(!LIVE)return; fetch('/config',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({budgetOn:policy.budget,loopOn:policy.loop,softAction:policy.soft})}).catch(()=>{}); }
   function syncSw(){ $('swBudget').classList.toggle('dis',!policy.enforcer); $('swLoop').classList.toggle('dis',!policy.enforcer); document.querySelectorAll('.seg').forEach(e=>e.style.opacity=policy.enforcer?'1':'.4'); document.body.classList.toggle('ungoverned',!policy.enforcer); }
   // Master switch. It MUST reach the server: turning it off only in the browser
   // leaves the screen saying "checks are off" while the governor keeps blocking,
@@ -1197,13 +1165,6 @@ window.h = s => String(s ?? '').replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) 
       : Math.max(+$(id).min, Math.min(+$(id).max, value));
     paintFader(id);
   }
-  $('swModel').onclick=()=>{ policy.advise=!policy.advise; $('swModel').classList.toggle('on',policy.advise);
-    if(!policy.advise){ policy.enforceModel=false; $('segSwap').classList.remove('on'); $('segSay').classList.add('on'); }
-    pushConfig(); };
-  // "Switch it" only does anything on the proxy path, where we own the request.
-  // A coding-agent hook cannot change the model, so on that route it stays advice.
-  $('segSay').onclick=()=>{policy.enforceModel=false;$('segSay').classList.add('on');$('segSwap').classList.remove('on');pushConfig();};
-  $('segSwap').onclick=()=>{policy.enforceModel=true;$('segSwap').classList.add('on');$('segSay').classList.remove('on');pushConfig();};
 
   $('verifyBtn').onclick=async()=>{ const b=$('verifyBtn'); b.textContent='checking...';
     if(LIVE){ try{ const r=await(await fetch('/verify')).json(); $('mChain').innerHTML=r.ok?`<span class="chainok">all ${r.receipts} match</span>`:`<span class="chainbad">do not match</span>`; b.textContent=r.ok?`All ${r.receipts} records check out`:'Records do not match'; }catch{ b.textContent='governor offline'; } }
@@ -1264,9 +1225,6 @@ window.h = s => String(s ?? '').replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) 
         mb.classList.toggle('esc', c.fleetBurnLimit>0 && c.fleetBurn>=c.fleetBurnLimit*0.6);
         fb.style.color = (c.fleetBurnLimit>0 && c.fleetBurn>=c.fleetBurnLimit*0.6) ? 'var(--esc)' : '';
       }
-      if(typeof c.adviseModel==='boolean'){ policy.advise=c.adviseModel; $('swModel').classList.toggle('on',c.adviseModel); }
-      if(typeof c.enforceModel==='boolean'){ policy.enforceModel=c.enforceModel;
-        $('segSwap').classList.toggle('on',c.enforceModel); $('segSay').classList.toggle('on',!c.enforceModel); }
       if(c.softAction){ policy.soft=c.softAction; $('segEsc').classList.toggle('on',c.softAction==='escalate'); $('segDeny').classList.toggle('on',c.softAction==='deny'); }
       if(c.models&&Object.keys(c.models).length){ MODELS=c.models; reKeys(); buildModelSelect(); }
       if(c.model&&MODELS[c.model]) modelKey=c.model;
@@ -1375,37 +1333,6 @@ window.__runDemo = (paint, onDecision, getPolicy, wire) => {
     out.scrollIntoView({block:'nearest',behavior:'smooth'});
   };
 
-  // The model check is the feature people do not know they want, and it was
-  // invisible here because the demo fleet never changed what it was doing.
-  // test-runner-05 now cycles through real work, and the advice follows the
-  // task rather than being pinned to the card: mechanical work on a top model
-  // asks to come down, reasoning work on a light one asks to go up, and
-  // ordinary work gets no opinion at all. That last state matters most: it is
-  // the proof this stays quiet unless it is sure.
-  const CYCLE=[
-    { task:"run the full suite and fix whatever fails", model:'claude-opus',
-      advice:{cheaper:true,  label:'Sonnet 5', why:'this looks like mechanical work, and Opus 5 costs 2.5x Sonnet 5'} },
-    { task:"work out why the payment webhook drops events under load", model:'claude-haiku',
-      advice:{cheaper:false, label:'Sonnet 5', why:'this looks like reasoning work, and Haiku 4.5 is a lighter model than Sonnet 5'} },
-    { task:"add the changelog entry for this release", model:'claude-sonnet',
-      advice:null },
-  ];
-  let cyc=0;
-  const advised=st['test-runner-05'];
-  setInterval(()=>{
-    if(!advised) return;
-    cyc=(cyc+1)%CYCLE.length;
-    const c=CYCLE[cyc];
-    advised.task=c.task; advised.model=c.model;
-    // The demo block does not share scope with the card registry, so find the
-    // element by the agent id it prints.
-    const el=[...document.querySelectorAll('.agent')].find(e=>e.querySelector('.aid')?.textContent==='test-runner-05');
-    if(el){ el.classList.add('reconsider'); setTimeout(()=>el.classList.remove('reconsider'),300); }
-    paint('test-runner-05',{tokens:advised.tokens,budget:advised.budget,status:advised.status,
-      model:c.model,task:c.task,loopStreak:advised.loopStreak||0,advice:c.advice});
-  }, 5200);
-  paint('test-runner-05',{tokens:0,budget:advised.budget,status:'active',
-    model:CYCLE[0].model,task:CYCLE[0].task,loopStreak:0,advice:CYCLE[0].advice});
   async function rcpt(a,verb,rule,authority){ const e={ts:Date.now(),agent:a.id,operator:'you@yourcompany.com',verdict:verb,reason:rule,tool:(a.lastTool||'Task'),model:a.model,tokens:Math.round(a.tokens)}; if(authority)e.authority=authority; const j=JSON.stringify(e); const h=await sha(prev+j); chain.push({j,h}); prev=h; return {verdict:verb,reason:rule,receipt:'rcpt_'+h.slice(0,12),agent:{id:a.id,tokens:Math.round(a.tokens),budget:a.budget,status:a.status,loopStreak:a.loopStreak||0},model:a.model,task:a.task,entry:e}; }
   function actionFor(a){ if(a.plan==='loop'&&a.tokens>a.budget*.32)return 'GET /page?id=42'; if(a.plan==='loop')return pick(['GET /list','parse','GET /page?id='+Math.floor(rand(1,40))]); return pick(STEADY); }
   async function step(a){

@@ -174,20 +174,6 @@ export function matchRule(rules, ev) {
   return null;
 }
 
-// ── Is this task worth the model that is answering it? ────────────────────
-//
-// Anthropic's own cost guidance names the two biggest causes of surprise
-// spend: long sessions that are never cleared, and a top-tier model left as
-// the default on work that does not need it.
-//
-// This is a HEURISTIC and is treated as one. A wrong downgrade produces worse
-// work, which costs more than the money it saves, so the rule is: only speak
-// up on a clear mechanical signal with NO reasoning signal, and stay silent on
-// anything ambiguous. Silence is the safe default here, not a guess.
-const MECHANICAL = /\b(?:re-?)?run(?:ning)? (?:the |all |every )?(?:\w+ )?(?:tests?|suite|build|linter)|npm (?:test|run build)|pytest|go test|cargo test|\blint(?:ing|er)?\b|prettier|gofmt|\btypos?\b|rename (?:the |this )?(?:variable|file|function|method)|bump the version|update the (?:changelog|readme|docs)|add a test for|fix the (?:formatting|indentation|imports?)/i;
-const REASONING  = /\b(?:why|design|architect(?:ure)?|debug|investigate|figure out|root cause|refactor|re-?architect|plan|approach|trade-?offs?|decide|strategy|should we|compare|evaluate|migrate)\b/i;
-
-// 'reasoning' | 'mechanical' | null (unknown -> say nothing)
 // Which client is this work for?
 //
 // An agency running five projects needs spend split by client, and the answer
@@ -218,62 +204,12 @@ export function clientFor(cwd, clients) {
   return parts.length ? '?' + parts[parts.length - 1] : '';
 }
 
-export function taskShape(task = '') {
-  const t = String(task || '');
-  if (!t.trim()) return null;
-  if (REASONING.test(t)) return 'reasoning';       // reasoning wins ties
-  if (MECHANICAL.test(t)) return 'mechanical';
-  return null;
-}
-
-// Named tiers, NOT "cheapest in the family". Sorting by price suggested
-// gpt-5-nano for a changelog bump -- a 100x saving on paper and useless in
-// practice, because nano cannot carry multi-step work. Advice moves ONE step,
-// to a model that can actually do the job.
-const TIERS = {
-  anthropic: { top: 'claude-opus-5',   mid: 'claude-sonnet-5',    low: 'claude-haiku-4-5' },
-  openai:    { top: 'gpt-5.6-sol',     mid: 'gpt-5.4',            low: 'gpt-5-mini' },
-  google:    { top: 'gemini-3.1-pro',  mid: 'gemini-3.5-flash',   low: 'gemini-2.5-flash-lite' },
-  xai:       { top: 'grok-4.6',        mid: 'grok-4.3',           low: 'grok-build-0.1' },
-};
-const tierOf = (key, t) => (t.top === key ? 'top' : t.mid === key ? 'mid' : t.low === key ? 'low' : null);
-
 // New agents in the last minute. Not a total: a team of twenty that started
 // this morning is a choice, twenty appearing in sixty seconds is a fan-out.
 export function spawnRate(state, now = Date.now()) {
   if (!state.spawns) return 0;
   const from = now - BURN_WINDOW;
   return state.spawns.reduce((n, s) => n + (s.t > from ? 1 : 0), 0);
-}
-
-// { suggest, label, ratio, why } or null when there is nothing worth saying.
-export function modelAdvice(model, shape) {
-  if (!shape) return null;
-  const me = priceOf(model);
-  const t = TIERS[me.p];
-  if (!t) return null;
-  // Anything off the named ladder (a Pro or a dated variant) is left alone
-  // rather than guessed at.
-  const here = tierOf(me.key, t);
-  if (!here) return null;
-
-  let suggest = null;
-  if (shape === 'mechanical' && here === 'top') suggest = t.mid;
-  else if (shape === 'mechanical' && here === 'mid') suggest = t.low;
-  else if (shape === 'reasoning' && here === 'low') suggest = t.mid;
-  else if (shape === 'reasoning' && here === 'mid') suggest = t.top;
-  if (!suggest || suggest === me.key) return null;
-
-  const to = MODELS[suggest];
-  const cheaper = to.in < me.in;
-  return {
-    suggest, label: to.label,
-    ratio: +(cheaper ? me.in / to.in : to.in / me.in).toFixed(1),
-    cheaper,
-    why: cheaper
-      ? `this looks like mechanical work, and ${me.label} costs ${+(me.in / to.in).toFixed(1)}x ${to.label}`
-      : `this looks like reasoning work, and ${me.label} is a lighter model than ${to.label}`,
-  };
 }
 
 export const DEFAULTS = {
@@ -316,10 +252,6 @@ export const DEFAULTS = {
   budgetOn: true,
   loopOn: true,
   rulesOn: true,      // capability rules: what it may DO
-  adviseModel: true,  // say when the model looks mismatched to the task
-  enforceModel: false,// rewrite the model on the proxy. Off by default: silently
-                      // changing someone's model is a big deal, and we can only
-                      // do it where we own the request (never for Claude Code).
   // Directory prefix -> client name. Map a folder once and every session in it
   // is attributed automatically. { "/Users/me/work/acme": "Acme Corp" }
   clients: {},
@@ -666,15 +598,7 @@ export function decide(state, ev, config = {}) {
     a.status = 'grounded';
     return record(state, a, 'deny', 'it passed the warn-me mark, and you set that to stop it', a.tokens);
   }
-  const r = record(state, a, 'allow', 'inside the limit, doing new work', a.tokens);
-  // Advisory only: it never changes the verdict, it just tells you the model
-  // and the job look mismatched. Enforcement happens only on the proxy, where
-  // we actually own the request.
-  if (cfg.adviseModel !== false) {
-    const advice = modelAdvice(a.model, taskShape(a.task || ev.task));
-    if (advice) r.advice = advice;
-  }
-  return r;
+  return record(state, a, 'allow', 'inside the limit, doing new work', a.tokens);
 }
 
 // Human resolves an escalation.

@@ -50,8 +50,7 @@ function readTranscript(path) {
       const id = m?.message?.id || m?.requestId;
       if (id) { if (counted.has(id)) continue; counted.add(id); }
       // Price each message at the model that ANSWERED it. A session that
-      // switched models part-way (which is exactly what this tool now suggests
-      // you do) is a mix, and pricing the whole transcript at whatever is
+      // switched models part-way is a mix, and pricing the whole transcript at whatever is
       // current mis-states it by the ratio between the two -- 1.7x between
       // Opus 5 and Sonnet 5.
       const eff = (u.input_tokens || 0) + 5 * (u.output_tokens || 0)
@@ -67,14 +66,13 @@ function readTranscript(path) {
   return out;
 }
 
-function emit(decision, reason, systemMessage) {
+function emit(decision, reason) {
   // decision: 'allow' | 'deny' | 'ask'
   const out = {
     hookEventName: 'PreToolUse',
     permissionDecision: decision,
     permissionDecisionReason: reason,
   };
-  if (systemMessage) out.systemMessage = systemMessage;
   process.stdout.write(JSON.stringify({ hookSpecificOutput: out }));
   process.exit(0);
 }
@@ -150,13 +148,6 @@ async function main() {
     }
     return emit('ask', `GVNR is checking with you: ${r.reason}. It has spent ${of}. `
       + `Allow it to keep going?`);
-  }
-  // A PreToolUse hook cannot change the model -- verified against the hooks
-  // docs -- so the honest move is to tell the human, who can switch with
-  // /model. systemMessage surfaces it without interrupting the work.
-  if (r.advice) {
-    return emit('allow', `GVNR: ${of}`,
-      `GVNR: ${r.advice.why}. Consider /model ${r.advice.suggest}.`);
   }
   return emit('allow', `GVNR: ${of}`);
 }

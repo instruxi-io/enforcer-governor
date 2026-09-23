@@ -8,7 +8,7 @@
 [![licence FSL-1.1-ALv2](https://img.shields.io/badge/licence-FSL--1.1--ALv2-blue)](LICENSE)
 [![node](https://img.shields.io/node/v/enforcer-governor)](https://nodejs.org)
 
-[![The Enforcer Governor dashboard: six agents working, spend per agent, a model suggestion, and the hash-chained receipt strip](docs/dashboard.png)](https://gvnr.io/console.html)
+[![The GVNR dashboard: six agents working, spend per agent against its cap, and the hash-chained receipt strip](docs/dashboard.png)](https://gvnr.io/console.html)
 
 *The dashboard, running the [live demo](https://gvnr.io/console.html) with a simulated fleet. Every agent shows what it was asked to do, what it has spent against its cap, and how long it can keep working. Each decision at the bottom is hash-chained to the one before it.*
 
@@ -25,7 +25,6 @@ AI agents burn tokens, and tokens are money. They get stuck in loops, repeat wor
 Every decision leaves a **tamper-evident receipt**, so you can always prove what your agents did and who approved what. Everything runs on your own computer with your own keys. Nothing is sent to us, ever.
 
 **See it in 10 seconds** (no install, simulated agents): **https://gvnr.io/console.html**
-
 
 Licensed [FSL-1.1-ALv2](LICENSE): free to run on your own agents, in production, commercially. Becomes Apache 2.0 two years after each release. Source-available rather than OSI open source, so it is described as free and self-hosted.
 ---
@@ -69,8 +68,6 @@ One thing: **Node.js**, a free tool most developers already have. Check by typin
 - **Errors per minute.** A rate-limited call fails cheaply; the retry after it does not. One report had 96% of attempts coming back rate limited while the wrapper kept paying for the rest.
 
 Each one **asks** rather than blocks, and asks once, so an overnight run stops and waits for you instead of dying or nagging.
-
-**The right model for the job.** Running the test suite on your most expensive model is the most common way to overspend without noticing. The governor reads the task the agent was actually given and says when the model looks mismatched, in either direction: a top-tier model on mechanical work, or a light one on work that needs reasoning. It moves one step at a time, along named tiers, and says nothing at all when the task is ambiguous, because a bad downgrade costs more in wasted work than it saves in tokens.
 
 It does **not** claim to detect hallucination. Nobody can do that reliably. It catches the mechanical waste that is actually detectable, and escalates the judgment calls to you.
 
@@ -195,8 +192,6 @@ Prices are the providers' published list rates. **On a flat subscription you are
 
 `softAction` is `"escalate"` (ask a human) or `"deny"` (auto-block at the soft cap). Everything is also flippable live from the dashboard switches.
 
-**Matching the model to the task** is on by default as advice (`adviseModel`). Set `enforceModel: true` and the governor will actually rewrite the request to the cheaper model on the proxy path, where it owns the request. It only ever downgrades: spending more of your money without asking is not its call. On the hook route it stays advice, because a hook cannot change the model, so the suggestion is surfaced to you and you switch yourself.
-
 ---
 
 ## When the budget runs out, finish somewhere cheaper
@@ -273,7 +268,6 @@ Everything is set from the **owner console** on the dashboard: one panel with a 
 - On subscription billing, dollar figures are estimates at list prices, labelled `est.`
 - The governor answers only this machine: loopback connections, local Host headers, and no cross-origin requests. Controls that loosen a limit (settings, approve, resume, remove) need a key that changes on every start and lives only in the dashboard page. That stops a stray `curl` or another website; an agent with a shell running as you could still load the dashboard and read the key. Against a deliberate adversary rather than an accident, run the agent in a container or VM and keep GVNR on the host.
 - If GVNR is not running, the hook lets actions through and says so, rather than breaking your agent.
-- Model matching is a heuristic on the wording of the task, so it stays quiet unless the signal is clear. It is advice everywhere except the proxy, where it can downgrade if you turn that on.
 
 ## Run the tests
 
