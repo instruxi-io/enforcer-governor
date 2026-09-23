@@ -215,6 +215,10 @@ console.log('  fleet-wide day/week/month caps ok');
     'deleting a tree asks a human');
   assert.equal(t('Bash', 'Bash:{"command":"git push --force origin main"}').verdict, 'escalate',
     'rewriting history asks a human');
+  // git takes the force flag after the remote and branch too, and a +refspec
+  // force-pushes with no flag. All three slipped through the first pattern.
+  for (const c of ['git push origin main --force', 'git push origin main -f', 'git push origin +main', 'git push --force-with-lease'])
+    assert.equal(t('Bash', `Bash:{"command":"${c}"}`).verdict, 'escalate', `${c} is a history rewrite`);
   assert.equal(t('Read', 'Read:{"file_path":"/app/.env"}').verdict, 'escalate',
     'credentials ask a human, on ANY tool not just Bash');
   assert.equal(t('Bash', 'Bash:{"command":"npm publish"}').verdict, 'escalate',
@@ -224,6 +228,8 @@ console.log('  fleet-wide day/week/month caps ok');
   assert.equal(t('Read', 'Read:{"file_path":"src/index.ts"}').verdict, 'allow', 'reading a source file is fine');
   assert.equal(t('Bash', 'Bash:{"command":"npm test"}').verdict, 'allow', 'running tests is fine');
   assert.equal(t('Bash', 'Bash:{"command":"git push origin main"}').verdict, 'allow', 'a normal push is fine');
+  assert.equal(t('Bash', 'Bash:{"command":"git push -u origin feature"}').verdict, 'allow', 'setting upstream is fine');
+  assert.equal(t('Bash', 'Bash:{"command":"git push origin main && ls -f"}').verdict, 'allow', 'a later command\'s -f is not the push\'s');
 
   // Every action gets its own answer -- no blanket approval.
   const s = makeState();

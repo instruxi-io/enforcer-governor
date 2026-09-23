@@ -127,7 +127,10 @@ export const DEFAULT_RULES = [
   { name: 'delete a whole tree', tool: 'Bash',
     match: 'rm\\s+(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r)', action: 'ask' },
   { name: 'rewrite git history', tool: 'Bash',
-    match: 'push\\s+(--force|-f)\\b|reset\\s+--hard|filter-branch', action: 'ask' },
+    // The force flag can sit anywhere after `push` (git accepts it after the
+    // remote and branch), and a +refspec force-pushes with no flag at all.
+    // Stop at a shell separator so a later command's flags are not blamed on it.
+    match: 'push\\b[^|;&]*?\\s(--force(-with-lease|-if-includes)?|-f)\\b|push\\b[^|;&]*?\\s\\+[\\w./-]|reset\\s+--hard|filter-branch', action: 'ask' },
   { name: 'read or write credentials', tool: '',
     match: '\\.env\\b|id_rsa|\\.pem\\b|credentials\\.json|\\.aws/|\\.ssh/', action: 'ask' },
   { name: 'publish or deploy', tool: 'Bash',
