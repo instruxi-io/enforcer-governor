@@ -48,7 +48,10 @@ function loadConfig() {
   if (process.env.GOVERNOR_OPERATOR) cfg.operator = process.env.GOVERNOR_OPERATOR;
   syncBudget(cfg);
   // Explicit token budget still wins, for anyone who really does think in tokens.
-  if (process.env.GOVERNOR_BUDGET) cfg.budget = +process.env.GOVERNOR_BUDGET;
+  // It is kept apart from the derived one, because every agent's budget is
+  // recomputed from dollars and its own model, and that recompute used to throw
+  // the explicit figure away: the banner said 50,000 tokens, agents got 4 million.
+  if (process.env.GOVERNOR_BUDGET) cfg.budget = cfg.budgetTokens = +process.env.GOVERNOR_BUDGET;
   if (process.env.GOVERNOR_PORT) cfg.port = +process.env.GOVERNOR_PORT;
   return cfg;
 }
@@ -57,6 +60,7 @@ function loadConfig() {
 // at each agent's OWN model price. A flat token cap would silently give a
 // Haiku agent a quarter of the money an Opus agent gets.
 function budgetFor(a) {
+  if (CONFIG.budgetTokens > 0) return CONFIG.budgetTokens;
   return tokensForDollars(CONFIG.dollars, priceOf(a.model, CONFIG.model).in);
 }
 
@@ -400,7 +404,9 @@ async function handle(req, res) {
     }
     // Raising the limit has to affect the agent already running, not just the
     // next one. Without this, changing it mid-session looks like a dead control.
-    if ('dollars' in patch || 'model' in patch) {
+    if ('budget' in patch) CONFIG.budgetTokens = +patch.budget > 0 ? +patch.budget : 0;
+    else if ('dollars' in patch) CONFIG.budgetTokens = 0;
+    if ('dollars' in patch || 'model' in patch || 'budget' in patch) {
       if (!('budget' in patch)) syncBudget(CONFIG);
       for (const a of Object.values(state.agents)) {
         // A limit a human deliberately raised must survive a config change.
@@ -539,7 +545,9 @@ server.listen(CONFIG.port, () => {
     console.log(`\n  Point any agent at this address: OPENAI_BASE_URL=${url}/v1`);
   });
   const r = priceOf(CONFIG.model);
-  console.log(`\n  Spend limit: $${CONFIG.dollars} per agent at ${r.label} rates (${CONFIG.budget.toLocaleString()} tokens), it checks with you at ${Math.round(CONFIG.soft * 100)}%.`);
+  console.log(CONFIG.budgetTokens > 0
+    ? `\n  Spend limit: ${CONFIG.budgetTokens.toLocaleString()} tokens per agent (GOVERNOR_BUDGET), it checks with you at ${Math.round(CONFIG.soft * 100)}%.`
+    : `\n  Spend limit: $${CONFIG.dollars} per agent at ${r.label} rates (${CONFIG.budget.toLocaleString()} tokens), it checks with you at ${Math.round(CONFIG.soft * 100)}%.`);
   console.log(`  Change it in the dashboard, no restart needed.`);
   const caps = [['a day', CONFIG.dailyLimit], ['a week', CONFIG.weeklyLimit], ['a month', CONFIG.monthlyLimit]]
     .filter(([, v]) => v > 0).map(([w, v]) => `$${v} ${w}`);

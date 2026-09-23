@@ -38,7 +38,25 @@ jobs:
           fi
           echo "version $PKG"
 
+      # Skip, rather than fail, when there is nothing this run can do: the
+      # version is already on npm (it was published by hand), or no NPM_TOKEN
+      # is set yet. A red X on every release said "broken" when nothing was.
+      - name: decide whether to publish
+        id: gate
+        env:
+          HAS_TOKEN: ${{ secrets.NPM_TOKEN != '' }}
+        run: |
+          PKG="$(node -p "require('./package.json').name + '@' + require('./package.json').version")"
+          if npm view "$PKG" version >/dev/null 2>&1; then
+            echo "$PKG is already on npm, nothing to publish"; echo "go=false" >> "$GITHUB_OUTPUT"
+          elif [ "$HAS_TOKEN" != "true" ]; then
+            echo "::notice::NPM_TOKEN is not set, so $PKG was not published with provenance"; echo "go=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: publish with provenance
+        if: steps.gate.outputs.go == 'true'
         run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

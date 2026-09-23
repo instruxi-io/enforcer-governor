@@ -186,3 +186,22 @@ console.log('receipts survive a restart and fail loudly on edits and deletions o
     console.log('a reroute leaves a receipt chain that verifies on disk ok');
   } finally { gov.kill(); upstream.close(); }
 }
+
+// An explicit token budget has to reach the agents. Every agent's budget is
+// recomputed from dollars and its model, and that used to discard it: the
+// banner said 50,000 tokens while agents were allowed four million.
+{
+  const { spawn } = await import('node:child_process');
+  const home = mkdtempSync(join(tmpdir(), 'gov-budget-'));
+  const port = 48000 + Math.floor(Math.random() * 900);
+  const gov = spawn(process.execPath, ['src/governor.mjs', 'start', '--no-open'],
+    { env: { ...process.env, HOME: home, GOVERNOR_PORT: String(port), GOVERNOR_BUDGET: '50000' }, stdio: 'ignore' });
+  try {
+    for (let i = 0; i < 60; i++) { try { await fetch(`http://localhost:${port}/verify`); break; } catch { await new Promise(r => setTimeout(r, 100)); } }
+    const d = b => fetch(`http://localhost:${port}/decide`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(b) }).then(r => r.json());
+    assert((await d({ agent: 'ci', tokens: 100, action: 'a' })).verdict === 'allow', 'under an explicit token budget is allowed');
+    const over = await d({ agent: 'ci', tokens: 60000, action: 'b' });
+    assert(over.verdict === 'deny', `over GOVERNOR_BUDGET must be denied, got ${over.verdict} with budget ${over.agent && over.agent.budget}`);
+    console.log('GOVERNOR_BUDGET caps every agent at that many tokens ok');
+  } finally { gov.kill(); }
+}
