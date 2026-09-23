@@ -10,7 +10,7 @@ import { join } from 'node:path';
 const home = mkdtempSync(join(tmpdir(), 'gov-login-'));
 process.env.HOME = home; process.env.ENFORCER_HOME = join(home, '.enforcer'); process.env.GOVERNOR_HOME = join(home, '.g');
 
-const { browserSignIn, pkce, resourcesFor } = await import('../bin/login.mjs');
+const { browserSignIn, pkce, resourcesFor, requestedScope } = await import('../bin/login.mjs');
 let pass = 0;
 const ok = async (label, fn) => { await fn(); pass++; console.log('  ok  ' + label); };
 const b64url = (b) => b.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -44,6 +44,14 @@ const as = createServer(async (req, res) => {
 });
 await new Promise((r) => as.listen(0, '127.0.0.1', r));
 const base = `http://127.0.0.1:${as.address().port}`;
+
+await ok('asks for every scope the server advertises, and read-only when it advertises none', () => {
+  // The ceiling a self-registered client gets is the advertised list; asking
+  // for a fixed subset silently threw the graph's write scopes away.
+  assert.equal(requestedScope({ scopes_supported: ['enforcer:read', 'enforcer:graph-runs.write'] }), 'enforcer:read enforcer:graph-runs.write');
+  assert.equal(requestedScope({}), 'enforcer:read');
+  assert.equal(requestedScope({ scopes_supported: [] }), 'enforcer:read');
+});
 
 await ok('signs in: register, authorize, loopback redirect, redeem with the verifier', async () => {
   const want = ['https://api.example.test', 'https://api.example.test/mcp'];
