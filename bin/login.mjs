@@ -22,6 +22,12 @@ const API = '/api/v1/enforcer';
 const b64url = (buf) => buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const out = (s) => process.stdout.write(s + '\n');
 
+/** The scope to ask for: everything the server advertises, or read-only. */
+export function requestedScope(meta) {
+  const s = Array.isArray(meta?.scopes_supported) ? meta.scopes_supported.filter((x) => typeof x === 'string' && x.trim()) : [];
+  return s.length ? s.join(' ') : 'enforcer:read';
+}
+
 export async function discover(base, fetchImpl = fetch) {
   const r = await fetchImpl(`${base}/.well-known/oauth-authorization-server`, { signal: AbortSignal.timeout(10_000) });
   if (!r.ok) throw new Error(`no OAuth metadata at ${base} (HTTP ${r.status})`);
@@ -44,13 +50,18 @@ function openBrowser(url) {
  * `resource` is the RFC 8707 audience the token is for; `onUrl` receives the
  * authorization URL (printed and opened by the CLI, captured by the tests).
  */
-export async function browserSignIn({ base, resource, resources, scope = 'enforcer:read', fetchImpl = fetch, onUrl, timeoutMs = 5 * 60_000 }) {
+export async function browserSignIn({ base, resource, resources, scope, fetchImpl = fetch, onUrl, timeoutMs = 5 * 60_000 }) {
   // RFC 8707 lets one token name several resources. Asking for Enforcer's API
   // AND its MCP server is what makes this one sign-in serve both the governor
   // (which calls the API) and the MCP server (which serves tools): each server
   // accepts a token that names it.
   const wanted = [...new Set((resources || (resource ? [resource] : [])).filter(Boolean))];
   const meta = await discover(base, fetchImpl);
+  // Ask for what the server advertises, not a fixed list. A self-registered
+  // client's ceiling IS that list, so asking for less only threw scopes away:
+  // this sign-in asked for enforcer:read alone for weeks after the server began
+  // granting the graph's write scopes, and every graph tool refused the token.
+  scope = scope || requestedScope(meta);
   const { verifier, challenge } = pkce();
   const state = b64url(randomBytes(16));
 
