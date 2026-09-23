@@ -31,19 +31,20 @@ Licensed [FSL-1.1-ALv2](LICENSE): free to run on your own agents, in production,
 
 ## Where this sits
 
-Spend caps are no longer unique, and it would be dishonest to imply otherwise. Anthropic ships usage-credit limits at organization, group and member level, workspace spend limits on the Console, and a self-hosted gateway with per-user caps that block requests. Third-party tools cap Claude Code spend per session, day, week and month.
+Spend caps are no longer unique, and it would be dishonest to imply otherwise. Model providers ship usage limits at organisation, workspace and member level, and hosted services stop spend before the call, some of them by the minute.
 
-What none of them do is decide **whether an action is allowed at all**:
+Two kinds of tool get close, and each covers half. **Spend tools** stop the money but have no opinion on what the agent is doing. **Command guards** block the dangerous command but never look at the money. GVNR does both in one local install, and keeps a receipt of every decision:
 
-| | Sees spend | Stops spend | Gates the ACTION | Names who it acted for | Tamper-evident |
+| | Stops spend before the call | Limits the rate | Gates the action | Runs where | Record |
 |---|---|---|---|---|---|
-| Provider dashboards | after the fact | no | no | no | no |
-| Observability tools (Helicone, Langfuse, ccusage) | yes | no | no | no | logs, editable |
-| LLM gateways (LiteLLM, Portkey) | yes | hard cutoff | no | per key | logs, editable |
-| Native and third-party spend caps | yes | yes | **no** | no | no |
-| **Enforcer Governor** | **live** | **per agent and per fleet** | **yes, before it runs** | **yes** | **hash-chained** |
+| Provider limits | at a set total | no | no | the provider | usage reports |
+| Observability tools | no, they report | no | no | hosted or local | logs |
+| LLM gateways | yes, per key | configurable | no | self-hosted or hosted | logs |
+| Hosted spend caps | yes | some | no | their cloud | varies |
+| Command guards | no | no | yes, before it runs | your machine | not their focus |
+| **GVNR** | **yes, per agent and per fleet** | **yes, on by default** | **yes, before it runs (Claude Code hook)** | **your machine** | **hash-chained receipts** |
 
-A spend cap answers "can it afford this?". It has no opinion on `curl | sh`, on `rm -rf`, or on reading your `.env`, all of which are cheap. This asks the question Enforcer asks everywhere else: is this actor permitted to do this, right now, and who authorised it.
+A spend cap answers "can it afford this?". It has no opinion on `curl | sh`, on `rm -rf`, or on reading your `.env`, all of which are cheap. A command guard answers "is this dangerous?" and never notices a session fanning out into fifty subagents at $400 a minute. GVNR asks both, on the same action, before it runs.
 
 ---
 
