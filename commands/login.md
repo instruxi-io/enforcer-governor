@@ -1,5 +1,5 @@
 ---
-description: Sign this machine in to Enforcer, once, for the governor and the Enforcer MCP server
+description: Sign this machine in to Enforcer, once — the same sign-in as /enforcer:login
 argument-hint: [browser | api-key <key> | status | logout]
 allowed-tools: Bash(node:*)
 ---

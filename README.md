@@ -16,11 +16,14 @@ Every decision is appended to a hash-chained record. Edit or delete a single lin
 ## Install
 
 ```
-/plugin marketplace add instruxi-io/enforcer-governor
+/plugin marketplace add instruxi-io/claude-plugins
+/plugin install enforcer@instruxi
 /plugin install enforcer-governor@instruxi
 ```
 
-That brings the enforcement: the hooks, the capability rules, and the eight slash commands. `/plugin disable enforcer-governor` removes them just as cleanly. There is no daemon to start. The governor keeps its own state under `~/.enforcer-governor/` and a small shared file under `~/.enforcer/`; it writes to your `~/.claude/settings.json` only when you ask it to, with `/enforcer-governor:telemetry on`.
+Then restart Claude Code and sign in once with `/enforcer:login`. The `enforcer` plugin is the connection to your Enforcer workspace (its MCP server and the sign-in); the governor works without it, deciding and recording locally, but has no tenant policy to ask and nowhere to send receipts.
+
+The governor brings the enforcement: the hooks, the capability rules, and the eight slash commands. `/plugin disable enforcer-governor` removes them just as cleanly. There is no daemon to start. The governor keeps its own state under `~/.enforcer-governor/` and a small shared file under `~/.enforcer/`; it writes to your `~/.claude/settings.json` only when you ask it to, with `/enforcer-governor:telemetry on`.
 
 Two pieces cannot arrive that way, because Claude Code does not let a plugin ship either one: a plugin's `settings.json` honours only the `agent` and `subagentStatusLine` keys, and everything else is ignored without a word. Both are a single paste into your own `~/.claude/settings.json`, and the governor enforces correctly without either.
 
@@ -76,7 +79,7 @@ deny contains "ask: publishing from an agent needs a person to confirm" if {
 }
 ```
 
-**One sign-in for the governor and the Enforcer MCP server.** The plugin registers the Enforcer MCP server with a `headersHelper` that reads the same credential the hooks use, `~/.enforcer/credentials.json` (0600). Sign in once and both are signed in; sign out once and both stop sending a credential. If you already added the Enforcer MCP server by hand, remove that entry so its tools do not appear twice.
+**One sign-in for the governor and the Enforcer MCP server.** The MCP server comes with the `enforcer` plugin from the same marketplace (`/plugin install enforcer@instruxi`), not with the governor; until 2.6.0 the governor shipped its own copy. Both read the same credential, `~/.enforcer/credentials.json` (0600), so `/enforcer:login` and `/enforcer-governor:login` are the same sign-in: sign in once and both are signed in, sign out once and both stop sending a credential.
 
 **A spend limit that means dollars.** `/enforcer-governor:limit 40` sets $40 per agent. Claude prices each model at its own rate, so $40 is $40 whether the agent is on Opus 5 or Haiku 4.5. Where the harness figure is unavailable the cap falls back to cost-weighted effective tokens, because cached sessions re-read their whole context every turn and raw token counts explode while costing very little.
 
@@ -98,7 +101,7 @@ deny contains "ask: publishing from an agent needs a person to confirm" if {
 | `/enforcer-governor:resume [agent]` | run a stopped agent again, with room to finish |
 | `/enforcer-governor:config [--why]` | every setting, what it does, and which you have changed |
 | `/enforcer-governor:set <name> <value>` | change one, with validation |
-| `/enforcer-governor:login [api-key <key> \| status \| logout]` | sign in to Enforcer for the governor and the MCP server; no argument opens a browser |
+| `/enforcer-governor:login [api-key <key> \| status \| logout]` | sign in to Enforcer, the same sign-in as `/enforcer:login`; no argument opens a browser |
 | `/enforcer-governor:telemetry [on \| off \| status]` | send Claude Code's own OpenTelemetry (cost, tokens, tool use — never prompt text) to your Enforcer workspace; writes the `OTEL_*` exporter settings into `~/.claude/settings.json` |
 
 ### Getting out of the way
