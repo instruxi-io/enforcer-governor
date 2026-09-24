@@ -17,37 +17,24 @@ jobs:
       - name: manifests are valid JSON
         run: |
           node -e 'JSON.parse(require("fs").readFileSync(".claude-plugin/plugin.json"))'
-          node -e 'JSON.parse(require("fs").readFileSync(".claude-plugin/marketplace.json"))'
           node -e 'JSON.parse(require("fs").readFileSync("hooks/hooks.json"))'
           node -e 'JSON.parse(require("fs").readFileSync("settings.json"))'
 
-      # The install goes through the marketplace catalog, so parsing it is not
-      # enough: the entry has to name a plugin that is actually there. A source
-      # path that stops resolving breaks every new install while every existing
-      # one keeps working, which is the kind of break nobody notices for weeks.
-      - name: the marketplace entry resolves to a real plugin
+      # This repo is not a marketplace: the governor is installed from the
+      # Instruxi catalog (instruxi-io/claude-plugins), which pins a tag here and
+      # checks that its entries resolve. What stays here is the manifest itself.
+      - name: the plugin manifest is sound
         run: |
           node -e '
-            const fs = require("fs"), path = require("path");
+            const fs = require("fs");
             const fail = m => { console.error("FAIL: " + m); process.exit(1); };
-            const m = JSON.parse(fs.readFileSync(".claude-plugin/marketplace.json", "utf8"));
-            if (!m.name) fail("marketplace needs a name");
-            if (!m.owner || !m.owner.name) fail("marketplace needs an owner.name");
-            if (!Array.isArray(m.plugins) || !m.plugins.length) fail("marketplace lists no plugins");
-            for (const p of m.plugins) {
-              if (!p.name) fail("a plugin entry has no name");
-              if (typeof p.source !== "string") continue;          // remote sources cannot be checked here
-              if (p.source.includes("..")) fail(`${p.name}: source must stay inside the marketplace root`);
-              const root = path.join(m.metadata?.pluginRoot || ".", p.source);
-              const manifest = path.join(root, ".claude-plugin", "plugin.json");
-              if (!fs.existsSync(manifest)) fail(`${p.name}: no plugin.json at ${manifest}`);
-              const own = JSON.parse(fs.readFileSync(manifest, "utf8"));
-              if (own.name !== p.name) fail(`${p.name}: plugin.json calls itself ${own.name}`);
-              // A plugin cannot declare a status line; Claude Code ignores the
-              // field. Catch it here so it never gets added back believing it works.
-              if (own.statusLine) fail(`${p.name}: statusLine is not a manifest field and is ignored at load`);
-              console.log(`${p.name} -> ${root} ok`);
-            }
+            const own = JSON.parse(fs.readFileSync(".claude-plugin/plugin.json", "utf8"));
+            if (own.name !== "enforcer-governor") fail(`plugin.json calls itself ${own.name}`);
+            if (fs.existsSync(".claude-plugin/marketplace.json")) fail("this repo must not be a marketplace: a second one named instruxi would shadow the catalog");
+            // A plugin cannot declare a status line; Claude Code ignores the
+            // field. Catch it here so it never gets added back believing it works.
+            if (own.statusLine) fail("statusLine is not a manifest field and is ignored at load");
+            console.log("enforcer-governor plugin.json ok");
           '
       - name: every hook answers on stdout and exits 0
         run: |
