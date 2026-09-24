@@ -1,6 +1,6 @@
 {
   "name": "enforcer-governor",
-  "version": "0.29.4",
+  "version": "0.30.0",
   "description": "GVNR: stops AI agents overspending and running dangerous commands, before the action runs. Per-minute spend caps, allow/deny/escalate on every action, hash-chained receipts, MCP server. Free, self-hosted. Formerly Enforcer Governor.",
   "type": "module",
   "bin": {
@@ -9,7 +9,7 @@
   "scripts": {
     "start": "node src/governor.mjs",
     "install-hook": "node src/cli.mjs install-hook",
-    "test": "node test/policy.test.mjs && node test/receipts.test.mjs && node test/mcp.test.mjs"
+    "test": "node test/policy.test.mjs && node test/receipts.test.mjs && node test/mcp.test.mjs && node test/telemetry.test.mjs"
   },
   "files": [
     "src",

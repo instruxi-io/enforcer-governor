@@ -275,6 +275,15 @@ Everything is set from the **owner console** on the dashboard: one panel with a 
 - GVNR answers only this machine: loopback connections, local Host headers, and no cross-origin requests. Controls that loosen a limit (settings, approve, resume, remove) need a key that changes on every start and lives only in the dashboard page. That stops a stray `curl` or another website; an agent with a shell running as you could still load the dashboard and read the key. Against a deliberate adversary rather than an accident, run the agent in a container or VM and keep GVNR on the host.
 - If GVNR is not running, the hook lets actions through and says so, rather than breaking your agent.
 
+## Privacy: anonymous usage counts (off by default)
+
+GVNR sends nothing unless you switch on anonymous usage counts, in the dashboard or with `npx enforcer-governor telemetry on`. When on, it sends at most one small message a day to `gvnr.io/api/t`: a random install ID made on your machine, the GVNR version, your operating system, and whether it checked any agent actions that day. Never your code, commands, file paths, agent names, prompts or spend. Receipts never leave your machine.
+
+- Automated machines (`CI`, GitHub Actions and similar) and `DO_NOT_TRACK=1` never send, whatever the setting. `GVNR_TELEMETRY=0` does the same.
+- After two weeks the dashboard may ask one question: how you would feel if you could no longer use GVNR. Your answer is sent only if you press Send.
+- `npx enforcer-governor telemetry` shows the current setting; `telemetry off` switches it off.
+- The code is [`src/telemetry.mjs`](src/telemetry.mjs), and `test/telemetry.test.mjs` checks the exact fields sent.
+
 ## Run the tests
 
 ```bash

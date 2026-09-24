@@ -6,12 +6,12 @@
     "url": "https://github.com/instruxi-io/enforcer-governor",
     "source": "github"
   },
-  "version": "0.29.4",
+  "version": "0.30.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "enforcer-governor",
-      "version": "0.29.4",
+      "version": "0.30.0",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"

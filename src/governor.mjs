@@ -8,6 +8,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { handoffRequest, resumeWith, postJSON, HANDOFF_OPTS, RESUME_OPTS } from './handoff.mjs';
+import * as usage from './telemetry.mjs';
 import { makeState, decide, resolve, kill, release, verifyChain, getAgent, setModel, record, rollPeriods, burnRate, spawnRate, clientFor, sha256, priceOf, dollarsForTokens, weightsFor, MODELS, DEFAULTS, DEFAULT_RULES, tokensForDollars } from './policy.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
@@ -201,7 +202,9 @@ const localHost = (req) => {
 // key, as the same user it can do anything the dashboard can. Against a
 // deliberate adversary, isolate the agent; this closes the easy doors.
 const CONTROL_KEY = randomBytes(24).toString('hex');
-const LOOSENING = new Set(['/config', '/approve', '/release', '/uninstall', '/clients']);
+// Switching usage counts on, or sending a survey answer, is the person's choice, so it
+// needs the dashboard's key too: an agent cannot opt anyone in behind their back.
+const LOOSENING = new Set(['/config', '/approve', '/release', '/uninstall', '/clients', '/telemetry', '/survey']);
 // Names shown on the dashboard and written to the CSV come from callers, so
 // they are cut to plain characters here, once, before anything stores them.
 const cleanName = (v, max = 96) => typeof v === 'string'
@@ -368,6 +371,7 @@ async function handle(req, res) {
     if (ev.task) a.task = ev.task;
     if (!a.budgetRaised) a.budget = budgetFor(a);
     const r = decide(state, ev, CONFIG);
+    usage.noteDecision();
     broadcast('decision', { ...r, model: ev.model || '', task: ev.task || '', billing: ev.billing || '' });
     await persist(r);
     return json(res, 200, r);
@@ -429,6 +433,18 @@ async function handle(req, res) {
     return json(res, 200, snapshot().config);
   }
   if (req.method === 'GET' && path === '/state') return json(res, 200, snapshot());
+  // Anonymous usage counts (off unless switched on) and the in-dashboard survey.
+  if (req.method === 'GET' && path === '/telemetry') return json(res, 200, usage.status());
+  if (req.method === 'POST' && path === '/telemetry') {
+    const { on } = JSON.parse((await readBody(req)).toString() || '{}');
+    const st = usage.set(on === true);
+    if (st.on) usage.tick().catch(() => {});
+    return json(res, 200, st);
+  }
+  if (req.method === 'POST' && path === '/survey') {
+    const { answer, benefit } = JSON.parse((await readBody(req)).toString() || '{}');
+    return json(res, 200, await usage.survey(answer, typeof benefit === 'string' ? benefit : ''));
+  }
   // The record, as a spreadsheet. Every field an audit asks for, one row per
   // decision, plus the chain verdict in the filename so the file cannot be
   // passed off as verified when it was not.
@@ -532,7 +548,11 @@ async function handle(req, res) {
 // Listening is opt-in, so importing this file (a test, a tool) does not start a
 // daemon and grab port 4000 as a side effect of the import.
 export function start() {
+usage.init();
 server.listen(CONFIG.port, () => {
+  // Checks hourly; sends at most once a day, and only if the person switched counts on.
+  usage.tick().catch(() => {});
+  setInterval(() => usage.tick().catch(() => {}), 36e5).unref();
   const url = `http://localhost:${CONFIG.port}`;
   console.log(`\n  GVNR (Enforcer Governor) is running.`);
   console.log(`\n  Your dashboard:  ${url}  (opening it now)`);

@@ -408,6 +408,18 @@
     font-family:var(--mono,monospace);font-size:12.5px;letter-spacing:.06em;color:#04240F;background:#43BE74;
     padding:10px 18px;border-radius:0;box-shadow:0 14px 40px -12px rgba(67,190,116,.8);animation:flashIn .3s cubic-bezier(.34,1.5,.5,1)}
   @keyframes flashIn{from{opacity:0;transform:translate(-50%,-8px)}to{opacity:1;transform:translate(-50%,0)}}
+  /* Usage counts and the survey. Asked once, answered in a click, never in the way. */
+  .ask{border:1px solid var(--line);background:var(--panel);padding:14px 16px;margin:0 0 14px;display:grid;gap:10px;}
+  .ask-t{font-family:var(--sans);font-size:14px;font-weight:600;color:var(--ink);}
+  .ask-p{font-size:12.5px;line-height:1.6;color:var(--dim);max-width:78ch;margin:0;}
+  .ask-b{display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
+  .ask-go,.ask-no,.ask-opt{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;padding:8px 14px;cursor:pointer;border:1px solid var(--line);background:none;color:var(--dim);}
+  .ask-go{color:var(--bg);background:var(--teal);border-color:var(--teal);}
+  .ask-go:disabled{opacity:.4;cursor:default;}
+  .ask-opt[aria-pressed="true"]{color:var(--ink);border-color:var(--teal);background:rgba(0,212,170,.12);}
+  .ask-go:focus-visible,.ask-no:focus-visible,.ask-opt:focus-visible{outline:2px solid var(--teal);outline-offset:2px;}
+  .ask input{font:inherit;font-size:13px;background:var(--bg);color:var(--ink);border:1px solid var(--line);padding:8px 10px;width:100%;max-width:520px;}
+  .ask-done{font-family:var(--mono);font-size:11.5px;color:var(--allow);}
 </style>
 </head>
 <body>
@@ -439,6 +451,23 @@
       <button class="sp-x" id="spDismiss">Not now</button></div>
     <div class="sp-rows" id="spRows"></div>
     <button class="sp-go" id="spSave">Save these names</button>
+  </div>
+  <div class="ask" id="usageAsk" hidden>
+    <div class="ask-t">Help make GVNR better?</div>
+    <p class="ask-p">Share anonymous usage counts: <span id="usageWhat"></span> You can switch this off at the bottom of the page.</p>
+    <div class="ask-b"><button class="ask-go" id="usageYes">Share anonymous counts</button><button class="ask-no" id="usageNo">No thanks</button></div>
+  </div>
+  <div class="ask" id="surveyAsk" hidden>
+    <div class="ask-t">How would you feel if you could no longer use GVNR?</div>
+    <div class="ask-b" id="surveyOpts">
+      <button class="ask-opt" data-a="very" aria-pressed="false">Very disappointed</button>
+      <button class="ask-opt" data-a="somewhat" aria-pressed="false">Somewhat disappointed</button>
+      <button class="ask-opt" data-a="not" aria-pressed="false">Not disappointed</button>
+    </div>
+    <label class="ask-p" for="surveyBenefit">What is the main benefit you get from GVNR? (optional)</label>
+    <input id="surveyBenefit" maxlength="280" autocomplete="off">
+    <div class="ask-b"><button class="ask-go" id="surveySend" disabled>Send</button><button class="ask-no" id="surveyLater">Not now</button><span class="ask-done" id="surveyDone"></span></div>
+    <p class="ask-p">Sends your answer and a random ID. Nothing else.</p>
   </div>
   <div class="fleet-h"><span class="lbl">Your agents</span><span class="hint" id="fleetHint"></span></div>
   <div class="fleet" id="fleet"></div>
@@ -580,6 +609,11 @@
       <p class="exit-p">This removes GVNR from your agent's settings and stops every check straight away. Nothing you have already recorded is deleted, and your agents carry on working normally. You can put it back any time with one command.</p>
       <button class="exitbtn" id="exitBtn">Remove GVNR</button>
       <span class="exit-done" id="exitDone"></span>
+    </div>
+    <div class="exit" id="usageRow" hidden>
+      <div class="exit-t">Anonymous usage counts</div>
+      <p class="exit-p" id="usageRowP"></p>
+      <button class="ask-no" id="usageToggle"></button>
     </div>
   </section>
 </div>
@@ -1412,6 +1446,42 @@ window.__runDemo = (paint, onDecision, getPolicy, wire) => {
     if(window.__demoHold){ await wait(300); continue; }
     for(const a of AG){ await step(st[a.id]); await wait(red?260:120); } await wait(red?1400:850); } })();
 };
+</script>
+<script>
+// Usage counts (off unless switched on) and the two-week survey. Live mode only.
+(() => {
+  if (window.__GOVERNOR_LIVE__ !== true) return;
+  const $ = id => document.getElementById(id), DAY = 864e5;
+  const post = (u, b) => fetch(u, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(b) }).then(r => r.json());
+  const later = () => { try { return +localStorage.getItem('gvnr-survey-later') || 0; } catch { return 0; } };
+  let st;
+  const paint = () => {
+    $('usageWhat').textContent = st.sends;
+    $('usageAsk').hidden = st.asked || !!st.blocked;
+    $('usageRow').hidden = false;
+    $('usageRowP').textContent = (st.on ? 'On. ' : 'Off. ') + st.sends + (st.blocked ? ' Not sending here: ' + st.blocked + '.' : '');
+    $('usageToggle').textContent = st.on ? 'Switch off' : 'Switch on';
+    const now = Date.now();
+    $('surveyAsk').hidden = !(now - st.firstRun > 14 * DAY && now - st.surveyedAt > 90 * DAY && now - later() > 7 * DAY);
+  };
+  const choose = async on => { try { st = await post('/telemetry', { on }); paint(); } catch {} };
+  $('usageYes').onclick = () => choose(true);
+  $('usageNo').onclick = () => choose(false);
+  $('usageToggle').onclick = () => choose(!st.on);
+  let answer = '';
+  document.querySelectorAll('#surveyOpts .ask-opt').forEach(b => b.onclick = () => {
+    answer = b.dataset.a;
+    document.querySelectorAll('#surveyOpts .ask-opt').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    $('surveySend').disabled = false;
+  });
+  $('surveySend').onclick = async () => {
+    $('surveySend').disabled = true;
+    try { await post('/survey', { answer, benefit: $('surveyBenefit').value }); $('surveyDone').textContent = 'Thank you.'; setTimeout(() => { $('surveyAsk').hidden = true; }, 1500); }
+    catch { $('surveySend').disabled = false; }
+  };
+  $('surveyLater').onclick = () => { try { localStorage.setItem('gvnr-survey-later', String(Date.now())); } catch {} $('surveyAsk').hidden = true; };
+  fetch('/telemetry').then(r => r.json()).then(s => { st = s; paint(); }).catch(() => {});
+})();
 </script>
 </body>
 </html>
