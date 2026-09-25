@@ -13,7 +13,7 @@ import { gate } from '../src/gate.mjs';
 import { matchRule, DEFAULT_RULES } from '../src/capability.mjs';
 import { consult } from '../src/central.mjs';
 import { evaluate as economics } from '../src/economics.mjs';
-import { DEFAULTS, priceOf, tokensForDollars, getAgent, setModel } from '../src/policy.mjs';
+import { DEFAULTS, priceOf, tokensForDollars, getAgent, setModel, clientFor } from '../src/policy.mjs';
 import { read as meter } from '../src/meter.mjs';
 import { withLock, loadState, saveState, loadConfig, writeReceipt } from '../src/store.mjs';
 import { sha256 } from '../src/policy.mjs';
@@ -45,6 +45,16 @@ const central = matched ? await consult(matched, cfg) : null;
 
 let priced = cfg.model, spent = 0, budget = 0;
 
+// Who the agent acted for, and for which project, straight from config and the
+// working directory. economics.ingest() also stamps these on the agent, but a
+// rule decides BEFORE economics runs, so the first action of a session that a
+// rule refused or rewrote went on the record naming nobody. Those are the
+// receipts an audit reads first.
+const acting = (a) => ({
+  operator: a?.operator || cfg.operator || '',
+  client: a?.client || clientFor(ev.cwd, cfg.clients) || '',
+});
+
 // One lock covers deciding AND recording. They cannot be separated: the chain
 // hashes each entry against the previous head, so a second lock acquisition
 // between the two lets a parallel hook interleave and the record stops
@@ -69,7 +79,7 @@ const held = withLock(() => {
   // The receipt says where the money figure came from. "How did you know what
   // this cost" deserves an answer, not an assumption.
   const entry = v.entry({ agent, tool: ev.tool_name || '', model: a.model || '',
-    tokens: Math.round(a.tokens), operator: a.operator || '', client: a.client || '',
+    tokens: Math.round(a.tokens), ...acting(a),
     meter: reading.source });
   const hash = sha256(state.prevHash + JSON.stringify(entry));
   state.prevHash = hash;
@@ -84,7 +94,7 @@ const held = withLock(() => {
 // unhashed line as unverifiable rather than as a break. Recording nothing would
 // hide a real refusal; forging a link would cry tampering on an honest file.
 const verdict = held.ok && held.value ? held.value : gate(event, cfg, { central });
-if (!held.ok || !held.value) writeReceipt(verdict.entry({ agent, tool: ev.tool_name || '', chained: false }), undefined);
+if (!held.ok || !held.value) writeReceipt(verdict.entry({ agent, tool: ev.tool_name || '', ...acting(), chained: false }), undefined);
 
 // ── wording ─────────────────────────────────────────────────────────────────
 // A refusal and a stop are different events and must not read the same. A
