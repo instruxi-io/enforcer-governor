@@ -1,6 +1,6 @@
 {
   "name": "enforcer-governor",
-  "version": "2.6.1",
+  "version": "2.6.2",
   "description": "A Claude Code plugin that decides whether an agent action is allowed before it runs, and keeps a tamper-evident record of every decision.",
   "type": "module",
   "scripts": {
