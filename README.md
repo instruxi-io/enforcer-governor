@@ -101,7 +101,7 @@ deny contains "ask: publishing from an agent needs a person to confirm" if {
 | `/enforcer-governor:resume [agent]` | run a stopped agent again, with room to finish |
 | `/enforcer-governor:config [--why]` | every setting, what it does, and which you have changed |
 | `/enforcer-governor:set <name> <value>` | change one, with validation |
-| `/enforcer-governor:login [api-key <key> \| status \| logout]` | sign in to Enforcer, the same sign-in as `/enforcer:login`; no argument opens a browser |
+| `/enforcer-governor:login [<WORKSPACE-CODE> \| api-key <key> \| status \| logout]` | sign in to Enforcer, the same sign-in as `/enforcer:login`; no argument opens a browser, a workspace code skips asking for it |
 | `/enforcer-governor:telemetry [on \| off \| status]` | send Claude Code's own OpenTelemetry (cost, tokens, tool use — never prompt text) to your Enforcer workspace; writes the `OTEL_*` exporter settings into `~/.claude/settings.json` |
 
 ### Getting out of the way
