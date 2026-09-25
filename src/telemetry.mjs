@@ -9,7 +9,16 @@
 //   env.OTEL_LOGS_EXPORTER             otlp
 //   env.OTEL_EXPORTER_OTLP_PROTOCOL    http/protobuf
 //   env.OTEL_EXPORTER_OTLP_ENDPOINT    <origin>/api/v1/governance/otlp
+//   env.CLAUDE_CODE_OTEL_HEADERS_HELPER_DEBOUNCE_MS  600000
 //   otelHeadersHelper                  node ~/.enforcer/otel-headers.mjs
+//
+// THE REFRESH INTERVAL IS NOT OPTIONAL. Claude Code caches the helper's headers
+// for CLAUDE_CODE_OTEL_HEADERS_HELPER_DEBOUNCE_MS, 29 minutes by default, and an
+// OAuth access token lives 15. Left at the default, every 29-minute cycle sent
+// ~14 minutes of telemetry with an expired token: 401s, and 40-50% of cost and
+// usage data lost (measured on instruxi 2026-09-24). Ten minutes is under the
+// token's life, and the helper renews a token within 60s of expiry, so a cached
+// header always has minutes left.
 //
 // AUTH WITHOUT A STATIC SECRET. OTEL_EXPORTER_OTLP_HEADERS would put a credential
 // in a settings file in plain text, and an OAuth access token lasts 15 minutes.
@@ -38,7 +47,10 @@ const ROOT = () => join(SHARED_DIR(), 'plugin-root');
 export const OTLP_PATH = '/api/v1/governance/otlp';
 
 const ENV_KEYS = ['CLAUDE_CODE_ENABLE_TELEMETRY', 'OTEL_METRICS_EXPORTER', 'OTEL_LOGS_EXPORTER',
-  'OTEL_EXPORTER_OTLP_PROTOCOL', 'OTEL_EXPORTER_OTLP_ENDPOINT'];
+  'OTEL_EXPORTER_OTLP_PROTOCOL', 'OTEL_EXPORTER_OTLP_ENDPOINT', 'CLAUDE_CODE_OTEL_HEADERS_HELPER_DEBOUNCE_MS'];
+
+/** How long Claude Code may reuse the helper's headers: under an OAuth token's 15-minute life. */
+export const HEADERS_REFRESH_MS = '600000';
 
 const pluginRoot = () => join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -97,6 +109,7 @@ export function enable(cfg = {}) {
     OTEL_LOGS_EXPORTER: 'otlp',
     OTEL_EXPORTER_OTLP_PROTOCOL: 'http/protobuf',
     OTEL_EXPORTER_OTLP_ENDPOINT: endpoint,
+    CLAUDE_CODE_OTEL_HEADERS_HELPER_DEBOUNCE_MS: HEADERS_REFRESH_MS,
   };
   s.otelHeadersHelper = `node "${SHIM()}"`;
   writeSettings(s);

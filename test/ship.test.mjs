@@ -152,6 +152,10 @@ await ok('telemetry on writes the export settings and a helper, and keeps everyt
   assert.equal(r.endpoint, 'https://api.example.test/api/v1/governance/otlp');
   assert.equal(s.env.CLAUDE_CODE_ENABLE_TELEMETRY, '1');
   assert.equal(s.env.OTEL_EXPORTER_OTLP_ENDPOINT, r.endpoint);
+  // Claude Code caches the helper's headers for 29 minutes by default and an
+  // OAuth token lives 15: without this, half of every cycle sent an expired token.
+  assert.ok(Number(s.env.CLAUDE_CODE_OTEL_HEADERS_HELPER_DEBOUNCE_MS) > 0 && Number(s.env.CLAUDE_CODE_OTEL_HEADERS_HELPER_DEBOUNCE_MS) < 15 * 60_000,
+    'the header cache must refresh within an OAuth token\'s 15-minute life');
   assert.equal(s.env.KEEP_ME, '1');
   assert.deepEqual(s.statusLine, { type: 'command', command: 'x' });
   assert.match(s.otelHeadersHelper, /otel-headers\.mjs/);
