@@ -10,7 +10,7 @@ import { join } from 'node:path';
 const home = mkdtempSync(join(tmpdir(), 'gov-login-'));
 process.env.HOME = home; process.env.ENFORCER_HOME = join(home, '.enforcer'); process.env.GOVERNOR_HOME = join(home, '.g');
 
-const { browserSignIn, pkce, resourcesFor, requestedScope } = await import('../bin/login.mjs');
+const { browserSignIn, pkce, resourcesFor, requestedScope, parseLoginArgs, isWorkspaceCode } = await import('../bin/login.mjs');
 let pass = 0;
 const ok = async (label, fn) => { await fn(); pass++; console.log('  ok  ' + label); };
 const b64url = (b) => b.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -51,6 +51,30 @@ await ok('asks for every scope the server advertises, and read-only when it adve
   assert.equal(requestedScope({ scopes_supported: ['enforcer:read', 'enforcer:graph-runs.write'] }), 'enforcer:read enforcer:graph-runs.write');
   assert.equal(requestedScope({}), 'enforcer:read');
   assert.equal(requestedScope({ scopes_supported: [] }), 'enforcer:read');
+});
+
+await ok('a workspace code: `login CODE` is a browser sign-in into it; commands still win', () => {
+  assert.deepEqual(parseLoginArgs(['acme-1234-abcd']), ['browser', 'ACME-1234-ABCD']);
+  assert.deepEqual(parseLoginArgs([]), ['browser', undefined]);
+  assert.deepEqual(parseLoginArgs(['browser', 'ACME-1234-ABCD']), ['browser', 'ACME-1234-ABCD']);
+  assert.deepEqual(parseLoginArgs(['api-key', 'env3_x']), ['api-key', 'env3_x'], 'api-key has a dash but is a command');
+  assert.deepEqual(parseLoginArgs(['status']), ['status', undefined]);
+  for (const bad of ['ACME', 'a b-c', '-ACME', 'ACME-', 'x;rm-rf', 'logout']) assert.equal(isWorkspaceCode(bad), false, bad);
+});
+
+await ok('a workspace code rides on the authorize URL; without one it is absent', async () => {
+  const seen = [];
+  for (const tenantCode of ['ACME-1234-ABCD', undefined]) {
+    await browserSignIn({ base, resources: ['https://api.example.test'], tenantCode, timeoutMs: 5000, onUrl: async (url) => {
+      const a = new URL(url);
+      seen.push(a.searchParams.get('tenant_code'));
+      issued.challenge = a.searchParams.get('code_challenge');
+      const cb = new URL(a.searchParams.get('redirect_uri'));
+      cb.searchParams.set('code', 'the-code'); cb.searchParams.set('state', a.searchParams.get('state'));
+      await fetch(cb);
+    } });
+  }
+  assert.deepEqual(seen, ['ACME-1234-ABCD', null]);
 });
 
 await ok('signs in: register, authorize, loopback redirect, redeem with the verifier', async () => {

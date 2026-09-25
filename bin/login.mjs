@@ -50,7 +50,7 @@ function openBrowser(url) {
  * `resource` is the RFC 8707 audience the token is for; `onUrl` receives the
  * authorization URL (printed and opened by the CLI, captured by the tests).
  */
-export async function browserSignIn({ base, resource, resources, scope, fetchImpl = fetch, onUrl, timeoutMs = 5 * 60_000 }) {
+export async function browserSignIn({ base, resource, resources, scope, tenantCode, fetchImpl = fetch, onUrl, timeoutMs = 5 * 60_000 }) {
   // RFC 8707 lets one token name several resources. Asking for Enforcer's API
   // AND its MCP server is what makes this one sign-in serve both the governor
   // (which calls the API) and the MCP server (which serves tools): each server
@@ -101,6 +101,10 @@ export async function browserSignIn({ base, resource, resources, scope, fetchImp
       url.searchParams.set(k, v);
     }
     for (const r of wanted) url.searchParams.append('resource', r);
+    // The workspace, when this machine already knows it: the sign-in page then
+    // opens on the email step for that workspace instead of asking for its code.
+    // It is only a pre-fill; the server still checks membership.
+    if (tenantCode) url.searchParams.set('tenant_code', tenantCode);
     onUrl?.(url.toString());
 
     const code = await codeP;
@@ -147,8 +151,20 @@ async function whoAmI(base) {
   return (await r.json())?.data || null;
 }
 
+// A workspace code, as a tenant hands it out (e.g. ACME-1234-ABCD). Anything
+// that is not a command and looks like one is read as `login <CODE>`.
+const COMMANDS = new Set(['browser', 'api-key', 'status', 'logout']);
+export const isWorkspaceCode = (s) => typeof s === 'string' && !COMMANDS.has(s) && /^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)+$/.test(s.trim());
+
+/** `[cmd, arg]` from argv, with a bare workspace code meaning a browser sign-in into it. */
+export function parseLoginArgs(argv) {
+  const [first, arg] = argv;
+  if (isWorkspaceCode(first)) return ['browser', first.trim().toUpperCase()];
+  return [first || 'browser', arg];
+}
+
 async function main(argv) {
-  const [cmd = 'browser', arg] = argv;
+  const [cmd, arg] = parseLoginArgs(argv);
   // The same origin the governor asks for policy and ships receipts to. A
   // saved sign-in pins the origin it was made against; otherwise the
   // environment, then the `centralUrl` setting -- which /config told the user
@@ -195,7 +211,9 @@ async function main(argv) {
     const resources = process.env.ENFORCER_RESOURCES
       ? process.env.ENFORCER_RESOURCES.split(/\s+/).filter(Boolean)
       : await resourcesFor(base);
-    const oauth = await browserSignIn({ base, resources, onUrl: (url) => {
+    const code = (arg || process.env.ENFORCER_TENANT_CODE || '').trim().toUpperCase() || undefined;
+    if (code && !isWorkspaceCode(code)) { out(`"${code}" is not a workspace code. Usage: /enforcer-governor:login [<WORKSPACE-CODE>]`); process.exitCode = 2; return; }
+    const oauth = await browserSignIn({ base, resources, tenantCode: code, onUrl: (url) => {
       out('Opening your browser to sign in to Enforcer. If it does not open, visit:');
       out(url);
       openBrowser(url);
@@ -212,7 +230,7 @@ async function main(argv) {
     return;
   }
 
-  out('Usage: /enforcer-governor:login [api-key <key> | status | logout]  — no argument opens a browser');
+  out('Usage: /enforcer-governor:login [<WORKSPACE-CODE> | api-key <key> | status | logout]  — no argument opens a browser');
   process.exitCode = 2;
 }
 
