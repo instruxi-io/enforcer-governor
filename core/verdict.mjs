@@ -64,7 +64,8 @@ export class Verdict {
    * perfectly good receipt as degraded.
    */
   entry({ ts = new Date().toISOString(), agent, tool = '', model = '', tokens = 0,
-          operator = '', client = '', chained = true, meter = undefined } = {}) {
+          operator = '', client = '', chained = true, meter = undefined,
+          harness = '', adapterVersion = '' } = {}) {
     return {
       ts, agent, verdict: this.action, reason: this.reason, source: this.source,
       rule: this.rule || undefined,
@@ -79,6 +80,13 @@ export class Verdict {
       chained: chained ? undefined : false,
       // Appended last so every earlier field keeps its position in the hash.
       policy: this.policy || undefined,
+      // Which harness asked, and which version of its adapter: 'claude-code',
+      // 'mcp-proxy'. Appended after policy for the same reason policy was
+      // appended after chained -- a receipt written before these existed
+      // hashes exactly as it did, and one written after simply has two more
+      // keys at the end. Absent when the caller did not say.
+      harness: harness || undefined,
+      adapter_version: adapterVersion || undefined,
     };
   }
 

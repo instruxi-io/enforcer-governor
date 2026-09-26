@@ -130,7 +130,7 @@ Once you sign in to an Enforcer workspace, three things can leave, and each has 
 
 | what | when | switch |
 |---|---|---|
-| **Decision receipts** — the verdict, the rule that fired, the tool name, the model, token counts, a project name derived from the working directory, and the `operator` you set. Never the command text, never file contents, never prompts. | shipped in the background after each session, to your workspace's governance API | `shipOn` (default on) |
+| **Decision receipts** — the verdict, the rule that fired, the tool name, the model, token counts, a project name derived from the working directory, the `operator` you set, and which harness decided (`claude-code`) with its adapter version. Never the command text, never file contents, never prompts. | shipped in the background after each session, to your workspace's governance API | `shipOn` (default on) |
 | **Your organisation's policy answers** — for an action a local rule matched, the governor asks your workspace whether to allow, ask or deny. The request names the rule, not the command. | only when a rule matches | `policyOn` (default on) |
 | **Claude Code's own telemetry** — cost, tokens and tool-use metrics from Claude Code's built-in OpenTelemetry exporter. Prompt text is not exported. | only if you turn it on | `/enforcer-governor:telemetry on` (default off) |
 
