@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Session boundaries. SessionEnd closes the record with what the session
 // actually cost -- a summary an audit can read without replaying every line.
-import { input, emit, agentOf } from './lib.mjs';
+import { input, emit } from './lib.mjs';
+import { agentOf } from '../adapters/claude-code/events.mjs';
 import { DEFAULTS } from '../src/policy.mjs';
 import { loadConfig } from '../src/store.mjs';
 import { sweep } from '../adapters/claude-code/sweep.mjs';

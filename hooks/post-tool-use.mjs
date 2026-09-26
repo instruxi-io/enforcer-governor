@@ -3,7 +3,8 @@
 // `terraform apply` and never learned whether it ran. A failed call is also
 // the cheap half of a retry storm: the rate-limited call returns fast, and the
 // retry after it is what costs money.
-import { input, emit, agentOf } from './lib.mjs';
+import { input, emit } from './lib.mjs';
+import { agentOf } from '../adapters/claude-code/events.mjs';
 import { governor } from '../adapters/claude-code/index.mjs';
 
 const ev = input();
