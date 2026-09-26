@@ -12,7 +12,7 @@ import { governor } from '../adapters/claude-code/index.mjs';
 const ev = input();
 const EVENT = ev.hook_event_name === 'SessionEnd' ? 'SessionEnd' : 'SessionStart';
 const gov = governor();
-const event = { agent: agentOf(ev), session: ev.session_id, transcript: ev.transcript_path };
+const event = { agent: agentOf(ev), session: ev.session_id, transcript: ev.transcript_path, cwd: ev.cwd };
 
 // SessionEnd closes the record with what the session cost (core/governor.mjs):
 // Claude Code's own figure where it is fresh, the transcript's otherwise.
@@ -28,8 +28,12 @@ if (EVENT === 'SessionStart') recordPluginRoot();
 gov.flush(EVENT === 'SessionEnd' ? 0 : 30_000);
 
 // A session's start is the moment to pick up the tenant's managed floor; skipped
-// when the cached copy is fresh, so most starts touch no network at all.
-if (EVENT === 'SessionStart') await gov.session.start();
+// when the cached copy is fresh. It is also when the session's project is told
+// to the control plane (core/attribution.mjs): one short, best-effort request
+// when signed in, so the session is filed under its project even if it never
+// makes a governed decision. Only with a real session id -- agentOf's
+// 'claude-code' fallback names no one session.
+if (EVENT === 'SessionStart') await gov.session.start(ev.session_id ? { agent: event.agent, cwd: ev.cwd } : {});
 
 // ...and to tidy up Claude Code's scratch files: old sessions' only, by age.
 if (EVENT === 'SessionEnd') { try { sweep({ ...DEFAULTS, ...loadConfig() }); } catch {} }

@@ -126,15 +126,16 @@ Nothing waits on the network to decide: the settings are fetched at session star
 
 Nothing, until you sign in. The governor decides and records locally, and a machine that has never signed in (`/enforcer:login`) makes no network calls at all.
 
-Once you sign in to an Enforcer workspace, three things can leave, and each has its own switch:
+Once you sign in to an Enforcer workspace, these can leave, each under a switch:
 
 | what | when | switch |
 |---|---|---|
 | **Decision receipts** — the verdict, the rule that fired, the tool name, the model, token counts, a project name derived from the working directory, the `operator` you set, and which harness decided (`claude-code`) with its adapter version. Never the command text, never file contents, never prompts. | shipped in the background after each session, to your workspace's governance API | `shipOn` (default on) |
+| **A session's project** — at session start, the session id the receipts use (`claude:` + 8 characters) and the project name derived from the working directory, so the session is filed under its project even if it never makes a governed decision. Nothing else. | once per session start, one short request, never retried | `shipOn` (default on) |
 | **Your organisation's policy answers** — for an action a local rule matched, the governor asks your workspace whether to allow, ask or deny. The request names the rule, not the command. | only when a rule matches | `policyOn` (default on) |
 | **Claude Code's own telemetry** — cost, tokens and tool-use metrics from Claude Code's built-in OpenTelemetry exporter. Prompt text is not exported. | only if you turn it on | `/enforcer-governor:telemetry on` (default off) |
 
-Everything goes to the workspace you signed in to and nowhere else. `/enforcer:login logout` (or `/enforcer-governor:login logout`, the same command) stops all three on this machine; what has already been sent stays in your workspace's records, which is the point of a record.
+Everything goes to the workspace you signed in to and nowhere else. `/enforcer:login logout` (or `/enforcer-governor:login logout`, the same command) stops all of them on this machine; what has already been sent stays in your workspace's records, which is the point of a record.
 
 Files the governor writes: `~/.enforcer-governor/` (config, state, the receipt chain, per-session scratch that is swept after `sweepDays`), `~/.enforcer/credentials.json` (your sign-in) and `~/.enforcer/plugin-root` (where the installed plugin lives, so telemetry stays signed in across plugin updates).
 
