@@ -89,6 +89,18 @@ export function toOtlp(lines, prev, install, version = '') {
       record.attributes.push(kv('enforcer.receipt.hash', hash), kv('enforcer.receipt.prev', from), kv('enforcer.receipt.chained', true));
       prev = hash;
     }
+    // Which harness decided this, as attributes a collector can group by
+    // without parsing the body. Per RECORD, not on the resource: the resource
+    // is the install (one chain), and two harnesses may share a home and so a
+    // chain and a batch. The body already carries the same two fields -- it is
+    // the text that was hashed -- so these add a label, never a claim.
+    //
+    // NOT the receipt's `client`. The ingest stores `client` as the PROJECT the
+    // decision was attributed to (the console's per-project spend), so filling
+    // it from the harness would misfile every receipt. Lines written before
+    // receipts named a harness get neither attribute.
+    if (typeof entry.harness === 'string' && entry.harness) record.attributes.push(kv('enforcer.receipt.harness', entry.harness));
+    if (typeof entry.adapter_version === 'string' && entry.adapter_version) record.attributes.push(kv('enforcer.receipt.adapter_version', entry.adapter_version));
     records.push(record);
   }
   return {

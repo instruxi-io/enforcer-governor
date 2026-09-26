@@ -47,10 +47,17 @@ export const NO_COST = Object.freeze({
 
 /**
  * @param {object} opts
- * @param {string} [opts.harness]  who is asking (goes on receipts from step 5)
+ * @param {string} [opts.harness]  who is asking: 'claude-code', 'mcp-proxy'.
+ *   Every receipt this governor writes carries it, so a record shared by two
+ *   harnesses -- or a console reading a fleet of them -- can tell them apart.
+ * @param {string} [opts.adapterVersion]  the adapter's version, on every
+ *   receipt beside the harness: a decision is only explainable against the
+ *   code that made it.
  * @param {{read: Function, total: Function}} [opts.cost]  see NO_COST
  */
-export function createGovernor({ harness = 'unknown', cost = NO_COST } = {}) {
+export function createGovernor({ harness = 'unknown', adapterVersion = '', cost = NO_COST } = {}) {
+  // Stamped on every receipt, after every other field (see verdict.mjs entry()).
+  const stamp = { harness, adapterVersion };
   // Local config under the tenant's managed floor: stricter wins, per setting.
   // Read from a cache that session.start() refreshes; no decision waits on the
   // network for it.
@@ -109,7 +116,7 @@ export function createGovernor({ harness = 'unknown', cost = NO_COST } = {}) {
       spend.model = a.model; spend.tokens = a.tokens; spend.budget = a.budget;
       const entry = v.entry({ agent: event.agent, tool: recorded(event), model: a.model || '',
         tokens: Math.round(a.tokens), ...acting(a),
-        meter: reading.source });
+        meter: reading.source, ...stamp });
       const hash = sha256(state.prevHash + JSON.stringify(entry));
       state.prevHash = hash;
       writeReceipt(entry, hash);
@@ -121,7 +128,7 @@ export function createGovernor({ harness = 'unknown', cost = NO_COST } = {}) {
     // and the refusal is recorded without a hash rather than hidden or forged.
     const verdict = held.ok && held.value ? held.value : gate(event, cfg, { central });
     if (!held.ok || !held.value) {
-      writeReceipt(verdict.entry({ agent: event.agent, tool: recorded(event), ...acting(), chained: false }), undefined);
+      writeReceipt(verdict.entry({ agent: event.agent, tool: recorded(event), ...acting(), chained: false, ...stamp }), undefined);
     }
     return { verdict, spend, config: cfg };
   }
@@ -200,7 +207,9 @@ export function createGovernor({ harness = 'unknown', cost = NO_COST } = {}) {
           ...(a?.operator ? { operator: a.operator } : {}),
           // Appended last so every field above keeps its position in the hash.
           meter: source,
-          ...(c === undefined ? {} : { cost_usd: c }) };
+          ...(c === undefined ? {} : { cost_usd: c }),
+          // ...and these after it, for the same reason.
+          ...(harness ? { harness } : {}), ...(adapterVersion ? { adapter_version: adapterVersion } : {}) };
         const hash = createHash('sha256').update(state.prevHash + JSON.stringify(entry)).digest('hex');
         writeReceipt(entry, hash);
         state.prevHash = hash;
@@ -214,5 +223,5 @@ export function createGovernor({ harness = 'unknown', cost = NO_COST } = {}) {
     if (loadConfig().shipOn !== false) kick(delayMs);
   }
 
-  return { harness, config, before, after, spawned, brief, session, flush };
+  return { harness, adapterVersion, config, before, after, spawned, brief, session, flush };
 }
