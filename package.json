@@ -4,7 +4,7 @@
   "description": "A Claude Code plugin that decides whether an agent action is allowed before it runs, and keeps a tamper-evident record of every decision.",
   "type": "module",
   "scripts": {
-    "test": "node test/core-boundary.test.mjs && node test/plugin-root.test.mjs && node test/governor.test.mjs && node test/policy.test.mjs && node test/gate.test.mjs && node test/central.test.mjs && node test/login.test.mjs && node test/ship.test.mjs && node test/meter.test.mjs && node test/brief.test.mjs && node test/credentials.test.mjs && node test/outbox.test.mjs && node test/receipt-cost.test.mjs && node test/settings.test.mjs && node test/sweep.test.mjs && node test/managed.test.mjs && node test/plugin.test.mjs"
+    "test": "node test/core-boundary.test.mjs && node test/plugin-root.test.mjs && node test/governor.test.mjs && node test/policy.test.mjs && node test/gate.test.mjs && node test/tools.test.mjs && node test/central.test.mjs && node test/login.test.mjs && node test/ship.test.mjs && node test/meter.test.mjs && node test/brief.test.mjs && node test/credentials.test.mjs && node test/outbox.test.mjs && node test/receipt-cost.test.mjs && node test/settings.test.mjs && node test/sweep.test.mjs && node test/managed.test.mjs && node test/plugin.test.mjs"
   },
   "files": [
     "adapters",

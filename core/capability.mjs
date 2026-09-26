@@ -13,9 +13,12 @@
 // agent has spent, it belongs in economics.mjs, not here.
 
 import { Verdict, CAPABILITY } from './verdict.mjs';
+import { toolMatches, nativeField } from './tools.mjs';
 
 // `action` is the text a rule matches; `tool` scopes it ('' means any tool).
-// `field` names the tool_input key a rewrite edits.
+// `field` names the input key a rewrite edits. Both are in the core's own
+// vocabulary (tools.mjs): `shell` and `command`, not Claude Code's `Bash` --
+// which a rule may still say, and which still means the same thing.
 //
 // `id` is the rule's name in a TENANT POLICY: the governor asks Enforcer about
 // `agent_action` resources whose id is this, so a policy can say "deploy.publish
@@ -29,7 +32,7 @@ import { Verdict, CAPABILITY } from './verdict.mjs';
 // the question past the platform.
 export const DEFAULT_RULES = [
   { id: 'shell.pipe_to_shell', authz: 'write',
-    name: 'pipe the internet into a shell', tool: 'Bash', action: 'deny',
+    name: 'pipe the internet into a shell', tool: 'shell', action: 'deny',
     match: '(curl|wget)[^|]*\\|\\s*(ba|z|fi)?sh' },
 
   // A force-push is the one dangerous git action with a strictly safer form
@@ -38,22 +41,22 @@ export const DEFAULT_RULES = [
   // Rewriting is honest here in a way it would not be for, say, turning a
   // kubectl delete into --dry-run — that does not do what was asked at all.
   { id: 'git.force_push', authz: 'write',
-    name: 'force-push without a lease', tool: 'Bash', action: 'rewrite',
+    name: 'force-push without a lease', tool: 'shell', action: 'rewrite',
     match: 'git\\s+push\\s+(?:[^|;&]*\\s)?(--force|-f)(?=\\s|$)', field: 'command',
     replace: ['(--force|-f)(?=\\s|$)', '--force-with-lease'],
     why: 'a lease refuses the push if someone else has pushed since your last fetch' },
 
   { id: 'fs.delete_tree', authz: 'write',
-    name: 'delete a whole tree', tool: 'Bash', action: 'ask',
+    name: 'delete a whole tree', tool: 'shell', action: 'ask',
     match: 'rm\\s+(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r)' },
   { id: 'git.rewrite_history', authz: 'write',
-    name: 'rewrite git history', tool: 'Bash', action: 'ask',
+    name: 'rewrite git history', tool: 'shell', action: 'ask',
     match: 'reset\\s+--hard|filter-branch' },
   { id: 'secrets.access', authz: 'read',
     name: 'read or write credentials', tool: '', action: 'ask',
     match: '\\.env\\b|id_rsa|\\.pem\\b|credentials\\.json|\\.aws/|\\.ssh/' },
   { id: 'deploy.publish', authz: 'write',
-    name: 'publish or deploy', tool: 'Bash', action: 'ask',
+    name: 'publish or deploy', tool: 'shell', action: 'ask',
     match: 'npm\\s+publish|vercel\\s+.*--prod|kubectl\\s+(apply|delete)|terraform\\s+apply' },
 ];
 
@@ -75,12 +78,14 @@ export function ruleAuthz(rule) {
 /** First rule whose tool and pattern both match. Null when nothing matches. */
 export function matchRule(rules, ev) {
   const text = String(ev.action || '');
-  // Fall back to the prefix of the action ("Bash:...") when the caller did not
-  // name the tool. A missing field used to make every capability rule quietly
-  // miss, which fails in the one direction a guard must never fail in.
-  const tool = String(ev.tool || text.split(':')[0] || '').toLowerCase();
+  // Which tool this is, and whether a rule covers it, is tools.mjs's to say:
+  // the kind (`shell`) for a rule in the core's vocabulary, the harness's own
+  // name for a rule written the old way. It still falls back to the prefix of
+  // the action ("Bash:...") when the caller did not name the tool -- a missing
+  // field used to make every capability rule quietly miss, which fails in the
+  // one direction a guard must never fail in.
   for (const r of rules || []) {
-    if (r.tool && r.tool.toLowerCase() !== tool) continue;
+    if (!toolMatches(r.tool, ev)) continue;
     let re;
     try { re = new RegExp(r.match, 'i'); } catch { continue; }  // a bad pattern must not break the check
     if (re.test(text)) return r;
@@ -88,18 +93,25 @@ export function matchRule(rules, ev) {
   return null;
 }
 
-// Build the replacement tool_input for a rewrite rule. Returns null when the
-// edit would not actually change anything, which demotes the rule to an ask:
+// Build the replacement input for a rewrite rule. Returns null when the edit
+// would not actually change anything, which demotes the rule to an ask:
 // claiming to have made something safer without having done so is worse than
 // admitting the pattern was not handled.
-function rewriteInput(rule, input) {
+//
+// The rewrite is made to the harness's OWN input (`ev.raw`), with the rule's
+// field translated to the harness's key, so what comes back is exactly what
+// the harness runs -- every other key it sent (a description, a timeout) kept
+// as it was. A caller that sends no raw input is rewritten in `ev.input`.
+function rewriteInput(rule, ev) {
   if (!rule.replace || !rule.field) return null;
-  const before = input?.[rule.field];
+  const input = ev.raw ?? ev.input;
+  const key = nativeField(rule.field, ev);
+  const before = input?.[key];
   if (typeof before !== 'string') return null;
   let re;
   try { re = new RegExp(rule.replace[0], 'gi'); } catch { return null; }
   const after = before.replace(re, rule.replace[1]);
-  return after === before ? null : { ...input, [rule.field]: after };
+  return after === before ? null : { ...input, [key]: after };
 }
 
 /**
@@ -121,7 +133,7 @@ export function evaluate(rules, ev) {
   }
 
   if (hit.action === 'rewrite') {
-    const input = rewriteInput(hit, ev.input);
+    const input = rewriteInput(hit, ev);
     if (input) return Verdict.rewrite(input, `${hit.name} — ${hit.why}`, of);
     return Verdict.ask(`would ${hit.name}`, of);   // could not make it safer; ask instead
   }

@@ -25,6 +25,13 @@ import { kick } from './ship.mjs';
 import { brief as briefFor, markTold } from './brief.mjs';
 import { costUsd } from './cost.mjs';
 
+// The tool a receipt names: the harness's own name when the adapter gave one,
+// so the record and the console read as they always have ('Bash', not
+// 'shell'). An older caller put that name in `tool`; an adapter that sets
+// `name` is taken at its word, even when it is empty. Nothing is inferred from
+// the action text here -- a receipt states what the caller said, no more.
+const recorded = (event) => String(('name' in event ? event.name : event.tool) || '');
+
 /**
  * How a harness reports spend. Claude Code's comes from its transcript and its
  * status-line figure (adapters/claude-code/meter.mjs); a harness with no figure
@@ -52,8 +59,15 @@ export function createGovernor({ harness = 'unknown', cost = NO_COST } = {}) {
   /**
    * Decide before a tool runs, and record the decision.
    *
-   * event: { agent, action, input, tool, cwd, billing, session?, transcript? }
+   * event: { agent, action, tool, name, input, raw?, fields?, cwd, billing,
+   *          session?, transcript? }
    *   action is the text the rules match (see the adapter's matchText).
+   *   tool   is the kind in the core's vocabulary (shell, edit, ... tools.mjs);
+   *   name   what the harness called it ('Bash'), which is what receipts record;
+   *   input  the canonical fields (command, path, content, url);
+   *   raw    the harness's own input, which a rewrite edits and hands back;
+   *   fields canonical field -> the harness's key, for that rewrite.
+   * An older caller that sends only `tool: 'Bash'` is still understood.
    *
    * Returns { verdict, spend: { model, tokens, budget }, config }. The verdict
    * is a Verdict (verdict.mjs); the adapter words it for its harness.
@@ -93,7 +107,7 @@ export function createGovernor({ harness = 'unknown', cost = NO_COST } = {}) {
       });
 
       spend.model = a.model; spend.tokens = a.tokens; spend.budget = a.budget;
-      const entry = v.entry({ agent: event.agent, tool: event.tool || '', model: a.model || '',
+      const entry = v.entry({ agent: event.agent, tool: recorded(event), model: a.model || '',
         tokens: Math.round(a.tokens), ...acting(a),
         meter: reading.source });
       const hash = sha256(state.prevHash + JSON.stringify(entry));
@@ -107,7 +121,7 @@ export function createGovernor({ harness = 'unknown', cost = NO_COST } = {}) {
     // and the refusal is recorded without a hash rather than hidden or forged.
     const verdict = held.ok && held.value ? held.value : gate(event, cfg, { central });
     if (!held.ok || !held.value) {
-      writeReceipt(verdict.entry({ agent: event.agent, tool: event.tool || '', ...acting(), chained: false }), undefined);
+      writeReceipt(verdict.entry({ agent: event.agent, tool: recorded(event), ...acting(), chained: false }), undefined);
     }
     return { verdict, spend, config: cfg };
   }

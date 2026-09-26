@@ -6,7 +6,8 @@
 // noticing new agent ids appearing in state — which meant a subagent that
 // never made a tool call was invisible, and the burst was always measured late.
 // SubagentStart is the event itself.
-import { input, emit, agentOf } from './lib.mjs';
+import { input, emit } from './lib.mjs';
+import { agentOf } from '../adapters/claude-code/events.mjs';
 import { governor } from '../adapters/claude-code/index.mjs';
 
 const ev = input();

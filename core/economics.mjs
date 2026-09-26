@@ -15,6 +15,7 @@
 // below noticing.
 
 import { Verdict, ECONOMICS, CAPABILITY, OPERATOR } from './verdict.mjs';
+import { nameOf } from './tools.mjs';
 import {
   PERIODS, burnRate, spawnRate, addSpend, getAgent, setModel, clientFor,
   rollPeriods, modelAdvice, taskShape, BURN_WINDOW,
@@ -35,7 +36,7 @@ export function ingest(state, ev, cfg, now) {
   if (cfg.operator) a.operator = cfg.operator;
   if (ev.task) a.task = ev.task;
   if (ev.model) setModel(a, ev.model);
-  a.tool = ev.tool || String(ev.action || '').split(':')[0] || a.tool;
+  a.tool = nameOf(ev) || a.tool;   // the harness's name, not the kind: state reads as it always has
   if (ev.cwd) a.cwd = ev.cwd;
   // An explicit client always wins over a derived one, so a header or a config
   // entry can correct a directory that guessed wrong.
@@ -58,7 +59,7 @@ export function ingest(state, ev, cfg, now) {
   if (typeof ev.cost === 'number') a.cost = ev.cost;
   addSpend(state, a, a.tokens - was, now);
 
-  const sig = ev.action || `${ev.tool || 'tool'}:${JSON.stringify(ev.args ?? '')}`;
+  const sig = ev.action || `${nameOf(ev) || 'tool'}:${JSON.stringify(ev.args ?? '')}`;
   a.recent.push(sig);
   if (a.recent.length > cfg.loopWindow) a.recent.shift();
   a.loopStreak = a.recent.reduce((n, s) => n + (s === sig ? 1 : 0), 0);

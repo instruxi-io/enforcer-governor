@@ -7,7 +7,8 @@
 // additionalContext puts a sentence into the model's own context, before it
 // decides what to do, which turns "you have been stopped" into "land what you
 // have". Cheaper for everyone, and it happens before the money is spent.
-import { input, emit, agentOf } from './lib.mjs';
+import { input, emit } from './lib.mjs';
+import { agentOf } from '../adapters/claude-code/events.mjs';
 import { governor } from '../adapters/claude-code/index.mjs';
 
 const EVENT = 'UserPromptSubmit';

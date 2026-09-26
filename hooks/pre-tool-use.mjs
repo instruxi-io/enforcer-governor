@@ -8,22 +8,17 @@
 // it for the harness. The two-layer semantics live in gate.mjs, and the one
 // thing this file still owns is the wording, because these sentences are read
 // by a person mid-work at the moment they are interrupted.
-import { input, emit, pass, matchText, agentOf, billing } from './lib.mjs';
+import { input, emit, pass } from './lib.mjs';
+import { toolEvent } from '../adapters/claude-code/events.mjs';
 import { priceOf } from '../src/policy.mjs';
 import { governor } from '../adapters/claude-code/index.mjs';
 
 const EVENT = 'PreToolUse';
 const ev = input();
-const event = {
-  agent: agentOf(ev),
-  action: matchText(ev.tool_name, ev.tool_input),
-  input: ev.tool_input,
-  tool: ev.tool_name,
-  cwd: ev.cwd,
-  billing: billing(),
-  session: ev.session_id,
-  transcript: ev.transcript_path,
-};
+// Claude's tool call in the core's vocabulary: `shell` for Bash, the canonical
+// fields, and Claude's own name and tool_input kept beside them for the receipt
+// and for a rewrite (adapters/claude-code/events.mjs).
+const event = toolEvent(ev);
 
 // Deciding and recording live in the core (core/governor.mjs): the tenant
 // policy check, the lock, the gate, the hash-chained receipt and the blind

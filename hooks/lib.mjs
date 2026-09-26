@@ -30,31 +30,6 @@ export function emit(eventName, out, top = {}) {
 // `tool_deferred`, and its reason and updatedInput are discarded everywhere.
 export const pass = (event, top = {}) => emit(event, {}, top);
 
-// ── What the capability rules get to see ────────────────────────────────────
-// Whatever this leaves out is unenforced. v1 truncated to 200 characters,
-// which meant `rm -rf` on the far side of a long command was invisible and
-// padding the front of a command walked past every rule. Fields the rules care
-// about go FIRST, where a cap cannot displace them; bulk content (a file body)
-// is deliberately not promoted -- no rule matches file contents, and hoisting
-// them would sweep source code into the match text for nothing.
-const FIELDS = ['command', 'file_path', 'path', 'notebook_path', 'url', 'pattern'];
-const CAP = 8192;
-
-export function matchText(tool, toolInput) {
-  const name = tool || 'tool';
-  if (toolInput == null) return `${name}:`;
-  if (typeof toolInput !== 'object') return `${name}:${String(toolInput).slice(0, CAP)}`;
-  const front = [];
-  for (const k of FIELDS) if (typeof toolInput[k] === 'string' && toolInput[k]) front.push(toolInput[k]);
-  let rest = ''; try { rest = JSON.stringify(toolInput); } catch {}
-  return `${name}:${[...front, rest].join('\n').slice(0, CAP)}`;
-}
-
-export const agentOf = ev => ev.session_id ? 'claude:' + String(ev.session_id).slice(0, 8) : 'claude-code';
-
-// Which wallet is paying. On a plan Claude Code is flat-rate; an API key in the
-// environment moves the same work onto per-token billing, which is where the
-// nastiest surprise bills come from. We can see the key is set, not that it was
-// used, so this is reported and never acted on.
-export const billing = () =>
-  (process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN) ? 'api' : 'plan';
+// What Claude Code's hook JSON MEANS -- the tool map, the match text, the agent
+// id, the billing mode -- is in adapters/claude-code/events.mjs. This file is
+// only the stdin/stdout contract.
