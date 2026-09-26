@@ -2,6 +2,7 @@
 // The hooks in hooks/ are the rest of it -- they read Claude Code's hook JSON,
 // call the governor, and answer in Claude Code's permission vocabulary.
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { createGovernor } from '../../core/governor.mjs';
 import { read, harnessUsd, HARNESS, TRANSCRIPT } from './meter.mjs';
 import { readUsage } from './usage.mjs';
@@ -30,4 +31,9 @@ export const ADAPTER_VERSION = (() => {
   catch { return ''; }
 })();
 
-export const governor = () => createGovernor({ harness: HARNESS_NAME, adapterVersion: ADAPTER_VERSION, cost });
+// The plugin's own shipper, as it has always been: it reports the plugin
+// version as the OTLP service.version, and it is the one `node bin/ship.mjs`
+// runs by hand.
+export const SHIPPER = fileURLToPath(new URL('../../bin/ship.mjs', import.meta.url));
+
+export const governor = () => createGovernor({ harness: HARNESS_NAME, adapterVersion: ADAPTER_VERSION, cost, shipper: SHIPPER });

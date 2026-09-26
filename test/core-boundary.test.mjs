@@ -25,6 +25,7 @@ const scan = (sub, local) => {
 };
 scan('', /^\.\/[a-z-]+\.mjs$/);
 scan('test', /^\.\.\/[a-z-]+\.mjs$/);
+scan('bin', /^\.\.\/[a-z-]+\.mjs$/);
 if (!files) { console.error('FAIL: core/ has no modules'); process.exit(1); }
 if (bad.length) { console.error('FAIL: core/ must import only core/ and node: built-ins:\n  ' + bad.join('\n  ')); process.exit(1); }
 console.log(`core/ imports only core/ and node: built-ins (${files} modules) ok`);

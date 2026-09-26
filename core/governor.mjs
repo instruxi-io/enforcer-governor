@@ -21,7 +21,7 @@ import { evaluate as economics } from './economics.mjs';
 import { DEFAULTS, priceOf, tokensForDollars, dollarsForTokens, getAgent, setModel, clientFor, sha256 } from './policy.mjs';
 import { withLock, loadState, saveState, loadConfig, writeReceipt } from './store.mjs';
 import { effective, refresh, stale } from './managed.mjs';
-import { kick } from './ship.mjs';
+import { kick, SHIPPER } from './ship.mjs';
 import { brief as briefFor, markTold } from './brief.mjs';
 import { costUsd } from './cost.mjs';
 
@@ -54,8 +54,11 @@ export const NO_COST = Object.freeze({
  *   receipt beside the harness: a decision is only explainable against the
  *   code that made it.
  * @param {{read: Function, total: Function}} [opts.cost]  see NO_COST
+ * @param {string} [opts.shipper]  the script to start, detached, to ship the
+ *   record. Defaults to the core's own (core/bin/ship.mjs); an adapter with
+ *   its own entry point -- the Claude Code plugin's bin/ship.mjs -- names it.
  */
-export function createGovernor({ harness = 'unknown', adapterVersion = '', cost = NO_COST } = {}) {
+export function createGovernor({ harness = 'unknown', adapterVersion = '', cost = NO_COST, shipper = SHIPPER } = {}) {
   // Stamped on every receipt, after every other field (see verdict.mjs entry()).
   const stamp = { harness, adapterVersion };
   // Local config under the tenant's managed floor: stricter wins, per setting.
@@ -148,7 +151,7 @@ export function createGovernor({ harness = 'unknown', adapterVersion = '', cost 
       });
     }
     // Ship what has been decided, without waiting (at most every 30s).
-    if (loadConfig().shipOn !== false) kick();
+    if (loadConfig().shipOn !== false) kick(30_000, shipper);
   }
 
   /** Count a new agent starting, for the fan-out rate check. */
@@ -220,8 +223,8 @@ export function createGovernor({ harness = 'unknown', adapterVersion = '', cost 
 
   /** Ship the record now-ish: delayMs is the throttle (0 at session end). */
   function flush(delayMs = 30_000) {
-    if (loadConfig().shipOn !== false) kick(delayMs);
+    if (loadConfig().shipOn !== false) kick(delayMs, shipper);
   }
 
-  return { harness, adapterVersion, config, before, after, spawned, brief, session, flush };
+  return { harness, adapterVersion, shipper, config, before, after, spawned, brief, session, flush };
 }
