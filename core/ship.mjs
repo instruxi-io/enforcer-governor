@@ -191,20 +191,24 @@ function takeLock() {
 }
 function dropLock() { try { unlinkSync(LOCK()); } catch {} }
 
+// The shipper kick() starts when the adapter names none: the core's own, which
+// travels with the core wherever it is installed. It used to be the plugin's
+// bin/ship.mjs, reached by walking out of core/ -- see core/bin/ship.mjs.
+export const SHIPPER = join(dirname(fileURLToPath(import.meta.url)), 'bin', 'ship.mjs');
+
 /**
  * Start a detached shipper if one has not been started recently. Called from
  * hooks: it costs a stat and, at most every `everyMs`, a process spawn that the
- * hook does not wait for.
+ * hook does not wait for. `shipper` is the script to start.
  */
-export function kick(everyMs = 30_000) {
+export function kick(everyMs = 30_000, shipper = SHIPPER) {
   try {
     if (Date.now() - statSync(KICKED()).mtimeMs < everyMs) return false;
   } catch { /* never kicked */ }
   try {
     mkdirSync(DIR, { recursive: true });
     writeFileSync(KICKED(), String(Date.now()));
-    const bin = join(dirname(fileURLToPath(import.meta.url)), '..', 'bin', 'ship.mjs');
-    spawn(process.execPath, [bin], { detached: true, stdio: 'ignore', env: process.env }).unref();
+    spawn(process.execPath, [shipper], { detached: true, stdio: 'ignore', env: process.env }).unref();
     return true;
   } catch { return false; }
 }

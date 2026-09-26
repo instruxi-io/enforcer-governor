@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Ship pending receipts to the control plane and exit.
 //
-// Started detached by the hooks (src/ship.mjs kick), and runnable by hand:
+// Started detached by the hooks (core/ship.mjs kick, named as the Claude Code
+// adapter's shipper in adapters/claude-code/index.mjs), and runnable by hand:
 //   node bin/ship.mjs          ship what is pending, print one line
 import { readFileSync } from 'node:fs';
 import { shipAll } from '../src/ship.mjs';

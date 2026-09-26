@@ -1,0 +1,41 @@
+{
+  "name": "@instruxi-io/governor-core",
+  "version": "0.1.0",
+  "description": "The harness-neutral core of Enforcer Governor: decides whether an agent tool call may run (allow, rewrite, ask, deny) and keeps a hash-chained receipt of every decision. Adapters bind it to a harness.",
+  "type": "module",
+  "main": "./index.mjs",
+  "exports": {
+    ".": "./index.mjs",
+    "./contract": "./test/contract.mjs",
+    "./package.json": "./package.json",
+    "./report": null,
+    "./*": "./*.mjs"
+  },
+  "files": [
+    "*.mjs",
+    "bin/ship.mjs",
+    "test/contract.mjs",
+    "LICENSE"
+  ],
+  "scripts": {
+    "prepack": "node -e \"require('fs').copyFileSync('../LICENSE', 'LICENSE')\""
+  },
+  "keywords": [
+    "agents",
+    "governance",
+    "guardrails",
+    "audit",
+    "mcp",
+    "claude-code"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/instruxi-io/enforcer-governor.git",
+    "directory": "core"
+  },
+  "homepage": "https://github.com/instruxi-io/enforcer-governor/tree/main/core",
+  "license": "FSL-1.1-ALv2",
+  "engines": {
+    "node": ">=18"
+  }
+}
