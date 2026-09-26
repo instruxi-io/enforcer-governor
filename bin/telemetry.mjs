@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // /enforcer-governor:telemetry [on | off | status]
-import { enable, disable, status } from '../src/telemetry.mjs';
+import { enable, disable, status } from '../adapters/claude-code/telemetry.mjs';
 import { loadConfig } from '../src/store.mjs';
 import { DEFAULTS } from '../src/policy.mjs';
 import { stats } from '../src/outbox.mjs';

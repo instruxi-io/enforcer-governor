@@ -14,7 +14,7 @@ import { matchRule, DEFAULT_RULES } from '../src/capability.mjs';
 import { consult } from '../src/central.mjs';
 import { evaluate as economics } from '../src/economics.mjs';
 import { DEFAULTS, priceOf, tokensForDollars, getAgent, setModel, clientFor } from '../src/policy.mjs';
-import { read as meter } from '../src/meter.mjs';
+import { read as meter } from '../adapters/claude-code/meter.mjs';
 import { withLock, loadState, saveState, loadConfig, writeReceipt } from '../src/store.mjs';
 import { sha256 } from '../src/policy.mjs';
 import { effective } from '../src/managed.mjs';

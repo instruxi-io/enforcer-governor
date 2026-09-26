@@ -8,7 +8,7 @@ const home = mkdtempSync(join(tmpdir(), 'gov-meter-'));
 process.env.HOME = home; process.env.USERPROFILE = home;
 mkdirSync(join(home, '.enforcer-governor'), { recursive: true });
 
-const { read, recordHarnessCost, HARNESS, TRANSCRIPT } = await import('../src/meter.mjs');
+const { read, recordHarnessCost, HARNESS, TRANSCRIPT } = await import('../adapters/claude-code/meter.mjs');
 const dir = join(home, '.enforcer-governor');
 
 let pass = 0;

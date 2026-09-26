@@ -6,8 +6,8 @@
 // stopped, so cost is O(what changed) no matter how long the session runs.
 import { readFileSync, writeFileSync, statSync, openSync, readSync, closeSync } from 'node:fs';
 import { join } from 'node:path';
-import { DIR } from './store.mjs';
-import { priceOf } from './policy.mjs';
+import { DIR } from '../../core/store.mjs';
+import { priceOf } from '../../core/policy.mjs';
 
 const cursorFile = id => join(DIR, `cursor-${String(id).replace(/[^\w-]/g, '')}.json`);
 

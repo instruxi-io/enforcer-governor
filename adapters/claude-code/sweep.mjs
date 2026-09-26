@@ -21,7 +21,7 @@
 // wrong number. Age keeps even that rare.
 import { readdirSync, statSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
-import { DIR } from './store.mjs';
+import { DIR } from '../../core/store.mjs';
 
 // Only these two. Everything else in the directory is durable state — the
 // chain head, the receipts, the shipping watermark, the credential — and a

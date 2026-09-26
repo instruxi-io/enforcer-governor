@@ -18,7 +18,7 @@ const { toOtlp, shipOnce, installId, RECEIPT_SCOPE } = await import('../src/ship
 const { saveCredentials } = await import('../src/credentials.mjs');
 const { RECEIPTS } = await import('../src/store.mjs');
 const { stats } = await import('../src/outbox.mjs');
-const telemetry = await import('../src/telemetry.mjs');
+const telemetry = await import('../adapters/claude-code/telemetry.mjs');
 
 let pass = 0;
 const ok = async (label, fn) => { await fn(); pass++; console.log('  ok  ' + label); };

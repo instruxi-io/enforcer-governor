@@ -3,14 +3,14 @@
 // actually cost -- a summary an audit can read without replaying every line.
 import { createHash } from 'node:crypto';
 import { input, emit, agentOf } from './lib.mjs';
-import { readUsage } from '../src/usage.mjs';
+import { readUsage } from '../adapters/claude-code/usage.mjs';
 import { priceOf, dollarsForTokens, DEFAULTS } from '../src/policy.mjs';
-import { costUsd, harnessUsd, HARNESS, TRANSCRIPT } from '../src/meter.mjs';
+import { costUsd, harnessUsd, HARNESS, TRANSCRIPT } from '../adapters/claude-code/meter.mjs';
 import { withLock, loadState, saveState, writeReceipt, loadConfig } from '../src/store.mjs';
 import { kick } from '../src/ship.mjs';
-import { sweep } from '../src/sweep.mjs';
+import { sweep } from '../adapters/claude-code/sweep.mjs';
 import { refresh, stale } from '../src/managed.mjs';
-import { recordPluginRoot } from '../src/telemetry.mjs';
+import { recordPluginRoot } from '../adapters/claude-code/telemetry.mjs';
 
 const ev = input();
 const EVENT = ev.hook_event_name === 'SessionEnd' ? 'SessionEnd' : 'SessionStart';

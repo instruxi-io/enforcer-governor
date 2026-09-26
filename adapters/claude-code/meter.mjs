@@ -22,8 +22,8 @@
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { DIR } from './store.mjs';
-import { priceOf } from './policy.mjs';
+import { DIR } from '../../core/store.mjs';
+import { priceOf } from '../../core/policy.mjs';
 import { readUsage } from './usage.mjs';
 
 export const HARNESS = 'harness';
