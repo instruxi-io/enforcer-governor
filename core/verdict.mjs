@@ -65,7 +65,7 @@ export class Verdict {
    */
   entry({ ts = new Date().toISOString(), agent, tool = '', model = '', tokens = 0,
           operator = '', client = '', chained = true, meter = undefined,
-          harness = '', adapterVersion = '' } = {}) {
+          harness = '', adapterVersion = '', spentUsd = undefined } = {}) {
     return {
       ts, agent, verdict: this.action, reason: this.reason, source: this.source,
       rule: this.rule || undefined,
@@ -87,6 +87,9 @@ export class Verdict {
       // keys at the end. Absent when the caller did not say.
       harness: harness || undefined,
       adapter_version: adapterVersion || undefined,
+      // The agent's spend in dollars when this was decided. Last, for the same
+      // reason as the two above; absent when the harness reports no spend.
+      spent_usd: spentUsd,
     };
   }
 
