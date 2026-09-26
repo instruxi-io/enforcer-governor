@@ -9,92 +9,28 @@
 // thing this file still owns is the wording, because these sentences are read
 // by a person mid-work at the moment they are interrupted.
 import { input, emit, pass, matchText, agentOf, billing } from './lib.mjs';
-import { gate } from '../src/gate.mjs';
-import { matchRule, DEFAULT_RULES } from '../src/capability.mjs';
-import { consult } from '../src/central.mjs';
-import { evaluate as economics } from '../src/economics.mjs';
-import { DEFAULTS, priceOf, tokensForDollars, getAgent, setModel, clientFor } from '../src/policy.mjs';
-import { read as meter } from '../adapters/claude-code/meter.mjs';
-import { withLock, loadState, saveState, loadConfig, writeReceipt } from '../src/store.mjs';
-import { sha256 } from '../src/policy.mjs';
-import { effective } from '../src/managed.mjs';
+import { priceOf } from '../src/policy.mjs';
+import { governor } from '../adapters/claude-code/index.mjs';
 
 const EVENT = 'PreToolUse';
 const ev = input();
-// Local config under the tenant's managed floor: stricter wins, per setting
-// (src/managed.mjs). Read from a cache file that SessionStart refreshes -- no
-// decision ever waits on the network.
-const cfg = effective({ ...DEFAULTS, ...loadConfig() });
-const agent = agentOf(ev);
 const event = {
-  agent,
+  agent: agentOf(ev),
   action: matchText(ev.tool_name, ev.tool_input),
   input: ev.tool_input,
   tool: ev.tool_name,
   cwd: ev.cwd,
   billing: billing(),
+  session: ev.session_id,
+  transcript: ev.transcript_path,
 };
 
-// Ask the tenant's policy BEFORE taking the lock, and only when a local rule
-// matched. The network must never sit inside the lock — forty parallel tool
-// calls would queue behind one slow round trip — and an unmatched call has
-// nothing to ask about, so it pays nothing.
-const rules = cfg.rulesOn === false ? [] : (cfg.rules || DEFAULT_RULES);
-const matched = matchRule(rules, event);
-const central = matched ? await consult(matched, cfg) : null;
-
-let priced = cfg.model, spent = 0, budget = 0;
-
-// Who the agent acted for, and for which project, straight from config and the
-// working directory. economics.ingest() also stamps these on the agent, but a
-// rule decides BEFORE economics runs, so the first action of a session that a
-// rule refused or rewrote went on the record naming nobody. Those are the
-// receipts an audit reads first.
-const acting = (a) => ({
-  operator: a?.operator || cfg.operator || '',
-  client: a?.client || clientFor(ev.cwd, cfg.clients) || '',
-});
-
-// One lock covers deciding AND recording. They cannot be separated: the chain
-// hashes each entry against the previous head, so a second lock acquisition
-// between the two lets a parallel hook interleave and the record stops
-// verifying — which is exactly what happens with 40 concurrent tool calls.
-const held = withLock(() => {
-  const state = loadState();
-  const reading = meter(ev.session_id, ev.transcript_path, cfg);
-  // Price the agent at its OWN model before judging it: "$20 per agent" has to
-  // mean $20 whether it is on Opus or Haiku, and a flat token cap would quietly
-  // give one of them a quarter of the other's money.
-  const a = getAgent(state, agent, cfg);
-  if (reading.model) setModel(a, reading.model);
-  if (!a.budgetRaised) a.budget = tokensForDollars(cfg.dollars, priceOf(a.model, cfg.model).in);
-
-  const v = gate(event, cfg, {
-    withState: (fn) => ({ ok: true, value: fn(state, reading) }),
-    economics,
-    central,
-  });
-
-  priced = a.model; spent = a.tokens; budget = a.budget;
-  // The receipt says where the money figure came from. "How did you know what
-  // this cost" deserves an answer, not an assumption.
-  const entry = v.entry({ agent, tool: ev.tool_name || '', model: a.model || '',
-    tokens: Math.round(a.tokens), ...acting(a),
-    meter: reading.source });
-  const hash = sha256(state.prevHash + JSON.stringify(entry));
-  state.prevHash = hash;
-  writeReceipt(entry, hash);
-  saveState(state);
-  return v;
-});
-
-// The blind path. Capability needs no state, so it still gets to refuse — that
-// asymmetry is the whole point of gate.mjs. The receipt is written without a
-// hash: there is no readable chain tail to hash against, and verify() counts an
-// unhashed line as unverifiable rather than as a break. Recording nothing would
-// hide a real refusal; forging a link would cry tampering on an honest file.
-const verdict = held.ok && held.value ? held.value : gate(event, cfg, { central });
-if (!held.ok || !held.value) writeReceipt(verdict.entry({ agent, tool: ev.tool_name || '', ...acting(), chained: false }), undefined);
+// Deciding and recording live in the core (core/governor.mjs): the tenant
+// policy check, the lock, the gate, the hash-chained receipt and the blind
+// fallback. This hook owns what is Claude Code's: reading the hook JSON above,
+// and the wording below.
+const { verdict, spend } = await governor().before(event);
+const priced = spend.model, spent = spend.tokens, budget = spend.budget;
 
 // ── wording ─────────────────────────────────────────────────────────────────
 // A refusal and a stop are different events and must not read the same. A
