@@ -201,11 +201,18 @@ export function createGovernor({ harness = 'unknown', adapterVersion = '', cost 
         const { tokens, model, usd: harnessFigure, source } = cost.total(event);
         const a = state.agents[agent];
         if (!a && !tokens) return;
-        const usd = harnessFigure ?? dollarsForTokens(tokens, priceOf(model).in);
+        // A harness with no cost figure at all (NO_COST: an MCP proxy sees
+        // tool calls, never tokens) did not spend $0.00 -- nobody knows what
+        // it spent. Pricing its zero tokens would write a fabricated zero into
+        // cost_usd, which the ingest cannot tell from a real one (cost.mjs), so
+        // such a session closes with no figure and a sentence that says why.
+        const unmetered = source === NO_COST.total().source && harnessFigure == null && !tokens;
+        const usd = unmetered ? null : harnessFigure ?? dollarsForTokens(tokens, priceOf(model).in);
         // ONE number, two readers: the sentence and the field a machine sums.
-        const c = costUsd(usd);
+        const c = unmetered ? undefined : costUsd(usd);
         const entry = { ts: new Date().toISOString(), agent, verdict: 'summary',
-          reason: `session ended after $${usd.toFixed(2)}`, tokens: Math.round(tokens),
+          reason: unmetered ? 'session ended; this harness reports no cost, so none is recorded' : `session ended after $${usd.toFixed(2)}`,
+          tokens: Math.round(tokens),
           ...(model ? { model } : {}), ...(a?.client ? { client: a.client } : {}),
           ...(a?.operator ? { operator: a.operator } : {}),
           // Appended last so every field above keeps its position in the hash.

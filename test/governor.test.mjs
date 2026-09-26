@@ -52,6 +52,22 @@ const v = verify(join(home, 'receipts.jsonl'));
 assert(v.ok && v.receipts === all.length, `the chain verifies across API calls (${JSON.stringify(v)})`);
 ok('session.end() closes a chain that verifies');
 
+// A harness with no cost source closes its session without claiming $0.00:
+// no cost_usd (a fabricated zero reads as a real one at the ingest), and a
+// reason that says there was no figure.
+{
+  const none = createGovernor({ harness: 'no-cost' });
+  await none.before(ev('Read', '/w/acme/c.ts', { agent: 'n:1' }));
+  none.session.end({ agent: 'n:1' });
+  const s = receipts().at(-1);
+  assert(s.verdict === 'summary' && s.agent === 'n:1' && s.meter === 'none', 'a harness with no cost source still closes its session');
+  assert(!('cost_usd' in s) && !/\$/.test(s.reason), `...without claiming a cost it never measured (${JSON.stringify(s)})`);
+  assert(s.harness === 'no-cost', 'the summary names the harness');
+  const v2 = verify(join(home, 'receipts.jsonl'));
+  assert(v2.ok, 'the chain verifies with an unmetered summary in it');
+  ok('a session with no cost source records no cost');
+}
+
 const bare = createGovernor();
 assert(bare.harness === 'unknown' && NO_COST.read().source === 'none', 'a harness with no cost source still works');
 ok('defaults');
