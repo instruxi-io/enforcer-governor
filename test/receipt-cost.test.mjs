@@ -51,7 +51,7 @@ function endSession(h, ev = {}) {
 
 // ── the field itself ────────────────────────────────────────────────────────
 
-const { costUsd, COST_MAX } = await import('../src/meter.mjs');
+const { costUsd, COST_MAX } = await import('../adapters/claude-code/meter.mjs');
 
 ok('a cost outside what the control plane accepts is left off, not zeroed', () => {
   // The server stores a missing cost as 0 and reads that back as "never

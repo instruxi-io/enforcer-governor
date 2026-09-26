@@ -18,7 +18,7 @@
 import { readFileSync } from 'node:fs';
 import { loadState, loadConfig } from '../src/store.mjs';
 import { DEFAULTS, priceOf, dollarsForTokens } from '../src/policy.mjs';
-import { recordHarnessCost } from '../src/meter.mjs';
+import { recordHarnessCost } from '../adapters/claude-code/meter.mjs';
 
 let ev = {}; try { ev = JSON.parse(readFileSync(0, 'utf8') || '{}'); } catch {}
 const cfg = { ...DEFAULTS, ...loadConfig() };

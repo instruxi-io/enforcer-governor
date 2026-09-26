@@ -38,7 +38,7 @@ import { readFileSync, writeFileSync, mkdirSync, renameSync, copyFileSync, exist
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { SHARED_DIR, baseUrl } from './credentials.mjs';
+import { SHARED_DIR, baseUrl } from '../../core/credentials.mjs';
 
 const home = () => process.env.HOME || process.env.USERPROFILE || homedir();
 export const CLAUDE_SETTINGS = () => process.env.CLAUDE_SETTINGS_PATH || join(home(), '.claude', 'settings.json');
@@ -52,7 +52,8 @@ const ENV_KEYS = ['CLAUDE_CODE_ENABLE_TELEMETRY', 'OTEL_METRICS_EXPORTER', 'OTEL
 /** How long Claude Code may reuse the helper's headers: under an OAuth token's 15-minute life. */
 export const HEADERS_REFRESH_MS = '600000';
 
-const pluginRoot = () => join(dirname(fileURLToPath(import.meta.url)), '..');
+// This file sits at <plugin root>/adapters/claude-code/, two levels down.
+const pluginRoot = () => join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 /** Record where this plugin version lives, for the headers shim. Never throws. */
 export function recordPluginRoot() {

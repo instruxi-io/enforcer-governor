@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, readdirSync, utimesSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { sweep } from '../src/sweep.mjs';
+import { sweep } from '../adapters/claude-code/sweep.mjs';
 
 let pass = 0;
 const ok = (label, fn) => { fn(); pass++; console.log('  ok  ' + label); };
