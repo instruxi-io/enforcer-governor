@@ -25,6 +25,7 @@ import { kick, SHIPPER } from './ship.mjs';
 import { brief as briefFor, markTold } from './brief.mjs';
 import { costUsd } from './cost.mjs';
 import { signedInOperator, refreshIdentity, identityStale } from './identity.mjs';
+import { attributeSession } from './attribution.mjs';
 
 // The tool a receipt names: the harness's own name when the adapter gave one,
 // so the record and the console read as they always have ('Bash', not
@@ -192,12 +193,32 @@ export function createGovernor({ harness = 'unknown', adapterVersion = '', cost 
   }
 
   const session = {
-    /** Pick up the tenant's managed floor when the cached copy is stale. */
-    async start() {
+    /**
+     * Pick up the tenant's managed floor when the cached copy is stale, and
+     * tell the control plane which project the session works for.
+     *
+     * event: { agent?, cwd? } -- the agent id receipts use, and the working
+     * directory the project is derived from. Without an agent (an older
+     * caller), nothing is attributed and start() does what it always did.
+     * Resolves to what the attribution did (attribution.mjs), for tests and
+     * callers that care; nothing depends on it.
+     */
+    async start(event = {}) {
       const cfg = { ...DEFAULTS, ...loadConfig() };
       if (stale()) { try { await refresh(cfg); } catch {} }
       // Who is signed in, cached so decisions can name them without a call.
       if (identityStale()) { try { await refreshIdentity(cfg); } catch {} }
+      // AFTER the two refreshes, never beside them: all three read the OAuth
+      // credential, and two concurrent refresh_token grants from one process
+      // would race a single-use token. By now any refresh has been written back.
+      //
+      // The project exactly as a receipt would name it (acting() in before()):
+      // the configured mapping, else the folder name marked '?' as a guess. The
+      // effective config, so a managed shipOn is honoured too.
+      if (!event.agent) return undefined;
+      const eff = config();
+      try { return await attributeSession({ agent: event.agent, client: clientFor(event.cwd, eff.clients) }, eff); }
+      catch { return { sent: false, detail: 'attribution failed' }; }
     },
     /**
      * Close the record with what the session cost: a summary receipt an audit
