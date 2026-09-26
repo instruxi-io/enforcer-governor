@@ -24,6 +24,7 @@ import { effective, refresh, stale } from './managed.mjs';
 import { kick, SHIPPER } from './ship.mjs';
 import { brief as briefFor, markTold } from './brief.mjs';
 import { costUsd } from './cost.mjs';
+import { signedInOperator, refreshIdentity, identityStale } from './identity.mjs';
 
 // The tool a receipt names: the harness's own name when the adapter gave one,
 // so the record and the console read as they always have ('Bash', not
@@ -96,7 +97,8 @@ export function createGovernor({ harness = 'unknown', adapterVersion = '', cost 
     // working directory: a rule decides before economics stamps these on the
     // agent, and those first receipts are the ones an audit reads first.
     const acting = (a) => ({
-      operator: a?.operator || cfg.operator || '',
+      // An explicit operator setting wins; otherwise the signed-in account.
+      operator: a?.operator || cfg.operator || signedInOperator() || '',
       client: a?.client || clientFor(event.cwd, cfg.clients) || '',
     });
 
@@ -119,7 +121,12 @@ export function createGovernor({ harness = 'unknown', adapterVersion = '', cost 
       spend.model = a.model; spend.tokens = a.tokens; spend.budget = a.budget;
       const entry = v.entry({ agent: event.agent, tool: recorded(event), model: a.model || '',
         tokens: Math.round(a.tokens), ...acting(a),
-        meter: reading.source, ...stamp });
+        meter: reading.source, ...stamp,
+        // What the agent had spent when this was decided, in dollars, so a
+        // receipt can be read without the price table. Omitted when the
+        // harness reports no spend at all (a zero there would be invented).
+        spentUsd: reading.source === 'none' ? undefined
+          : costUsd(dollarsForTokens(a.tokens, priceOf(a.model, cfg.model).in)) });
       const hash = sha256(state.prevHash + JSON.stringify(entry));
       state.prevHash = hash;
       writeReceipt(entry, hash);
@@ -187,7 +194,10 @@ export function createGovernor({ harness = 'unknown', adapterVersion = '', cost 
   const session = {
     /** Pick up the tenant's managed floor when the cached copy is stale. */
     async start() {
-      if (stale()) { try { await refresh({ ...DEFAULTS, ...loadConfig() }); } catch {} }
+      const cfg = { ...DEFAULTS, ...loadConfig() };
+      if (stale()) { try { await refresh(cfg); } catch {} }
+      // Who is signed in, cached so decisions can name them without a call.
+      if (identityStale()) { try { await refreshIdentity(cfg); } catch {} }
     },
     /**
      * Close the record with what the session cost: a summary receipt an audit
@@ -207,7 +217,7 @@ export function createGovernor({ harness = 'unknown', adapterVersion = '', cost 
         const entry = { ts: new Date().toISOString(), agent, verdict: 'summary',
           reason: `session ended after $${usd.toFixed(2)}`, tokens: Math.round(tokens),
           ...(model ? { model } : {}), ...(a?.client ? { client: a.client } : {}),
-          ...(a?.operator ? { operator: a.operator } : {}),
+          ...((a?.operator || signedInOperator()) ? { operator: a?.operator || signedInOperator() } : {}),
           // Appended last so every field above keeps its position in the hash.
           meter: source,
           ...(c === undefined ? {} : { cost_usd: c }),

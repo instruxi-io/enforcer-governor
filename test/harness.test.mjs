@@ -46,8 +46,11 @@ ok('every receipt names the harness and adapter version: decision, blind refusal
 
 ok('they are the LAST keys (before the hash), so every earlier field keeps its position', () => {
   for (const r of recs) {
+    // spent_usd was added after them, for the same reason: it may only ever
+    // come last, so it must not appear anywhere before these two.
     const keys = Object.keys(r).filter(k => k !== 'hash');
-    assert.deepEqual(keys.slice(-2), ['harness', 'adapter_version'], `order: ${keys.join(',')}`);
+    const tail = keys.at(-1) === 'spent_usd' ? keys.slice(0, -1) : keys;
+    assert.deepEqual(tail.slice(-2), ['harness', 'adapter_version'], `order: ${keys.join(',')}`);
   }
 });
 
