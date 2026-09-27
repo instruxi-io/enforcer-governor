@@ -2,7 +2,7 @@
 
 **A Claude Code plugin that decides whether an agent action is allowed *before* it runs — and keeps a record you can prove.**
 
-Agents get stuck in loops, repeat work, and pipe the internet into a shell. Every other tool reports the damage afterwards. This one answers a question first:
+Agents get stuck in loops, repeat work, and run scripts straight off the internet. Every other tool reports the damage afterwards. This one answers a question first:
 
 > **May this agent do this, right now?**
 

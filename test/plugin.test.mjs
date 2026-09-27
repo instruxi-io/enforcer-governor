@@ -166,7 +166,7 @@ const run = (home, ev) => runFull(home, ev).hookSpecificOutput;
   assert(lines.length === 3, `the blind refusal must still be recorded, got ${lines.length} lines`);
   assert(lines[2].hash === undefined, 'a blind receipt must carry no hash, so the chain is not forged');
   assert(lines[2].chained === false, 'a blind receipt must say it is unchained');
-  assert(lines[2].rule === 'pipe the internet into a shell', 'a blind receipt must name the rule that decided');
+  assert(lines[2].rule === 'run a script downloaded from the internet', 'a blind receipt must name the rule that decided');
 
   const { verify } = await import('../src/store.mjs');
   const v = verify(join(home, 'receipts.jsonl'));

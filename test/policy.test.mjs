@@ -401,7 +401,7 @@ console.log('  model advice is conservative ok');
   for (const f of ['tool', 'model', 'rule', 'operator']) {
     assert(r.entry[f], `the receipt is missing ${f}, which is the field an auditor asks for`);
   }
-  assert(r.entry.rule === 'pipe the internet into a shell', 'the receipt must name the rule that fired');
+  assert(r.entry.rule === 'run a script downloaded from the internet', 'the receipt must name the rule that fired');
   console.log('receipts carry the fields an audit asks for ok');
 }
 
