@@ -32,7 +32,7 @@ import { toolMatches, nativeField } from './tools.mjs';
 // the question past the platform.
 export const DEFAULT_RULES = [
   { id: 'shell.pipe_to_shell', authz: 'write',
-    name: 'pipe the internet into a shell', tool: 'shell', action: 'deny',
+    name: 'run a script downloaded from the internet', tool: 'shell', action: 'deny',
     match: '(curl|wget)[^|]*\\|\\s*(ba|z|fi)?sh' },
 
   // A force-push is the one dangerous git action with a strictly safer form

@@ -122,7 +122,7 @@ export const dollarsForTokens = (tok, perM) => (tok / 1e6) * perM;
 // action: 'deny' refuses outright; 'ask' hands the decision to the human via
 // Claude Code's own permission prompt -- no bespoke approval UI needed.
 export const DEFAULT_RULES = [
-  { name: 'pipe the internet into a shell', tool: 'Bash',
+  { name: 'run a script downloaded from the internet', tool: 'Bash',
     match: '(curl|wget)[^|]*\\|\\s*(ba|z|fi)?sh', action: 'deny' },
   { name: 'delete a whole tree', tool: 'Bash',
     match: 'rm\\s+(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r)', action: 'ask' },
