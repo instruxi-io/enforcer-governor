@@ -82,9 +82,15 @@ const run = (home, ev) => runFull(home, ev).hookSpecificOutput;
   const edited = [...lines]; edited[1] = JSON.stringify({ ...JSON.parse(edited[1]), tokens: 999999 });
   writeFileSync(file, edited.join('\n') + '\n');
   assert(verify(file).brokeAt === 2, 'an edited receipt must be named');
+  assert(verify(file).receipts === 4, 'a break must not stop the count: every line is still a receipt');
 
   writeFileSync(file, [lines[0], ...lines.slice(2)].join('\n') + '\n');
   assert(verify(file).brokeAt === 2, 'a deleted receipt must be named');
+  // ...and the CLI says so with its exit code, so a script can gate on it.
+  const cli = () => { try { execFileSync('node', [new URL('../src/report.mjs', import.meta.url).pathname, 'verify'], { env: { ...process.env, GOVERNOR_HOME: home }, stdio: 'ignore' }); return 0; } catch (e) { return e.status; } };
+  assert(cli() === 1, 'verify must exit non-zero on a broken record');
+  writeFileSync(file, lines.join('\n') + '\n');
+  assert(cli() === 0, 'and zero on an intact one');
   console.log('the record fails loudly on edits and deletions ok');
 }
 

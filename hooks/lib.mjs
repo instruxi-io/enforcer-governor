@@ -30,6 +30,10 @@ export function emit(eventName, out, top = {}) {
 // `tool_deferred`, and its reason and updatedInput are discarded everywhere.
 export const pass = (event, top = {}) => emit(event, {}, top);
 
+// Events with no hookSpecificOutput schema (SessionEnd, SubagentStop): Claude
+// Code rejects any JSON naming them, so the only valid answer is none at all.
+export function done() { process.exit(0); }
+
 // What Claude Code's hook JSON MEANS -- the tool map, the match text, the agent
 // id, the billing mode -- is in adapters/claude-code/events.mjs. This file is
 // only the stdin/stdout contract.

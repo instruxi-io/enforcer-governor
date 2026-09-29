@@ -21,7 +21,8 @@ if (cmd === 'verify') {
   if (!v.receipts) console.log('No decisions recorded yet.');
   else if (v.ok) console.log(`All ${v.receipts} records check out.${v.unverifiable ? ` (${v.unverifiable} carry no hash and could not be chain-checked: either written before hashes were stored, or decided while the governor could not read its own chain.)` : ''}`);
   else console.log(`The record does NOT check out. Line ${v.brokeAt} of ${v.receipts} does not match the one before it.\nFile: ${RECEIPTS}`);
-  process.exit(0);
+  // Non-zero on a broken chain, so a script or CI step can gate on it.
+  process.exit(v.ok ? 0 : 1);
 }
 
 // Everything the v1 console could turn, as text. Grouped, because the order

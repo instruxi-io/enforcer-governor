@@ -133,6 +133,13 @@ assert.equal(priceOf('gpt-5-mini-2026').key, 'gpt-5-mini', 'dated suffix still m
 assert.equal(priceOf('claude-sonnet-4-6-20260101').key, 'claude-sonnet-4-6', 'dated Claude matches');
 // Unknown models must not silently price as something cheap.
 assert.equal(priceOf('gpt-9-unreleased').p, 'openai', 'unknown GPT stays on OpenAI pricing');
+assert.equal(priceOf('grok-4').p, 'xai', 'unknown Grok stays on xAI pricing');
+assert.equal(priceOf('deepseek-chat').p, 'deepseek', 'unknown DeepSeek stays on DeepSeek pricing');
+assert.equal(priceOf('qwen3-coder').p, 'alibaba', 'unknown Qwen stays on Qwen pricing');
+assert.equal(priceOf('qwen3-coder-plus-2026-07').key, 'qwen3-coder-plus', 'dated Qwen matches');
+// Family fallback is the priciest model in that family, never a cheaper one.
+for (const [p, key] of [['xai', 'grok-4.6'], ['deepseek', 'deepseek-v4-pro'], ['alibaba', 'qwen3.7-max']])
+  assert.ok(Object.values(MODELS).filter(x => x.p === p).every(x => x.in <= MODELS[key].in), `${key} is the top of ${p}`);
 assert.equal(priceOf('').key, 'claude-opus-5', 'no model reported falls back to the default');
 
 // $20 buys the right number of effective tokens on each provider.
