@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 export const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 
 // Published list prices, USD per million tokens. `in` = input, `out` = output,
-// `cin` = cached input. Sources: Anthropic and OpenAI pricing pages.
+// `cin` = cached input. Sources: each provider's own pricing page.
 //
 // We measure spend in EFFECTIVE TOKENS: input-token-equivalents at that model's
 // own price. One effective token always costs `in` / 1e6 dollars, so dollars
@@ -18,14 +18,14 @@ export const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 // and 4x on gpt-4o -- so a flat 5x mis-bills every OpenAI model. Weights are
 // therefore derived per model from the prices below.
 export const MODELS = {
-  // ── Anthropic ──  cache read 0.1x input, 5-minute cache write 1.25x
-  // xAI. Prices are the sub-200k tier; xAI doubles them past 200k, so a very
+  // ── xAI ── Prices are the sub-200k tier; xAI doubles them past 200k, so a very
   // long context is metered low here rather than high, which is the safe
   // direction for a cap but worth knowing.
   'grok-4.6':          { p: 'xai',  label: 'Grok 4.6',    in: 2,    out: 6,  cin: 0.5 },
   'grok-4.5':          { p: 'xai',  label: 'Grok 4.5',    in: 2,    out: 6,  cin: 0.3 },
   'grok-4.3':          { p: 'xai',  label: 'Grok 4.3',    in: 1.25, out: 2.5, cin: 0.2 },
   'grok-build-0.1':    { p: 'xai',  label: 'Grok Build',  in: 1,    out: 2,  cin: 0.2 },
+  // ── Anthropic ──  cache read 0.1x input, 5-minute cache write 1.25x
   'claude-fable-5':    { p: 'anthropic', label: 'Fable 5',     in: 10,   out: 50 },
   'claude-opus-5':     { p: 'anthropic', label: 'Opus 5',      in: 5,    out: 25 },
   'claude-opus-4-8':   { p: 'anthropic', label: 'Opus 4.8',    in: 5,    out: 25 },
@@ -77,6 +77,21 @@ export const MODELS = {
   'gemini-2.5-flash-lite': { p: 'google', label: 'Gemini 2.5 Flash-Lite', in: 0.10, out: 0.40, cin: 0.01 },
   'gemini-2.5-flash':      { p: 'google', label: 'Gemini 2.5 Flash',      in: 0.30, out: 2.50, cin: 0.03 },
   'gemini-2.5-pro':        { p: 'google', label: 'Gemini 2.5 Pro',        in: 1.25, out: 10.00, cin: 0.125 },
+  // ── DeepSeek ──  peak-hour rates (off-peak is half), so an off-peak session
+  // is metered high rather than low. Cache-hit input priced explicitly.
+  'deepseek-v4-pro':       { p: 'deepseek', label: 'DeepSeek V4 Pro',       in: 1.32, out: 3.96, cin: 0.044 },
+  'deepseek-flash':        { p: 'deepseek', label: 'DeepSeek V4.1 Flash',   in: 0.30, out: 1.20, cin: 0.006 },
+  // ── Alibaba (Qwen) ──  Model Studio International list prices, smallest
+  // context tier. The Mainland endpoint is cheaper, so it is metered high.
+  'qwen3.8-max':           { p: 'alibaba', label: 'Qwen3.8 Max',           in: 2,    out: 6    },
+  'qwen3.8-flash':         { p: 'alibaba', label: 'Qwen3.8 Flash',         in: 0.15, out: 0.47 },
+  'qwen3.7-max':           { p: 'alibaba', label: 'Qwen3.7 Max',           in: 2.50, out: 7.50 },
+  'qwen3.7-plus':          { p: 'alibaba', label: 'Qwen3.7 Plus',          in: 0.40, out: 1.60 },
+  'qwen3-coder-plus':      { p: 'alibaba', label: 'Qwen3 Coder Plus',      in: 1,    out: 5    },
+  'qwen3-coder-flash':     { p: 'alibaba', label: 'Qwen3 Coder Flash',     in: 0.30, out: 1.50 },
+  'qwen-max':              { p: 'alibaba', label: 'Qwen Max',              in: 1.60, out: 6.40 },
+  'qwen-plus':             { p: 'alibaba', label: 'Qwen Plus',             in: 0.40, out: 1.20 },
+  'qwen-flash':            { p: 'alibaba', label: 'Qwen Flash',            in: 0.05, out: 0.40 },
 };
 
 // Longest key first, so 'gpt-5.6-sol' matches before the 'gpt-5' substring.
@@ -93,6 +108,9 @@ export function priceOf(model = '', fallback = DEFAULT_MODEL) {
   if (key) return { key, ...MODELS[key] };
   if (/^(gpt|o[134]\b|chatgpt)/.test(m)) return { key: 'gpt-5.5', ...MODELS['gpt-5.5'] };
   if (/(gemini|bard|palm)/.test(m)) return { key: 'gemini-3.1-pro', ...MODELS['gemini-3.1-pro'] };
+  if (/(grok|xai)/.test(m)) return { key: 'grok-4.6', ...MODELS['grok-4.6'] };
+  if (m.includes('deepseek')) return { key: 'deepseek-v4-pro', ...MODELS['deepseek-v4-pro'] };
+  if (/(qwen|qwq)/.test(m)) return { key: 'qwen3.7-max', ...MODELS['qwen3.7-max'] };
   if (m.includes('claude')) return { key: DEFAULT_MODEL, ...MODELS[DEFAULT_MODEL] };
   return { key: fallback, ...(MODELS[fallback] || MODELS[DEFAULT_MODEL]) };
 }

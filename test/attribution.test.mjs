@@ -196,6 +196,7 @@ await ok('SessionStart hook against a hung server still exits within the timeout
 await ok('SessionEnd sends no attribution', async () => {
   const r = await runHook({ hook_event_name: 'SessionEnd', session_id: '0f3c9a1b-2222-4333-8444-555566667777', cwd: '/w/acme-api' });
   assert.equal(r.code, 0);
+  assert.equal(r.out, '', 'SessionEnd has no hookSpecificOutput; Claude Code rejects any JSON for it');
   assert.equal(posts.length, 0);
 });
 

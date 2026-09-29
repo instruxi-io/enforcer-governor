@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Session boundaries. SessionEnd closes the record with what the session
 // actually cost -- a summary an audit can read without replaying every line.
-import { input, emit } from './lib.mjs';
+import { input, emit, done } from './lib.mjs';
 import { agentOf } from '../adapters/claude-code/events.mjs';
 import { DEFAULTS } from '../src/policy.mjs';
 import { loadConfig } from '../src/store.mjs';
@@ -38,4 +38,5 @@ if (EVENT === 'SessionStart') await gov.session.start(ev.session_id ? { agent: e
 // ...and to tidy up Claude Code's scratch files: old sessions' only, by age.
 if (EVENT === 'SessionEnd') { try { sweep({ ...DEFAULTS, ...loadConfig() }); } catch {} }
 
+if (EVENT === 'SessionEnd') done();
 emit(EVENT, {});

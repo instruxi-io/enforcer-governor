@@ -95,19 +95,23 @@ export function writeReceipt(entry, hash) {
   catch { return false; }
 }
 
-// Walk the file, not memory: the file is the record. Returns the first line
-// that does not add up, so an edit or a deletion anywhere is named.
+// Walk the file, not memory: the file is the record. Names the first line
+// that does not add up, so an edit or a deletion anywhere is named -- and
+// still counts every line, so "line 3 of N" says how much of the record
+// sits after the break.
 export function verify(file = RECEIPTS) {
   if (!existsSync(file)) return { ok: true, receipts: 0, brokeAt: 0 };
-  let prev = 'genesis', n = 0, legacy = 0;
+  let prev = 'genesis', n = 0, legacy = 0, brokeAt = 0;
   for (const line of readFileSync(file, 'utf8').split('\n')) {
     if (!line.trim()) continue;
     n++;
-    let e; try { e = JSON.parse(line); } catch { return { ok: false, receipts: n, brokeAt: n }; }
+    if (brokeAt) continue;
+    let e; try { e = JSON.parse(line); } catch { brokeAt = n; continue; }
     const { hash, ...body } = e;
     if (!hash) { legacy++; continue; }
-    if (sha256(prev + JSON.stringify(body)) !== hash) return { ok: false, receipts: n, brokeAt: n };
+    if (sha256(prev + JSON.stringify(body)) !== hash) { brokeAt = n; continue; }
     prev = hash;
   }
+  if (brokeAt) return { ok: false, receipts: n, brokeAt };
   return { ok: true, receipts: n, brokeAt: 0, unverifiable: legacy || undefined, head: prev };
 }
