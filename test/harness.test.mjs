@@ -48,7 +48,9 @@ ok('they are the LAST keys (before the hash), so every earlier field keeps its p
   for (const r of recs) {
     // spent_usd was added after them, for the same reason: it may only ever
     // come last, so it must not appear anywhere before these two.
-    const keys = Object.keys(r).filter(k => k !== 'hash');
+    // The decision record (2.9) came after spent_usd, and is always last.
+    let keys = Object.keys(r).filter(k => k !== 'hash');
+    if (keys.at(-1) === 'decision') keys = keys.slice(0, -1);
     const tail = keys.at(-1) === 'spent_usd' ? keys.slice(0, -1) : keys;
     assert.deepEqual(tail.slice(-2), ['harness', 'adapter_version'], `order: ${keys.join(',')}`);
   }
@@ -60,7 +62,10 @@ ok('a receipt without them serialises exactly as it did before they existed', ()
   const before = JSON.stringify(v.entry(at));
   assert.ok(!before.includes('harness') && !before.includes('adapter_version'));
   const after = JSON.stringify(v.entry({ ...at, harness: 'claude-code', adapterVersion: '2.7.0' }));
-  assert.equal(after, before.slice(0, -1) + ',"harness":"claude-code","adapter_version":"2.7.0"}', 'only appended');
+  // The 2.9 decision record rides last on both; set it aside to compare the rest.
+  const rest = (j) => { const o = JSON.parse(j); delete o.decision; return JSON.stringify(o); };
+  assert.equal(rest(after), rest(before).slice(0, -1) + ',"harness":"claude-code","adapter_version":"2.7.0"}', 'only appended');
+  assert.equal(Object.keys(JSON.parse(after)).at(-1), 'decision');
 });
 
 ok('the chain still verifies', () => {

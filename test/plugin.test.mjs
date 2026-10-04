@@ -6,6 +6,10 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 
+// These hooks run as a person's session would: a headless parent (a graph
+// worker running this suite) must not make them headless (core/worker.mjs).
+for (const k of ['JEV_HOOKS_HEADLESS', 'ENFORCER_HEADLESS', 'CLAUDE_CODE_ENTRYPOINT']) delete process.env[k];
+
 const assert = (c, m) => { if (!c) { console.error('FAIL: ' + m); process.exit(1); } };
 const HOOK = new URL('../hooks/pre-tool-use.mjs', import.meta.url).pathname;
 

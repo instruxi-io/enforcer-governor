@@ -20,6 +20,7 @@
 
 import { Verdict, ECONOMICS, CAPABILITY, POLICY } from './verdict.mjs';
 import { evaluate as capability, DEFAULT_RULES } from './capability.mjs';
+import { evaluate as worker } from './worker.mjs';
 
 /**
  * Fold the tenant's answer (central.mjs) into the local capability verdict.
@@ -40,12 +41,12 @@ import { evaluate as capability, DEFAULT_RULES } from './capability.mjs';
  */
 export function compose(cap, central) {
   if (!cap || !central) return cap;
-  const base = { rule: cap.rule, checked: [...cap.checked, POLICY], policy: central.opinion };
+  const base = { rule: cap.rule, ruleId: cap.ruleId, checked: [...cap.checked, POLICY], policy: central.opinion };
   if (central.opinion === 'deny') {
-    return Verdict.deny(central.reason || 'refused by the tenant policy', { ...base, source: POLICY });
+    return Verdict.deny(central.reason || 'refused by the tenant policy', { ...base, source: POLICY, code: 'tenant_policy' });
   }
   if (central.opinion === 'ask' && cap.action !== 'deny') {
-    return Verdict.ask(central.reason || 'the tenant policy asks for confirmation', { ...base, source: POLICY });
+    return Verdict.ask(central.reason || 'the tenant policy asks for confirmation', { ...base, source: POLICY, code: 'tenant_policy' });
   }
   if (central.opinion === 'allow' && cap.action === 'ask') {
     return null;   // the tenant waived the confirmation; economics still runs
@@ -74,6 +75,14 @@ export function gate(ev, cfg = {}, deps = {}) {
   // inside its success branch.
   // deps.central is the tenant's answer for the rule that matched, fetched by
   // the hook BEFORE this runs — the gate stays synchronous and network-free.
+  //
+  // The graph-worker rules (worker.mjs) go first: they are the only rules that
+  // can ALLOW, and a headless force-push must be refused rather than rewritten
+  // into a prompt nobody will answer. A tenant can still refuse what they allow.
+  if (cfg.rulesOn !== false) {
+    const w = compose(worker(ev), deps.central);
+    if (w) return w;
+  }
   const cap = compose(capability(rules, ev), deps.central);
   if (cap && cap.action !== 'allow') return cap;
   const waived = deps.central?.opinion === 'allow' && !cap;
@@ -89,7 +98,7 @@ export function gate(ev, cfg = {}, deps = {}) {
   // in the suite pinned it, which is why it survived.
   if (cfg.budgetOn === false && cfg.loopOn === false) {
     return Verdict.allow('spend and loop checks are switched off',
-      { source: ECONOMICS, checked: [CAPABILITY, ECONOMICS], policy: waived ? 'allow' : null });
+      { code: 'checks_off', source: ECONOMICS, checked: [CAPABILITY, ECONOMICS], policy: waived ? 'allow' : null });
   }
 
   // withState hands back a `reading` alongside the state: what this session has

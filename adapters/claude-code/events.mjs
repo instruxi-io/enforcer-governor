@@ -12,6 +12,7 @@
 // 'Bash', and a rewrite comes back as a tool_input Claude Code can run as it
 // is -- with its description and timeout still in it.
 
+import { workerContext, runIdOf } from './worktree.mjs';
 import { SHELL, EDIT, WRITE, READ, WEB, MCP, OTHER } from '../../core/tools.mjs';
 
 // ── the tool map ────────────────────────────────────────────────────────────
@@ -106,5 +107,8 @@ export function toolEvent(ev) {
     billing: billing(),
     session: ev.session_id,
     transcript: ev.transcript_path,
+    // For the graph-worker rules (core/worker.mjs) and the decision record.
+    worker: workerContext(ev),
+    runId: runIdOf(ev),
   };
 }

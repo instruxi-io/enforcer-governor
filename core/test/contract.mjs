@@ -88,6 +88,9 @@ function place(tmp, label, { config = {}, blind = false } = {}) {
   delete env.ENFORCER_API_KEY;
   delete env.ANTHROPIC_API_KEY;
   delete env.ANTHROPIC_AUTH_TOKEN;
+  // A headless parent (a graph worker running this suite) must not make the
+  // contract's session headless: the graph-worker rules would then decide.
+  delete env.JEV_HOOKS_HEADLESS; delete env.ENFORCER_HEADLESS; delete env.CLAUDE_CODE_ENTRYPOINT;
   return { home, env };
 }
 

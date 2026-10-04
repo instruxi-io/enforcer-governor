@@ -16,6 +16,8 @@
 // `source` names the layer that decided, which is what lets the receipt say
 // who refused without the reader parsing English.
 
+import { decisionRecord } from './codes.mjs';
+
 export const ALLOW = 'allow';
 export const DENY = 'deny';
 export const ASK = 'ask';
@@ -34,7 +36,7 @@ export const ECONOMICS = 'economics';
 export const OPERATOR = 'operator';
 
 export class Verdict {
-  constructor({ action, reason, source, rule = null, input = null, checked = [], advice = null, policy = null }) {
+  constructor({ action, reason, source, rule = null, input = null, checked = [], advice = null, policy = null, code = null, ruleId = null }) {
     this.action = action;
     this.reason = reason;
     this.source = source;
@@ -45,6 +47,11 @@ export class Verdict {
     // What the tenant's policy said, when it was asked: allow | deny | ask |
     // silent | unreachable. Null when no rule matched, so nobody was asked.
     this.policy = policy;
+    // The machine code for this decision (codes.mjs). Null means "derive it":
+    // codeOf() falls back by source, so a verdict built without one still has one.
+    this.code = code;
+    // The rule's policy id ('git.force_push'), beside its display name in `rule`.
+    this.ruleId = ruleId;
     Object.freeze(this);
   }
 
@@ -65,7 +72,7 @@ export class Verdict {
    */
   entry({ ts = new Date().toISOString(), agent, tool = '', model = '', tokens = 0,
           operator = '', client = '', chained = true, meter = undefined,
-          harness = '', adapterVersion = '', spentUsd = undefined } = {}) {
+          harness = '', adapterVersion = '', spentUsd = undefined, runId = undefined } = {}) {
     return {
       ts, agent, verdict: this.action, reason: this.reason, source: this.source,
       rule: this.rule || undefined,
@@ -90,6 +97,10 @@ export class Verdict {
       // The agent's spend in dollars when this was decided. Last, for the same
       // reason as the two above; absent when the harness reports no spend.
       spent_usd: spentUsd,
+      // The decision record a parent process parses (codes.mjs): decision,
+      // machine code, rule, tool, summary, run_id. Last, so every receipt
+      // written before 2.9 hashes exactly as it did.
+      decision: decisionRecord(this, { tool, run_id: runId }),
     };
   }
 
