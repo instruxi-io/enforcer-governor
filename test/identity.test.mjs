@@ -94,7 +94,8 @@ await ok('decision receipts carry spent_usd, the agent\'s spend in dollars when 
   const r = receipts().at(-1);
   assert.equal(typeof r.spent_usd, 'number');
   assert.ok(r.spent_usd > 0, `spent_usd=${r.spent_usd}`);
-  assert.equal(Object.keys(r).filter((k) => k !== 'hash').at(-1), 'spent_usd', 'it is the last field');
+  assert.deepEqual(Object.keys(r).filter((k) => k !== 'hash').slice(-2), ['spent_usd', 'decision'],
+    'it is the last field before the decision record, which 2.9 appended');
 });
 
 await ok('a harness that reports no spend gets no spent_usd (a zero would be invented)', async () => {

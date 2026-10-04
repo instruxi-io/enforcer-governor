@@ -14,6 +14,7 @@
 
 import { Verdict, CAPABILITY } from './verdict.mjs';
 import { toolMatches, nativeField } from './tools.mjs';
+import { ruleCode } from './codes.mjs';
 
 // `action` is the text a rule matches; `tool` scopes it ('' means any tool).
 // `field` names the input key a rewrite edits. Both are in the core's own
@@ -123,7 +124,7 @@ function rewriteInput(rule, ev) {
 export function evaluate(rules, ev) {
   const hit = matchRule(rules || DEFAULT_RULES, ev);
   if (!hit) return null;
-  const of = { source: CAPABILITY, rule: hit.name, checked: [CAPABILITY] };
+  const of = { source: CAPABILITY, rule: hit.name, checked: [CAPABILITY], code: ruleCode(hit), ruleId: ruleId(hit) };
 
   if (hit.action === 'deny') {
     // Refuse the ACTION, do not stop the agent. A capability check says "not

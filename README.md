@@ -139,6 +139,71 @@ Everything goes to the workspace you signed in to and nowhere else. `/enforcer:l
 
 Files the governor writes: `~/.enforcer-governor/` (config, state, the receipt chain, per-session scratch that is swept after `sweepDays`), `~/.enforcer/credentials.json` (your sign-in) and `~/.enforcer/plugin-root` (where the installed plugin lives, so telemetry stays signed in across plugin updates).
 
+## Decisions and their codes
+
+Every decision the governor makes, including "no objection", is one JSON record:
+
+```json
+{"decision":"deny","code":"push_not_alone","rule":"graph.push","tool":"Bash","summary":"a push, pull request or land must be the whole command, on its own","run_id":"a54645af-…"}
+```
+
+- `decision` is `allow`, `deny` or `ask` (a rewrite is put to the person as an `ask` carrying the safer command).
+- `code` is one of the codes below, defined once in `core/codes.mjs`. Codes are a published vocabulary: they are added, never renamed or reused.
+- `rule` is the rule's policy id (`git.force_push`), or `null` when no rule decided.
+- `run_id` is present only when the session holds an enforcer-graph run (`ENFORCER_GRAPH_RUN_ID`, or the run file enforcer-graph's hooks keep).
+
+The record is written three places: as the `decision` field, last, on the hash-chained receipt in `~/.enforcer-governor/receipts.jsonl`; as one line on the PreToolUse hook's stderr, prefixed `enforcer-governor:decision `; and as the **first line** of the permission reason whenever the hook allows, denies or asks. A parent process (the graph dispatcher, a CI wrapper) parses that line instead of grepping the sentence under it.
+
+| Code | Meaning |
+|---|---|
+| `pipe_to_shell` | a script piped from curl/wget into a shell |
+| `force_push` | a force-push (--force, -f or a +refspec) |
+| `destructive_delete` | rm -rf of a whole tree |
+| `destructive_git` | history rewrite: reset --hard or filter-branch |
+| `secret_in_command` | the action reads or writes credentials (.env, keys, credentials.json, ~/.aws, ~/.ssh) |
+| `deploy_publish` | publish or deploy (npm publish, vercel --prod, kubectl apply/delete, terraform apply) |
+| `custom_rule` | a rule from config.json with no code of its own |
+| `graph_push_allowed` | headless worker pushing its own graph/<key> branch, as the whole command |
+| `graph_pr_allowed` | headless worker opening a pull request from its graph/<key> branch |
+| `graph_land_allowed` | headless worker landing its graph/<key> pull request with land-pr.sh |
+| `graph_push_confirm` | graph/<key> push from a session with a person present: they confirm |
+| `graph_pr_confirm` | pull request from a graph/<key> branch in a session with a person present |
+| `graph_land_confirm` | land-pr.sh in a session with a person present |
+| `push_not_alone` | a push, pull request or land chained with other commands; it must run on its own |
+| `push_default_branch` | a push to a default branch (main, master, develop, trunk) |
+| `push_needs_approval_surface` | a push or pull request no rule allows, in a session with nobody to ask |
+| `branch_mismatch` | pushing a branch other than the one the worktree has checked out |
+| `outside_worktree` | the working directory is not a git worktree on a graph/<key> branch |
+| `governor_settings_edit` | an edit to plugin or governor settings |
+| `tenant_policy` | the organisation's Enforcer policy decided |
+| `agent_stopped` | the agent was stopped by a person or for looping, and stays stopped until resumed |
+| `period_limit` | the daily, weekly or monthly spend limit is reached |
+| `loop_detected` | the agent repeated the same action past the loop limit |
+| `burn_rate` | spending faster than the per-minute mark |
+| `fanout_rate` | starting subagents faster than the fan-out mark |
+| `retry_storm` | failing and retrying faster than the retry mark |
+| `client_limit` | a client's spend limit is reached |
+| `spend_limit` | the agent's spend limit is reached |
+| `spend_warning` | the agent passed the warn-me mark of its spend limit |
+| `no_rule_matched` | no rule objected and spend is within limits |
+| `spend_unchecked` | no rule objected; the governor could not read its state, so spend was not checked |
+| `checks_off` | no rule objected; spend and loop checks are switched off |
+
+### Headless graph workers
+
+A graph worker is a `claude -p` session the dispatcher starts in a git worktree on branch `graph/<key>`, with nobody to answer a prompt. The governor is the plugin that allows or denies its delivery steps (`core/worker.mjs`); jev-hooks and enforcer-graph no longer decide them. A session is **headless** when `JEV_HOOKS_HEADLESS=1` or `ENFORCER_HEADLESS=1` is set, or Claude Code reports the `sdk-cli` entrypoint (`claude -p`). The branch is read from the `.git` of the directory the command runs in (`cwd`, or `git -C <dir>`).
+
+| Rule | Headless | A person is present |
+|---|---|---|
+| `graph.push`: `git push -u origin graph/<key>` as the whole command, on that branch (also `HEAD:graph/<key>`, and `--force-with-lease` for the rebase path) | **allow** `graph_push_allowed`; chained: deny `push_not_alone`; other branch: deny `branch_mismatch`; not a graph worktree: deny `outside_worktree`; any other push: deny `push_needs_approval_surface` | ask `graph_push_confirm` |
+| `graph.pr_create`: `gh pr create` from the graph branch | **allow** `graph_pr_allowed`; off a graph branch: deny `outside_worktree` | ask `graph_pr_confirm` |
+| `graph.land`: `land-pr.sh`, including the skill's `"$(ls -d …/land-pr.sh \| tail -1)"` form | **allow** `graph_land_allowed`; off a graph branch: deny `outside_worktree` | ask `graph_land_confirm` |
+| `git.force_push`: `--force`, `-f`, `+refspec` | deny `force_push` | rewritten to `--force-with-lease` (an ask) `force_push` |
+| `git.push_default_branch`: a push to `main`, `master`, `develop` or `trunk` | deny `push_default_branch` | ask `push_default_branch` |
+| `governor.settings`: an edit of `.claude/settings*.json`, `managed-settings.json`, `.claude/plugins/` or `~/.enforcer-governor/` (Edit/Write, or a shell command that writes) | deny `governor_settings_edit` | ask `governor_settings_edit` |
+
+These are the only rules that **allow** (an affirmative grant that skips the prompt). They run before the capability rules, a tenant policy can still refuse what they allow, and `rulesOn: false` turns them off with the rest.
+
 ## How it works
 
 ```

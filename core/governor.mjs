@@ -86,6 +86,9 @@ export function createGovernor({ harness = 'unknown', adapterVersion = '', cost 
    */
   async function before(event) {
     const cfg = config();
+    // The run this session holds, when the adapter knows one: it rides on the
+    // decision record so a parent can tie a refusal to its run.
+    const st = { ...stamp, runId: event.runId };
     // The tenant's policy is asked BEFORE taking the lock, and only when a
     // local rule matched: the network must never sit inside the lock, and an
     // unmatched call has nothing to ask about.
@@ -122,7 +125,7 @@ export function createGovernor({ harness = 'unknown', adapterVersion = '', cost 
       spend.model = a.model; spend.tokens = a.tokens; spend.budget = a.budget;
       const entry = v.entry({ agent: event.agent, tool: recorded(event), model: a.model || '',
         tokens: Math.round(a.tokens), ...acting(a),
-        meter: reading.source, ...stamp,
+        meter: reading.source, ...st,
         // What the agent had spent when this was decided, in dollars, so a
         // receipt can be read without the price table. Omitted when the
         // harness reports no spend at all (a zero there would be invented).
@@ -139,7 +142,7 @@ export function createGovernor({ harness = 'unknown', adapterVersion = '', cost 
     // and the refusal is recorded without a hash rather than hidden or forged.
     const verdict = held.ok && held.value ? held.value : gate(event, cfg, { central });
     if (!held.ok || !held.value) {
-      writeReceipt(verdict.entry({ agent: event.agent, tool: recorded(event), ...acting(), chained: false, ...stamp }), undefined);
+      writeReceipt(verdict.entry({ agent: event.agent, tool: recorded(event), ...acting(), chained: false, ...st }), undefined);
     }
     return { verdict, spend, config: cfg };
   }

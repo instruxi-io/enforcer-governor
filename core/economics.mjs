@@ -165,6 +165,10 @@ function softLimit(state, a, ev, cfg) {
 }
 
 const CHECKS = [latched, periodCaps, loop, burn, fanout, retryStorm, clientCap, hardLimit, softLimit];
+// Each check's machine code (codes.mjs), stamped on the verdict it returns.
+const CHECK_CODES = new Map([[latched, 'agent_stopped'], [periodCaps, 'period_limit'], [loop, 'loop_detected'],
+  [burn, 'burn_rate'], [fanout, 'fanout_rate'], [retryStorm, 'retry_storm'], [clientCap, 'client_limit'],
+  [hardLimit, 'spend_limit'], [softLimit, 'spend_warning']]);
 
 /**
  * Run Layer B. Advances state, then judges.
@@ -174,7 +178,7 @@ export function evaluate(state, ev, cfg, now = Date.now()) {
   const a = ingest(state, ev, cfg, now);
   for (const check of CHECKS) {
     const v = check(state, a, ev, cfg, now);
-    if (v) return v;
+    if (v) return v.code ? v : new Verdict({ ...v, code: CHECK_CODES.get(check) });
   }
   // Advisory only: never changes the verdict, only says the model and the job
   // look mismatched. A hook cannot switch models, so this is for the human.
