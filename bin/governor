@@ -1,0 +1,12 @@
+#!/usr/bin/env node
+// governor decide: the common event JSON on stdin, the decision record
+// {decision, code, rule, tool, summary} on stdout. Harness-neutral.
+import { readFileSync } from 'node:fs';
+import { decide } from '../lib/decide.mjs';
+
+const [cmd] = process.argv.slice(2);
+if (cmd !== 'decide') { process.stderr.write('usage: governor decide < event.json\n'); process.exit(2); }
+let ev = {};
+try { ev = JSON.parse(readFileSync(0, 'utf8') || '{}'); } catch { process.stderr.write('governor: stdin is not JSON\n'); process.exit(2); }
+const { record } = await decide(ev);
+process.stdout.write(JSON.stringify(record) + '\n');
